@@ -1,82 +1,154 @@
-# ScopeDelta 30-Day Roadmap
+# ScopeDelta Production Roadmap
 
-This roadmap is outcome-driven. Engineering scope may change when customer evidence changes.
+This roadmap targets a complete self-serve subscription SaaS, not a concierge pilot or proof of concept. The product remains narrowly focused on scope-change management while the implementation is production-grade.
 
-## Week 1 — Validate willingness to pay
+## Completed foundation
 
-### Business outcome
-Get at least one paid pilot or strong equivalent evidence before investing in broad product scope.
+Already complete:
 
-### Product/engineering focus
-- Minimum credible landing page and product explanation.
-- A realistic demo or concierge workflow that can produce a sample scope analysis/change order.
-- Instrument basic lead/pilot tracking.
+- deployable Next.js application foundation;
+- CI, tests, lint/typecheck/build gates;
+- public landing page and paid-interest form;
+- production Netlify deployment and basic operations runbook.
 
-### Exit criteria
-- 5 qualified conversations completed.
-- At least 1 paid pilot, or 2 concrete pilot commitments with real project material.
-- Repeated pain around scope creep confirmed.
+These are infrastructure/marketing foundations only. They are not the core product.
 
-## Week 2 — Deliver the core workflow
+## Phase 1 — Identity, tenancy, persistence, and authorization
 
-### Business outcome
-A pilot user can complete the essential workflow with limited assistance.
+### Outcome
+A customer can create an account/workspace and the application can safely persist tenant-owned data.
 
-### Product/engineering focus
-- authentication/workspace foundation;
-- client/project records;
-- scope/SOW input;
-- structured scope extraction;
-- new change-request input;
-- scope comparison;
-- human review/edit step.
+### Product scope
+- authentication and account lifecycle;
+- organization/workspace creation;
+- production data store selected by engineering;
+- tenant membership/ownership model;
+- strict authorization boundaries;
+- foundational audit timestamps and identifiers;
+- minimum client/project persistence needed by later phases.
 
 ### Exit criteria
-A pilot can go from project scope + new request to a reviewed scope decision.
+A test suite proves one tenant cannot read or mutate another tenant's data, and a real user can create/sign in to a workspace and persist a project.
 
-## Week 3 — Make the decision commercially useful
+## Phase 2 — Project scope ingestion and evidence model
 
-### Business outcome
-A real change request can become a professional client approval flow.
+### Outcome
+A paying customer can give ScopeDelta the source of truth for an active project.
 
-### Product/engineering focus
-- change-order generation;
-- client-facing approval link;
-- approve/reject/clarification state;
-- audit history;
-- notifications;
-- reliability/security fixes from pilot usage.
-
-### Exit criteria
-At least one real or realistic end-to-end change order completes the workflow.
-
-## Week 4 — Revenue and repeatability
-
-### Business outcome
-Create a repeatable acquisition and onboarding motion.
-
-### Product/engineering focus
-- payment/pilot conversion path;
-- basic usage/activation analytics;
-- onboarding improvements from evidence;
-- production hardening;
-- only the highest-value integration if demanded by pilots.
+### Product scope
+- create/manage clients and projects;
+- paste scope text and upload supported scope/SOW documents;
+- secure document storage and metadata;
+- structured scope items: deliverables, exclusions, constraints, assumptions, revision/change limits where present;
+- trace structured items back to source evidence;
+- ingestion/extraction status, errors, retry, and editing.
 
 ### Exit criteria
-- public product/demo available;
-- pricing available;
-- first case-study evidence captured where possible;
-- next 30 days prioritized from customer/revenue evidence.
+A customer can add a real project scope and inspect/edit structured scope items with source traceability.
 
-## Prioritization order
+## Phase 3 — Core change-request analysis engine
 
-When work competes for time, rank it by:
+### Outcome
+ScopeDelta solves the central business problem: compare a new request against the agreed scope and produce a useful, defensible decision draft.
 
-1. customer evidence;
-2. revenue impact;
-3. activation impact;
-4. retention impact;
-5. risk reduction;
-6. engineering effort.
+### Product scope
+- submit/manage client change requests;
+- AI-assisted comparison against project scope;
+- classification: in scope / out of scope / partially in scope / insufficient information;
+- cited supporting scope evidence;
+- affected deliverables, assumptions, clarification questions, and relevant impact;
+- human review/edit before commercial action;
+- asynchronous processing/retry/idempotency where needed;
+- usage metering, limits, cost controls, and abuse protection for variable-cost operations.
 
-Do not advance speculative roadmap items merely because they are technically interesting.
+### Exit criteria
+A customer can go from stored scope + new request to a reviewed scope decision without founder/concierge processing.
+
+## Phase 4 — Change order and client approval
+
+### Outcome
+The scope decision becomes commercially actionable without leaving the product.
+
+### Product scope
+- generate/edit client-facing change order;
+- capture commercial fields such as added deliverables, price/fee, timeline impact, assumptions, and validity where applicable;
+- secure public client approval link;
+- approve / reject / request clarification workflow;
+- tamper-resistant identifiers and appropriate access controls;
+- approval/change audit history;
+- notifications needed for the workflow;
+- dashboard status for pending/approved/rejected changes.
+
+### Exit criteria
+One complete production workflow can move from project scope to client approval without manual founder operations.
+
+## Phase 5 — Subscription billing and automatic entitlements
+
+### Outcome
+Customers fund their own ongoing usage through recurring subscription revenue.
+
+### Product scope
+- recurring subscription checkout for the approved launch market/provider;
+- webhook-driven subscription state;
+- automatic product entitlements based on subscription state;
+- centrally configurable plan/usage allowances;
+- failed-payment/grace/cancellation behavior;
+- self-service billing/account management where provider capability permits;
+- usage enforcement before expensive operations exceed plan economics;
+- test/sandbox coverage before live activation.
+
+### Founder gate
+Exact public price, plan structure, and live payment-provider activation require founder approval. Engineering must not hard-code final pricing into core business logic.
+
+### Exit criteria
+A customer can subscribe, gain access automatically, use the product within plan limits, and cancel/manage the subscription without manual founder entitlement changes.
+
+## Phase 6 — Self-service onboarding, operations, and production hardening
+
+### Outcome
+The product can serve growing customer volume with minimal founder attention.
+
+### Product scope
+- first-run onboarding/checklist inside the product;
+- actionable error states and retry/recovery paths;
+- in-product help/documentation for core workflows;
+- account/data deletion and retention behavior;
+- rate limits and abuse controls;
+- observability for failures, latency, AI usage/cost, email/workflow delivery, and billing events without unnecessary customer-content logging;
+- backup/recovery expectations for persistent data;
+- production security review of tenant isolation, public approval links, file handling, secrets, and webhook endpoints;
+- end-to-end automated tests for revenue-critical workflows;
+- operational runbooks for exceptional incidents.
+
+### Exit criteria
+Routine customer onboarding, usage, payment, and recovery do not depend on a founder call or manual backend changes.
+
+## General-availability release gate
+
+ScopeDelta is ready for paying self-serve customers only when all of the following work together in production:
+
+1. sign up / sign in;
+2. workspace and tenant isolation;
+3. subscription entitlement;
+4. client/project creation;
+5. scope/SOW ingestion;
+6. structured scope with citations;
+7. new change request;
+8. AI-assisted cited analysis;
+9. human review/edit;
+10. change-order generation;
+11. secure client approval/rejection/clarification;
+12. audit/history/dashboard;
+13. usage limits/cost controls;
+14. account/billing lifecycle;
+15. monitoring, recoverability, and security checks.
+
+A landing page, demo, synthetic workflow, or concierge process does not satisfy this release gate.
+
+## Engineering sequencing
+
+GitHub issues define the executable backlog. Only the highest-priority unblocked issue should be marked `READY FOR CODEX`; downstream issues should remain blocked until dependencies are merged.
+
+## Product discipline
+
+Production-grade does not mean building every enterprise feature. Prioritize the narrow scope-change workflow, tenant/data safety, commercial automation, cost control, and operational scalability. Defer unrelated PM/CRM/accounting/integration features until paying-customer evidence demonstrates a need.

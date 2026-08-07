@@ -13,8 +13,12 @@ SSO, or client portals.
 ### Managed application
 
 Netlify remains the application host. Production is the merged `main` branch.
-The production context applies migrations and then builds; branch/deploy
-previews run only the build and receive no production database credentials.
+The protected GitHub `Production deploy` workflow applies migrations, then
+performs a manual Netlify CLI deploy. Netlify receives only runtime credentials;
+the direct migration credential exists only for the migration step. Automatic
+Netlify production builds are skipped by `netlify.toml` so code cannot publish
+before its migration. Branch/deploy previews still build and receive no
+production database credentials.
 
 PostgreSQL and SMTP remain provider-neutral. Neon Free is an optional managed
 PostgreSQL reference and Resend Free is an optional SMTP reference; their SDKs
@@ -23,34 +27,44 @@ on a free tier, and do not attach billing without founder approval.
 
 ### Self-hosted
 
-The `Dockerfile` builds a multi-stage Node.js 24 production image.
-`compose.yaml` demonstrates the app, PostgreSQL 17, a one-shot migration
-service, and development-only Mailpit. A production self-host must replace all
-sample credentials, omit Mailpit, persist PostgreSQL on protected storage, and
+The `Dockerfile` builds a multi-stage Node.js 24 production image that runs as
+the unprivileged `node` user. `compose.yaml` demonstrates the app, PostgreSQL
+17, a one-shot migration service, and development-only Mailpit; secrets are
+supplied from an untracked environment file. A production self-host must omit
+Mailpit, persist PostgreSQL on protected storage, and
 place the app behind a maintained reverse proxy that terminates TLS, redirects
 HTTP to HTTPS, preserves the original host/scheme, and supplies a trustworthy
 client-IP header.
 
 ## Production environment
 
-Set these only in the Netlify Production deploy context or the self-host secret
-manager:
+Set these runtime values only in the Netlify Production deploy context or the
+self-host secret manager:
 
 | Variable                                | Requirement                                                       |
 | --------------------------------------- | ----------------------------------------------------------------- |
 | `APP_URL`                               | Exact canonical HTTPS origin, no trailing slash.                  |
 | `DATABASE_URL`                          | Pooled runtime PostgreSQL URL with least-privilege app access.    |
-| `DATABASE_MIGRATION_URL`                | Direct PostgreSQL URL for migration/backup operations.            |
 | `BETTER_AUTH_SECRET`                    | At least 32 cryptographically random characters.                  |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` | Transactional SMTP endpoint and TLS mode.                         |
 | `SMTP_USER`, `SMTP_PASSWORD`            | Set together when authentication is required.                     |
 | `SMTP_FROM`                             | Verified sender, for example `ScopeDelta <no-reply@example.com>`. |
 | `LEAD_WEBHOOK_URL`                      | Existing paid-pilot JSON receiver.                                |
 
+Set these separately in the GitHub `production` environment used by
+`.github/workflows/production-deploy.yml`:
+
+| Secret                   | Requirement                                                       |
+| ------------------------ | ----------------------------------------------------------------- |
+| `DATABASE_MIGRATION_URL` | Direct schema-owner URL; scoped only to the migration step.       |
+| `NETLIFY_AUTH_TOKEN`     | Least-scope deploy token for the founder-controlled Netlify team. |
+| `NETLIFY_SITE_ID`        | Target ScopeDelta Netlify project identifier.                     |
+
 Do not use `NEXT_PUBLIC_`. Keep production values out of commits, tickets,
 screenshots, command history, and build output. Rotate `BETTER_AUTH_SECRET` only
 as an incident operation: rotation invalidates sessions and may affect pending
-tokens. After any Netlify environment change, publish a new production deploy.
+tokens. Never configure `DATABASE_MIGRATION_URL` in Netlify. After any Netlify
+runtime-environment change, run the protected production workflow again.
 
 ## PostgreSQL provisioning and permissions
 
@@ -60,15 +74,17 @@ tokens. After any Netlify environment change, publish a new production deploy.
 3. Create separate runtime and migration credentials. Runtime needs DML access
    to application tables; the migration role needs schema-change rights and is
    not exposed to the running app.
-4. Put the pooled endpoint in `DATABASE_URL` and the direct endpoint in
-   `DATABASE_MIGRATION_URL`. For Neon, use its pooled hostname for runtime and
-   unpooled/direct hostname for migration and `pg_dump`.
+4. Put the pooled endpoint in Netlify `DATABASE_URL` and the direct endpoint in
+   the GitHub `production` environment as `DATABASE_MIGRATION_URL`. For Neon,
+   use its pooled hostname for runtime and unpooled/direct hostname for
+   migration and `pg_dump`.
 5. Verify automated provider backups or configure the direct backup procedure
    below before accepting customer accounts.
 
-Do not run migrations from multiple production jobs concurrently. The Netlify
-production build is the single managed migration runner; self-hosted releases
-run the migration image once before replacing application containers.
+Do not run migrations from multiple production jobs concurrently. GitHub
+workflow concurrency makes `Production deploy` the single managed migration
+runner; self-hosted releases run the migration image once before replacing
+application containers.
 
 ## Migration release procedure
 
@@ -81,17 +97,20 @@ Before merging:
 5. For future non-additive changes, document the expand/backfill/contract
    releases and restoration implications in the PR.
 
-For Netlify production, `netlify.toml` runs `pnpm db:migrate && pnpm build` only
-in the production context. If migration fails, the deploy must fail before new
-code is published. Preview builds intentionally do not validate a live
-production database.
+For managed production, GitHub scopes `DATABASE_MIGRATION_URL` only to
+`pnpm db:migrate`. The following Netlify CLI step receives only
+`NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, and a non-secret orchestration marker.
+If migration fails, deployment does not start. `netlify.toml` cancels any
+automatic production build not carrying that marker, preventing the repository
+integration from racing the workflow. Preview builds intentionally do not
+validate a live production database.
 
 For self-hosting:
 
 ```bash
-docker compose build
-docker compose run --rm migrate
-docker compose up -d app
+docker compose --env-file .env.compose build
+docker compose --env-file .env.compose run --rm migrate
+docker compose --env-file .env.compose up -d app
 ```
 
 Never edit a migration that has reached any shared environment. Fix forward
@@ -119,12 +138,18 @@ Mailpit is development-only and must never be public or connected to production.
 1. Obtain founder approval for the chosen PostgreSQL/SMTP projects and any DNS
    changes; do not change the current production site beforehand.
 2. Provision and back up PostgreSQL, configure SMTP/DNS, and create secrets.
-3. Add Production-context variables in Netlify. Do not add database or SMTP
-   credentials to preview contexts.
-4. Publish merged `main`. Confirm the migration step succeeds before the build.
-5. Run the verification checklist below with synthetic identities and no
+3. Add runtime variables in Netlify, explicitly excluding
+   `DATABASE_MIGRATION_URL`. Do not add database or SMTP credentials to preview
+   contexts.
+4. Create the GitHub `production` environment with the three deployment secrets
+   above. Add founder approval protection where the repository plan supports
+   it, and restrict the environment to `main`.
+5. Merge `main`. Confirm `Production deploy` applies migrations before the
+   manual Netlify deployment. The automatic Netlify production build should be
+   reported as intentionally skipped.
+6. Run the verification checklist below with synthetic identities and no
    customer content.
-6. Record only pass/fail evidence and sanitized identifiers in the release/PR.
+7. Record only pass/fail evidence and sanitized identifiers in the release/PR.
 
 ## Release verification
 

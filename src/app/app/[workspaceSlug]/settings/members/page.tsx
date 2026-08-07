@@ -4,9 +4,9 @@ import { getWorkspaceBySlug, listWorkspaceMembers } from "@/server/workspaces";
 
 export default async function MembersPage({
   params,
-}: {
+}: Readonly<{
   params: Promise<{ workspaceSlug: string }>;
-}) {
+}>) {
   const session = await requireSession();
   const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug } = await params;

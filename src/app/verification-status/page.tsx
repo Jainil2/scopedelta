@@ -7,9 +7,9 @@ export const dynamic = "force-dynamic";
 
 export default async function VerificationStatusPage({
   searchParams,
-}: {
+}: Readonly<{
   searchParams: Promise<{ next?: string }>;
-}) {
+}>) {
   const session = await getSession();
   const { next } = await searchParams;
   const destination = safeDestination(next);

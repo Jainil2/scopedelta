@@ -4,9 +4,9 @@ import { getWorkspaceBySlug } from "@/server/workspaces";
 
 export default async function WorkspaceSettingsPage({
   params,
-}: {
+}: Readonly<{
   params: Promise<{ workspaceSlug: string }>;
-}) {
+}>) {
   const session = await requireSession();
   const { workspaceSlug } = await params;
   const workspace = await getWorkspaceBySlug(

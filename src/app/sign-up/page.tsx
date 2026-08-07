@@ -3,9 +3,9 @@ import { SignUpForm } from "@/components/auth-forms";
 
 export default async function SignUpPage({
   searchParams,
-}: {
+}: Readonly<{
   searchParams: Promise<{ callbackURL?: string }>;
-}) {
+}>) {
   const { callbackURL } = await searchParams;
   return (
     <AuthShell

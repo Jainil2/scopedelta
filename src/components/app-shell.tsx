@@ -15,19 +15,19 @@ export function AppShell({
   workspaces,
   userName,
   children,
-}: {
+}: Readonly<{
   current: Workspace;
-  workspaces: Workspace[];
+  workspaces: readonly Workspace[];
   userName: string;
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <div className="app-frame">
       <aside className="app-sidebar">
         <Link className="app-wordmark" href="/">
           <span className="app-brand-mark" aria-hidden="true">
             Δ
-          </span>
+          </span>{" "}
           ScopeDelta
         </Link>
         <div className="workspace-switcher">

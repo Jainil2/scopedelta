@@ -3,9 +3,9 @@ import { getWorkspaceBySlug } from "@/server/workspaces";
 
 export default async function WorkspaceOverview({
   params,
-}: {
+}: Readonly<{
   params: Promise<{ workspaceSlug: string }>;
-}) {
+}>) {
   const session = await requireSession();
   const { workspaceSlug } = await params;
   const workspace = await getWorkspaceBySlug(
@@ -23,8 +23,7 @@ export default async function WorkspaceOverview({
           </p>
         </div>
         <span className="kernel-status">
-          <i aria-hidden="true" />
-          Tenant boundary active
+          <i aria-hidden="true" /> Tenant boundary active
         </span>
       </header>
       <section className="kernel-proof" aria-labelledby="kernel-title">

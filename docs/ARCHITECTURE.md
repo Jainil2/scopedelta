@@ -42,8 +42,11 @@ Browser
 Runtime connections use pooled `DATABASE_URL`. Schema migration, backup, and
 restore operations use direct `DATABASE_MIGRATION_URL`; transaction/session
 semantics required by schema tools must not traverse a transaction pooler.
-`db/migrations/` is immutable deployment history. Production applies pending
-migrations before building the new application; previews never receive
+`db/migrations/` is immutable deployment history. A protected GitHub production
+workflow applies pending migrations, then manually deploys the Netlify build.
+The direct credential is scoped only to the migration step and is neither
+stored in Netlify nor inherited by application Functions. Automatic Netlify
+production builds are skipped to preserve this ordering; previews never receive
 production database credentials and therefore only build.
 
 Initial migrations are additive. Future changes use expand/contract:
@@ -160,11 +163,13 @@ CI runs the full suite plus production and container builds.
 
 ## Deployment and privacy boundaries
 
-`APP_URL`, both database URLs, `BETTER_AUTH_SECRET`, and SMTP configuration are
-server-only. `NEXT_PUBLIC_` remains reserved for deliberately public values.
-Database URLs, cookies, tokens, credentials, names, emails, lead payloads, and
-customer content must not enter logs or fixtures. Operational logs use fixed,
-non-PII event names.
+`APP_URL`, database URLs, `BETTER_AUTH_SECRET`, and SMTP configuration are
+server-only. `DATABASE_URL` is a least-privilege Netlify runtime value;
+`DATABASE_MIGRATION_URL` exists only in a protected GitHub migration step or a
+self-host operator environment. `NEXT_PUBLIC_` remains reserved for deliberately
+public values. Database URLs, cookies, tokens, credentials, names, emails, lead
+payloads, and customer content must not enter logs or fixtures. Operational logs
+use fixed, non-PII event names.
 
 Netlify remains the managed host; Neon Free and Resend Free are optional
 reference providers, not application dependencies. A self-host uses the same

@@ -5,12 +5,12 @@ export function AuthShell({
   title,
   description,
   children,
-}: {
+}: Readonly<{
   eyebrow: string;
   title: string;
   description: string;
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <main className="auth-page" id="main-content">
       <a className="skip-link" href="#main-content">
@@ -20,7 +20,7 @@ export function AuthShell({
         <Link className="app-wordmark" href="/">
           <span className="app-brand-mark" aria-hidden="true">
             Δ
-          </span>
+          </span>{" "}
           ScopeDelta
         </Link>
         <Link className="auth-home-link" href="/">

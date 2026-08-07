@@ -3,9 +3,9 @@ import { ResetPasswordForm } from "@/components/auth-forms";
 
 export default async function ResetPasswordPage({
   searchParams,
-}: {
+}: Readonly<{
   searchParams: Promise<{ token?: string }>;
-}) {
+}>) {
   const { token } = await searchParams;
   return (
     <AuthShell

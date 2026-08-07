@@ -8,10 +8,10 @@ import { getWorkspaceBySlug, listWorkspaces } from "@/server/workspaces";
 export default async function WorkspaceLayout({
   children,
   params,
-}: {
+}: Readonly<{
   children: React.ReactNode;
   params: Promise<{ workspaceSlug: string }>;
-}) {
+}>) {
   const session = await requireSession();
   const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug } = await params;

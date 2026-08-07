@@ -20,31 +20,41 @@ corepack enable
 corepack prepare pnpm@10.28.2 --activate
 pnpm install --frozen-lockfile
 cp .env.example .env.local
-docker compose up -d postgres mailpit
-DATABASE_MIGRATION_URL=postgresql://scopedelta:scopedelta_local_only@localhost:5432/scopedelta pnpm db:migrate
+cp .env.compose.example .env.compose
+docker compose --env-file .env.compose up -d postgres mailpit
+pnpm db:migrate
 pnpm dev
 ```
 
-Set these local values in `.env.local`:
+Generate a URL-safe local PostgreSQL password and an independent auth secret,
+then put the PostgreSQL password in `.env.compose`. Set the matching URLs and
+auth secret in `.env.local`; keep every credential blank in committed example
+files:
 
 ```dotenv
 APP_URL=http://localhost:3000
-DATABASE_URL=postgresql://scopedelta:scopedelta_local_only@localhost:5432/scopedelta
-DATABASE_MIGRATION_URL=postgresql://scopedelta:scopedelta_local_only@localhost:5432/scopedelta
-BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
+DATABASE_URL=
+DATABASE_MIGRATION_URL=
+TEST_DATABASE_URL=
+BETTER_AUTH_SECRET=
 SMTP_HOST=localhost
 SMTP_PORT=1025
 SMTP_SECURE=false
 SMTP_FROM=ScopeDelta <no-reply@scopedelta.local>
 ```
 
+`pnpm db:migrate` loads an untracked `.env.local` when present. Browser tests
+require `TEST_DATABASE_URL` and `BETTER_AUTH_SECRET`; use a separate disposable
+test database. Generate secrets with a password manager or a command such as
+`openssl rand -hex 32` and never reuse local values in production.
+
 Open [the application](http://localhost:3000) and
 [Mailpit](http://localhost:8025). Mailpit captures verification, recovery, and
 workspace-invitation messages without sending real email.
 
 Alternatively, run the complete self-host stack—including a one-shot migration
-container—with `docker compose up --build`. The credentials in `compose.yaml`
-are deliberately local-only and must never be reused in a deployment.
+container—with `docker compose --env-file .env.compose up --build` after filling
+the untracked `.env.compose`. The Compose file contains no credential values.
 
 For a team LAN/VPN deployment, expose the application only through a trusted
 TLS reverse proxy, set `APP_URL` to that shared origin, and keep PostgreSQL and
@@ -59,6 +69,7 @@ connection is required for the Layer-0 workspace kernel.
 | `APP_URL`                               | Canonical HTTPS origin; localhost is the development fallback.       |
 | `DATABASE_URL`                          | Pooled PostgreSQL runtime connection.                                |
 | `DATABASE_MIGRATION_URL`                | Direct PostgreSQL connection for migrations and operational tooling. |
+| `TEST_DATABASE_URL`                     | Disposable PostgreSQL database used only by local/CI tests.          |
 | `BETTER_AUTH_SECRET`                    | Random server secret, at least 32 characters.                        |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` | Provider-neutral SMTP transport.                                     |
 | `SMTP_USER`, `SMTP_PASSWORD`            | Optional SMTP credentials; set both or neither.                      |
@@ -70,10 +81,13 @@ values may use `NEXT_PUBLIC_`. Never expose database URLs, auth secrets, SMTP
 credentials, or webhook endpoints with that prefix.
 
 Normal authentication and workspace flows require PostgreSQL and SMTP.
-Deployments must set `APP_URL`, both database URLs, `BETTER_AUTH_SECRET`, and the
-SMTP variables. The public landing page still renders when platform services
-are unavailable. `LEAD_WEBHOOK_URL` is independently required only to accept
-paid-pilot submissions.
+Deployments must set `APP_URL`, pooled `DATABASE_URL`, `BETTER_AUTH_SECRET`, and
+the SMTP variables in the application host. The privileged
+`DATABASE_MIGRATION_URL` belongs only in the protected production deployment
+workflow or a self-host operator environment—never in Netlify. The public
+landing page still renders when platform services are unavailable.
+`LEAD_WEBHOOK_URL` is independently required only to accept paid-pilot
+submissions.
 
 ## Database workflow
 
@@ -139,11 +153,15 @@ separate privacy and retention boundary; see
 
 ## Deployment
 
-Netlify remains the managed application host. Only the production deploy
-context runs `pnpm db:migrate` before `pnpm build`; previews build without
-production database credentials. The same runtime can be self-hosted with the
-multi-stage `Dockerfile` and Compose stack. PostgreSQL and SMTP are the only
-platform protocols—no hosted identity, database, or mail SDK is embedded.
+Netlify remains the managed application host. Merges to `main` trigger the
+protected GitHub `Production deploy` workflow: it applies migrations with a
+GitHub-only direct credential, then performs a manual Netlify CLI production
+deploy without that credential. `netlify.toml` skips automatic production
+builds so application code cannot race ahead of migrations; deploy previews
+continue to build without production credentials. The same runtime can be
+self-hosted with the multi-stage `Dockerfile` and Compose stack. PostgreSQL and
+SMTP are the only runtime protocols—no hosted identity, database, or mail SDK
+is embedded.
 
 For production configuration, backups, SMTP/DNS, rollback, logging, and TLS,
 follow [docs/OPERATIONS.md](docs/OPERATIONS.md). Architecture and security
@@ -152,8 +170,9 @@ boundaries are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## Troubleshooting
 
 - Wrong pnpm: run `corepack prepare pnpm@10.28.2 --activate`.
-- Database connection failures: check `docker compose ps`, the pooled runtime
-  URL, and the direct migration URL; then run `pnpm db:migrate`.
+- Database connection failures: check
+  `docker compose --env-file .env.compose ps`, the pooled runtime URL, and the
+  direct migration URL; then run `pnpm db:migrate`.
 - No email: open Mailpit locally or verify production sender DNS, credentials,
   TLS mode, and SMTP egress. Application logs intentionally omit recipients.
 - Sign-in redirects back: verify the email first and make sure `APP_URL` exactly

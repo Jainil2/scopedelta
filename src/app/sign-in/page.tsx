@@ -3,9 +3,9 @@ import { SignInForm } from "@/components/auth-forms";
 
 export default async function SignInPage({
   searchParams,
-}: {
+}: Readonly<{
   searchParams: Promise<{ callbackURL?: string }>;
-}) {
+}>) {
   const { callbackURL } = await searchParams;
   const safeCallback =
     callbackURL?.startsWith("/") && !callbackURL.startsWith("//")

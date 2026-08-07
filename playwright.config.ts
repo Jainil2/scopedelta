@@ -1,7 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
+import { config as loadEnvironment } from "dotenv";
+
+loadEnvironment({ path: ".env.local", quiet: true });
 
 const port = 3100;
 const baseURL = `http://localhost:${port}`;
+const testDatabaseUrl = requireEnvironment("TEST_DATABASE_URL");
+const testAuthSecret = requireEnvironment("BETTER_AUTH_SECRET");
 
 export default defineConfig({
   testDir: "./e2e",
@@ -36,12 +41,8 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     env: {
       APP_URL: baseURL,
-      DATABASE_URL:
-        process.env.TEST_DATABASE_URL ??
-        "postgresql://scopedelta:scopedelta_local_only@127.0.0.1:5432/scopedelta_test",
-      BETTER_AUTH_SECRET:
-        process.env.BETTER_AUTH_SECRET ??
-        "local-development-secret-change-before-production",
+      DATABASE_URL: testDatabaseUrl,
+      BETTER_AUTH_SECRET: testAuthSecret,
       SMTP_HOST: process.env.SMTP_HOST ?? "127.0.0.1",
       SMTP_PORT: process.env.SMTP_PORT ?? "1025",
       SMTP_SECURE: "false",
@@ -50,3 +51,9 @@ export default defineConfig({
     },
   },
 });
+
+function requireEnvironment(name: string) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required for browser tests.`);
+  return value;
+}

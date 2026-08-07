@@ -18,7 +18,7 @@ export default async function OnboardingPage() {
         <Link className="app-wordmark" href="/">
           <span className="app-brand-mark" aria-hidden="true">
             Δ
-          </span>
+          </span>{" "}
           ScopeDelta
         </Link>
         {existing[0] ? (

@@ -10,6 +10,11 @@ type ApiResult<T> =
   | { data: T }
   | { error: { message: string; fieldErrors?: Record<string, string[]> } };
 
+function formValue(data: FormData, name: string) {
+  const value = data.get(name);
+  return typeof value === "string" ? value : "";
+}
+
 async function apiRequest<T>(url: string, init?: RequestInit) {
   const response = await fetch(url, {
     ...init,
@@ -42,7 +47,7 @@ export function WorkspaceCreateForm() {
         "/api/v1/workspaces",
         {
           method: "POST",
-          body: JSON.stringify({ name: String(data.get("name") ?? "") }),
+          body: JSON.stringify({ name: formValue(data, "name") }),
         },
       );
       router.push(`/app/${workspace.slug}`);
@@ -61,7 +66,7 @@ export function WorkspaceCreateForm() {
     <form className="platform-form" onSubmit={submit}>
       <label className="platform-field" htmlFor="workspace-name">
         <span>
-          Workspace name
+          Workspace name{" "}
           <small>Usually your company or delivery organization</small>
         </span>
         <input
@@ -86,14 +91,14 @@ export function WorkspaceCreateForm() {
 
 export function WorkspaceSettingsForm({
   workspace,
-}: {
+}: Readonly<{
   workspace: {
     id: string;
     name: string;
     timezone: string;
     role: WorkspaceRole;
   };
-}) {
+}>) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState("");
@@ -110,8 +115,8 @@ export function WorkspaceSettingsForm({
       await apiRequest(`/api/v1/workspaces/${workspace.id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          name: data.get("name"),
-          timezone: data.get("timezone"),
+          name: formValue(data, "name"),
+          timezone: formValue(data, "timezone"),
         }),
       });
       setStatus("Workspace settings saved.");
@@ -141,7 +146,7 @@ export function WorkspaceSettingsForm({
       </label>
       <label className="platform-field" htmlFor="settings-timezone">
         <span>
-          Default time zone
+          Default time zone{" "}
           <small>IANA time zones keep workspace dates globally portable.</small>
         </span>
         <select
@@ -167,9 +172,9 @@ export function WorkspaceSettingsForm({
           Members can view these settings. An owner or admin must change them.
         </p>
       )}
-      <p className="platform-status" role="status" aria-live="polite">
+      <output className="platform-status" aria-live="polite">
         {status}
-      </p>
+      </output>
     </form>
   );
 }
@@ -196,13 +201,13 @@ export function MemberManagement({
   currentRole,
   members,
   invitations,
-}: {
+}: Readonly<{
   workspaceId: string;
   currentUserId: string;
   currentRole: WorkspaceRole;
-  members: Member[];
-  invitations: Invitation[];
-}) {
+  members: readonly Member[];
+  invitations: readonly Invitation[];
+}>) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -218,8 +223,8 @@ export function MemberManagement({
       await apiRequest(`/api/v1/workspaces/${workspaceId}/invitations`, {
         method: "POST",
         body: JSON.stringify({
-          email: data.get("email"),
-          role: data.get("role"),
+          email: formValue(data, "email"),
+          role: formValue(data, "role"),
         }),
       });
       form.reset();
@@ -337,9 +342,9 @@ export function MemberManagement({
           teammates.
         </p>
       )}
-      <p className="platform-status" role="status" aria-live="polite">
+      <output className="platform-status" aria-live="polite">
         {message}
-      </p>
+      </output>
       <div className="member-list" aria-label="Workspace members">
         {members.map((member) => {
           const isSelf = member.userId === currentUserId;
@@ -421,7 +426,9 @@ export function MemberManagement({
   );
 }
 
-export function InvitationAcceptance({ signedIn }: { signedIn: boolean }) {
+export function InvitationAcceptance({
+  signedIn,
+}: Readonly<{ signedIn: boolean }>) {
   const router = useRouter();
   const started = useRef(false);
   const [state, setState] = useState<"working" | "auth" | "error">("working");

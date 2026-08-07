@@ -10,11 +10,16 @@ type Status = { kind: "idle" | "error" | "success"; message: string };
 
 const idle: Status = { kind: "idle", message: "" };
 
+function formValue(data: FormData, name: string) {
+  const value = data.get(name);
+  return typeof value === "string" ? value : "";
+}
+
 export function SignUpForm({
   callbackURL = "/onboarding",
-}: {
+}: Readonly<{
   callbackURL?: string;
-}) {
+}>) {
   const [status, setStatus] = useState(idle);
   const [pending, setPending] = useState(false);
 
@@ -23,18 +28,16 @@ export function SignUpForm({
     if (pending) return;
     const form = event.currentTarget;
     const data = new FormData(form);
-    const password = String(data.get("password") ?? "");
-    if (password !== String(data.get("confirmPassword") ?? "")) {
+    const password = formValue(data, "password");
+    if (password !== formValue(data, "confirmPassword")) {
       setStatus({ kind: "error", message: "Passwords do not match." });
       return;
     }
     setPending(true);
     setStatus(idle);
     const result = await authClient.signUp.email({
-      name: String(data.get("name") ?? "").trim(),
-      email: String(data.get("email") ?? "")
-        .trim()
-        .toLowerCase(),
+      name: formValue(data, "name").trim(),
+      email: formValue(data, "email").trim().toLowerCase(),
       password,
       callbackURL: `/verification-status?next=${encodeURIComponent(callbackURL)}`,
     });
@@ -99,7 +102,9 @@ export function SignUpForm({
   );
 }
 
-export function SignInForm({ callbackURL = "/app" }: { callbackURL?: string }) {
+export function SignInForm({
+  callbackURL = "/app",
+}: Readonly<{ callbackURL?: string }>) {
   const router = useRouter();
   const [status, setStatus] = useState(idle);
   const [pending, setPending] = useState(false);
@@ -111,10 +116,8 @@ export function SignInForm({ callbackURL = "/app" }: { callbackURL?: string }) {
     setPending(true);
     setStatus(idle);
     const result = await authClient.signIn.email({
-      email: String(data.get("email") ?? "")
-        .trim()
-        .toLowerCase(),
-      password: String(data.get("password") ?? ""),
+      email: formValue(data, "email").trim().toLowerCase(),
+      password: formValue(data, "password"),
       callbackURL,
     });
     setPending(false);
@@ -171,9 +174,7 @@ export function ForgotPasswordForm() {
     const data = new FormData(event.currentTarget);
     setPending(true);
     await authClient.requestPasswordReset({
-      email: String(data.get("email") ?? "")
-        .trim()
-        .toLowerCase(),
+      email: formValue(data, "email").trim().toLowerCase(),
       redirectTo: "/reset-password",
     });
     setPending(false);
@@ -201,7 +202,7 @@ export function ForgotPasswordForm() {
   );
 }
 
-export function ResetPasswordForm({ token }: { token?: string }) {
+export function ResetPasswordForm({ token }: Readonly<{ token?: string }>) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>(
     token
@@ -217,8 +218,8 @@ export function ResetPasswordForm({ token }: { token?: string }) {
     event.preventDefault();
     if (pending || !token) return;
     const data = new FormData(event.currentTarget);
-    const password = String(data.get("password") ?? "");
-    if (password !== String(data.get("confirmPassword") ?? "")) {
+    const password = formValue(data, "password");
+    if (password !== formValue(data, "confirmPassword")) {
       setStatus({ kind: "error", message: "Passwords do not match." });
       return;
     }
@@ -295,10 +296,12 @@ function FormControl({
   label,
   hint,
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & {
-  label: string;
-  hint?: string;
-}) {
+}: Readonly<
+  React.InputHTMLAttributes<HTMLInputElement> & {
+    label: string;
+    hint?: string;
+  }
+>) {
   const id = `auth-${props.name}`;
   return (
     <label className="platform-field" htmlFor={id}>
@@ -315,11 +318,11 @@ function SubmitButton({
   pending,
   disabled,
   children,
-}: {
+}: Readonly<{
   pending: boolean;
   disabled?: boolean;
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <button
       className="app-primary-button"
@@ -332,14 +335,21 @@ function SubmitButton({
   );
 }
 
-function FormStatus({ status }: { status: Status }) {
+function FormStatus({ status }: Readonly<{ status: Status }>) {
+  if (status.kind === "error") {
+    return (
+      <p className="platform-status platform-status-error" role="alert">
+        {status.message}
+      </p>
+    );
+  }
+
   return (
-    <p
+    <output
       className={`platform-status platform-status-${status.kind}`}
-      role={status.kind === "error" ? "alert" : "status"}
       aria-live="polite"
     >
       {status.message}
-    </p>
+    </output>
   );
 }

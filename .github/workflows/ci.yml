@@ -21,7 +21,8 @@ jobs:
         env:
           POSTGRES_DB: scopedelta_test
           POSTGRES_USER: scopedelta
-          POSTGRES_PASSWORD: scopedelta_ci_only
+          # The service is isolated to this ephemeral runner; no reusable credential exists.
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -37,10 +38,10 @@ jobs:
     env:
       NEXT_TELEMETRY_DISABLED: "1"
       APP_URL: http://localhost:3100
-      DATABASE_URL: postgresql://scopedelta:scopedelta_ci_only@127.0.0.1:5432/scopedelta_test
-      DATABASE_MIGRATION_URL: postgresql://scopedelta:scopedelta_ci_only@127.0.0.1:5432/scopedelta_test
-      TEST_DATABASE_URL: postgresql://scopedelta:scopedelta_ci_only@127.0.0.1:5432/scopedelta_test
-      BETTER_AUTH_SECRET: ci-only-secret-with-at-least-thirty-two-characters
+      DATABASE_URL: postgresql://scopedelta@127.0.0.1:5432/scopedelta_test
+      DATABASE_MIGRATION_URL: postgresql://scopedelta@127.0.0.1:5432/scopedelta_test
+      TEST_DATABASE_URL: postgresql://scopedelta@127.0.0.1:5432/scopedelta_test
+      BETTER_AUTH_SECRET: ci-auth-${{ github.run_id }}-${{ github.run_attempt }}-scopedelta-tests-only
       SMTP_HOST: 127.0.0.1
       SMTP_PORT: "1025"
       SMTP_SECURE: "false"
@@ -60,7 +61,17 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Verify production deploy guard
+        run: |
+          CONTEXT=production node scripts/netlify-ignore.mjs
+          if CONTEXT=production SCOPEDELTA_DEPLOY_ORCHESTRATED=true node scripts/netlify-ignore.mjs; then
+            exit 1
+          fi
+          if CONTEXT=deploy-preview node scripts/netlify-ignore.mjs; then
+            exit 1
+          fi
 
       - name: Check migration definitions
         run: pnpm db:check

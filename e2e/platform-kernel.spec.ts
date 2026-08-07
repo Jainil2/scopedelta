@@ -269,10 +269,12 @@ async function expireSessions(email: string) {
 }
 
 async function withTestDatabase(work: (pool: Pool) => Promise<void>) {
+  const connectionString = process.env.TEST_DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("TEST_DATABASE_URL is required for browser tests.");
+  }
   const pool = new Pool({
-    connectionString:
-      process.env.TEST_DATABASE_URL ??
-      "postgresql://scopedelta:scopedelta_local_only@127.0.0.1:5432/scopedelta_test",
+    connectionString,
   });
   try {
     await work(pool);

@@ -54,6 +54,13 @@ is not automatically retried. The browser retains that UUID and all entered
 fields after a failure, so a deliberate user retry remains deduplicatable. A
 filled honeypot returns success without forwarding.
 
+Webhook transport requires HTTPS for every non-local receiver. Plain HTTP is
+accepted only for exact localhost, IPv4 loopback addresses in `127.0.0.0/8`, or
+IPv6 `::1` during local development. Other HTTP configurations are treated as
+unavailable before any lead data leaves the application. Webhook requests do
+not follow redirects, preventing a permitted URL from downgrading or changing
+the transport destination.
+
 This adapter is intentionally provider-neutral. ScopeDelta does not select a
 CRM, email vendor, analytics service, or lead database in SC-002. The deployment
 owner selects and secures the receiving endpoint, applies retention controls,

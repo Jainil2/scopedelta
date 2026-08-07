@@ -55,10 +55,33 @@ function getWebhookUrl() {
 
   try {
     const url = new URL(configuredUrl);
-    return url.protocol === "https:" || url.protocol === "http:" ? url : null;
+    if (url.protocol === "https:") return url;
+
+    return url.protocol === "http:" && isLoopbackHostname(url.hostname)
+      ? url
+      : null;
   } catch {
     return null;
   }
+}
+
+function isLoopbackHostname(hostname: string) {
+  const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+
+  if (normalizedHostname === "localhost" || normalizedHostname === "::1") {
+    return true;
+  }
+
+  const ipv4Parts = normalizedHostname.split(".");
+  return (
+    ipv4Parts.length === 4 &&
+    ipv4Parts[0] === "127" &&
+    ipv4Parts.every((part) => {
+      if (!/^\d{1,3}$/.test(part)) return false;
+      const value = Number(part);
+      return value >= 0 && value <= 255;
+    })
+  );
 }
 
 export async function POST(request: Request) {
@@ -150,6 +173,7 @@ export async function POST(request: Request) {
         "X-ScopeDelta-Event": event.event,
       },
       body: JSON.stringify(event),
+      redirect: "error",
       signal: AbortSignal.timeout(webhookTimeoutMs),
     });
 

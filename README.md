@@ -27,6 +27,9 @@ For production deployments, set `APP_URL` to the canonical absolute URL, such
 as `https://app.example.com`. Set `LEAD_WEBHOOK_URL` to the HTTPS endpoint that
 will receive paid-pilot applications. An empty webhook value is acceptable for
 local UI work, but the form will show a recoverable error until it is configured.
+Plain HTTP webhook URLs are accepted only for exact localhost and IP loopback
+addresses during local development; non-local HTTP URLs are rejected before any
+lead data is forwarded.
 
 Keep webhook URLs and other secrets in the deployment environment or an
 untracked `.env.local` file. Variables are server-only unless their names begin
@@ -57,8 +60,9 @@ event to `LEAD_WEBHOOK_URL`:
 
 The request uses the submission UUID as the `Idempotency-Key` header and sets
 `X-ScopeDelta-Event: pilot_interest.submitted`. Delivery has an eight-second
-timeout and no automatic retry; a person retrying the form reuses the same
-submission ID. Configure the receiving system to deduplicate on that ID.
+timeout, does not follow redirects, and has no automatic retry; a person
+retrying the form reuses the same submission ID. Configure the receiving system
+to deduplicate on that ID.
 
 The endpoint is intentionally provider-neutral and stores no lead data in this
 application. It caps request bodies, suppresses honeypot submissions, and never

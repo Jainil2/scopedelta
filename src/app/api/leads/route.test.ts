@@ -49,6 +49,7 @@ describe("POST /api/leads", () => {
     const [url, request] = fetchMock.mock.calls[0] as [URL, RequestInit];
     expect(url.href).toBe("https://example.test/pilot-leads");
     expect(request.method).toBe("POST");
+    expect(request.redirect).toBe("error");
     expect(request.headers).toMatchObject({
       "Content-Type": "application/json",
       "Idempotency-Key": submissionId,
@@ -130,6 +131,45 @@ describe("POST /api/leads", () => {
       code: "submission_unavailable",
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "http://example.test/pilot-leads",
+    "http://localhost.example.test/pilot-leads",
+  ])(
+    "rejects the insecure non-local webhook %s without forwarding",
+    async (webhookUrl) => {
+      vi.stubEnv("LEAD_WEBHOOK_URL", webhookUrl);
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const response = await POST(leadRequest(validSubmission));
+
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({
+        ok: false,
+        code: "submission_unavailable",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "http://localhost:3901/pilot-leads",
+    "http://127.42.0.2:3901/pilot-leads",
+    "http://[::1]:3901/pilot-leads",
+  ])("allows the local development webhook %s", async (webhookUrl) => {
+    vi.stubEnv("LEAD_WEBHOOK_URL", webhookUrl);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await POST(leadRequest(validSubmission));
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect((fetchMock.mock.calls[0][0] as URL).href).toBe(webhookUrl);
   });
 
   it("does not expose upstream details when the webhook rejects the event", async () => {

@@ -1,64 +1,38 @@
-# ScopeDelta Paid-Pilot Operating Assumptions
+# Historical Paid-Pilot Decision — Superseded
 
-## Purpose
+## Status
 
-This document defines the founder-approved Week-1 paid-pilot offer used for EXP-001. It is a willingness-to-pay test, not final SaaS pricing.
+Superseded by founder decision on 2026-08-07.
 
-## Approved validation offer
+ScopeDelta is now being built as a fully self-serve recurring-subscription SaaS. The standard product must not depend on concierge processing, sales/onboarding calls, or routine founder support.
 
-Founder approval date: 2026-08-07.
+The previously approved validation offer was:
 
-- Cohort: India-first small software agencies and experienced freelancers.
-- Price: ₹4,999 one-time.
-- Capacity: first 3 paid pilots.
-- Duration: up to 30 days.
-- Scope: one live project/example during the pilot.
-- Commercial model: guided pilot only; no subscription commitment is required during the pilot.
+- India-first cohort;
+- ₹4,999 one-time;
+- first 3 paid pilots;
+- one live project/example;
+- up to 30 days;
+- guided/concierge workflow.
 
-Changing this price, cohort, or material offer terms requires a new founder decision.
+This offer is retained only as historical context and is **not** the active commercial model or product-release gate.
 
-## Pilot outcome
+## Active commercial direction
 
-A qualified agency/freelancer should be able to give ScopeDelta one anonymized real scope example plus one new client request and receive a useful, reviewable scope decision/change-order draft quickly enough to improve a real commercial conversation.
+The normal business model is recurring subscription SaaS. Customers should be able to sign up, subscribe, use the full ScopeDelta workflow, manage billing, and recover from routine errors without founder intervention.
 
-## Pilot includes
+Exact recurring public pricing, plan allowances, launch currency/market changes, and live payment-provider activation require a founder decision before general availability.
 
-- one active project/example during validation;
-- guided onboarding;
-- manual/concierge processing where the product is not yet automated;
-- scope comparison with cited scope items;
-- assumptions and clarification questions;
-- rough delivery/timeline impact where enough information exists;
-- client-facing change-order draft;
-- direct founder feedback loop.
+## Active product decision
 
-## Pilot does not promise
+See:
 
-- autonomous legal or contractual judgment;
-- production ingestion of confidential documents beyond the approved production data-handling boundary;
-- accounting/invoicing integrations;
-- full project management;
-- guaranteed revenue recovery;
-- production-grade automation for every workflow step.
+- `docs/decisions/ADR-004-self-serve-production-saas.md`
+- `docs/PRODUCT.md`
+- `docs/ROADMAP.md`
 
-## Qualification
+## Historical lesson retained
 
-Prefer prospects with a recent concrete scope-change incident and authority to influence commercial/project decisions.
+The narrow product outcome remains valid: a software agency/freelancer should be able to provide the agreed scope plus a new client request and receive a useful, reviewable, cited scope decision that can become a professional client change order.
 
-Strong-fit prospects typically:
-
-- deliver fixed-price or milestone software projects;
-- handle client change requests during active delivery;
-- can describe recent absorbed, disputed, delayed, or repriced work;
-- are willing to discuss one anonymized real case;
-- have a founder, delivery lead, project manager, technical lead, or senior freelancer involved in the buying decision.
-
-## Pilot success evidence
-
-Record whether the pilot produces evidence of:
-
-- less time spent deciding whether a request is in scope;
-- earlier commercial conversations before extra work starts;
-- clearer client-facing change-order communication;
-- avoided unbilled work or recovered revenue;
-- willingness to continue paying for the workflow after the pilot.
+What changed is the operating model: this value must now be delivered by the production product itself rather than by concierge work.

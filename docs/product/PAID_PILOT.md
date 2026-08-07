@@ -2,7 +2,20 @@
 
 ## Purpose
 
-This document defines what the Week-1 pilot must prove. Final pricing is a founder decision and is intentionally not locked here yet.
+This document defines the founder-approved Week-1 paid-pilot offer used for EXP-001. It is a willingness-to-pay test, not final SaaS pricing.
+
+## Approved validation offer
+
+Founder approval date: 2026-08-07.
+
+- Cohort: India-first small software agencies and experienced freelancers.
+- Price: ₹4,999 one-time.
+- Capacity: first 3 paid pilots.
+- Duration: up to 30 days.
+- Scope: one live project/example during the pilot.
+- Commercial model: guided pilot only; no subscription commitment is required during the pilot.
+
+Changing this price, cohort, or material offer terms requires a new founder decision.
 
 ## Pilot outcome
 
@@ -22,7 +35,7 @@ A qualified agency/freelancer should be able to give ScopeDelta one anonymized r
 ## Pilot does not promise
 
 - autonomous legal or contractual judgment;
-- production ingestion of confidential documents before the data-handling path is ready;
+- production ingestion of confidential documents beyond the approved production data-handling boundary;
 - accounting/invoicing integrations;
 - full project management;
 - guaranteed revenue recovery;
@@ -32,11 +45,20 @@ A qualified agency/freelancer should be able to give ScopeDelta one anonymized r
 
 Prefer prospects with a recent concrete scope-change incident and authority to influence commercial/project decisions.
 
-## Commercial decision still required
+Strong-fit prospects typically:
 
-Before outreach presents a specific fee, the founder must approve:
+- deliver fixed-price or milestone software projects;
+- handle client change requests during active delivery;
+- can describe recent absorbed, disputed, delayed, or repriced work;
+- are willing to discuss one anonymized real case;
+- have a founder, delivery lead, project manager, technical lead, or senior freelancer involved in the buying decision.
 
-1. the initial one-time pilot price;
-2. whether the first outreach cohort is India-first, international-first, or mixed.
+## Pilot success evidence
 
-After approval, update this document and the landing/outreach copy if needed.
+Record whether the pilot produces evidence of:
+
+- less time spent deciding whether a request is in scope;
+- earlier commercial conversations before extra work starts;
+- clearer client-facing change-order communication;
+- avoided unbilled work or recovered revenue;
+- willingness to continue paying for the workflow after the pilot.

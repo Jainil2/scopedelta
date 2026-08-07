@@ -3,12 +3,13 @@
 Use this file to summarize durable patterns from interviews and pilots. Do not store confidential customer documents or unnecessary personal data here.
 
 ## Evidence standard
+
 Prefer concrete recent behavior over opinions. Record the problem, current workflow, business impact, objections, and whether the prospect commits time, real anonymized material, or money.
 
 ## Conversation log
 
 | Date | Prospect type | Role | Pricing model | Recent scope-change example | Current process | Impact | Test commitment | Paid commitment | Key objection / quote |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ---- | ------------- | ---- | ------------- | --------------------------- | --------------- | ------ | --------------- | --------------- | --------------------- |
 
 ## Repeated patterns
 

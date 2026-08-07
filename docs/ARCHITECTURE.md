@@ -2,9 +2,9 @@
 
 ## Status
 
-Accepted for SC-001 and extended by SC-002. Revisit these decisions only when
-validated product needs or an approved issue require a material architectural
-change.
+Accepted for SC-001 and extended by SC-002 and SC-003. Revisit these decisions
+only when validated product needs or an approved issue require a material
+architectural change.
 
 ## Context and goals
 
@@ -22,8 +22,12 @@ client components should be introduced only for browser interaction.
 
 This structure provides server rendering, metadata, route handling, and a
 production build without adding a separate API service or paid infrastructure.
-Next.js can run on a standard Node.js host or a compatible serverless platform;
-the repository does not select or provision a hosting vendor.
+Next.js can run on a standard Node.js host or a compatible serverless platform.
+SC-003 selects Netlify Free as the first production host because it supports the
+application's App Router and Node route-handler needs, permits commercial
+projects on the free plan, and imposes a hard usage limit without automatic
+overage charges. GitHub-connected production deploys follow `main`; the
+checked-in `netlify.toml` keeps the build contract reviewable and portable.
 
 ## Repository layout
 
@@ -61,11 +65,15 @@ unavailable before any lead data leaves the application. Webhook requests do
 not follow redirects, preventing a permitted URL from downgrading or changing
 the transport destination.
 
-This adapter is intentionally provider-neutral. ScopeDelta does not select a
-CRM, email vendor, analytics service, or lead database in SC-002. The deployment
-owner selects and secures the receiving endpoint, applies retention controls,
-and deduplicates submissions. The application never logs lead payloads or
-returns receiving-provider details to the browser.
+This adapter remains provider-neutral. SC-003 configures a founder-owned
+Formspree form as the initial production receiver because it accepts the
+existing JSON event without application-specific client credentials or a new
+database. Formspree is an operational deployment choice, not a domain
+dependency: its URL is supplied only through `LEAD_WEBHOOK_URL`, and no SDK or
+provider type enters application code. The deployment owner secures the
+receiver, applies retention controls, and deduplicates submissions. The
+application never logs lead payloads or returns receiving-provider details to
+the browser.
 
 ## Quality and delivery
 
@@ -76,6 +84,8 @@ returns receiving-provider details to the browser.
   tests.
 - Pull-request CI installs the locked dependency graph and runs formatting,
   linting, type checking, tests, and the production build on Node.js 24.
+- Netlify installs the frozen pnpm graph, builds the same Next.js artifact on
+  Node.js 24, and publishes merged `main` commits as production deploys.
 
 The committed `pnpm-lock.yaml`, pinned package-manager version, and `.nvmrc`
 keep local worktrees and CI reproducible.
@@ -88,6 +98,13 @@ back to `http://localhost:3000`; production deployments must set the real URL.
 applications; without it, the form safely preserves input and reports a
 recoverable error. The `.env.example` file contains variable names without
 credentials.
+
+The production values live in Netlify's Production deploy context. The
+Formspree endpoint is treated as secret operational configuration because
+direct disclosure would bypass ScopeDelta's server validation and honeypot.
+Netlify build and function logs must not contain lead request or webhook bodies.
+Detailed deployment, verification, lead-retention, rollback, and disable
+procedures live in `docs/OPERATIONS.md`.
 
 Environment variables are server-only by default. A `NEXT_PUBLIC_` prefix is
 reserved for values deliberately exposed in browser bundles. Secrets, customer
@@ -106,8 +123,14 @@ isolation at every read and mutation boundary.
 - Component tests give fast confidence in the landing-page behavior. Browser
   automation verifies the primary responsive conversion flow without adding a
   persistent end-to-end suite yet.
-- No database or hosting vendor is selected. This preserves reversibility but
-  leaves those deployment decisions to later validated requirements.
+- No database or product data store is selected. This preserves reversibility
+  and leaves persistence decisions to later validated requirements. Netlify is
+  the selected validation host, but the standard Next.js build and
+  provider-free application boundary keep a future host move practical.
 - Webhook delivery avoids persistence and provider coupling, but availability
   depends on the configured receiver. The stable event and idempotency key keep
   a future adapter or durable queue possible without introducing one early.
+- Netlify Free and Formspree Free minimize launch cost and prohibit surprise
+  infrastructure spend, but they introduce external usage limits and a manual
+  lead-review workflow. A paid plan, durable queue, CRM, or database requires a
+  separate approved issue and founder approval where it creates spend.

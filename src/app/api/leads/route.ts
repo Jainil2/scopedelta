@@ -168,6 +168,7 @@ export async function POST(request: Request) {
     const response = await fetch(webhookUrl, {
       method: "POST",
       headers: {
+        Accept: "application/json",
         "Content-Type": "application/json",
         "Idempotency-Key": lead.submissionId,
         "X-ScopeDelta-Event": event.event,

@@ -1,146 +1,268 @@
 # ScopeDelta Product Definition
 
+## Category
+
+**ScopeDelta is an AI-native client software delivery operating system for software service companies.**
+
+It combines an opinionated daily delivery workspace with a differentiated Commercial Delivery Graph that connects what was sold, what the client asks for, what the team builds, what QA verifies, and what the client approves.
+
 ## Mission
 
-Help small software agencies and freelancers prevent unbilled scope creep by converting ambiguous client requests into reviewable, client-approved change orders.
+Help software delivery organizations run client projects with less tool fragmentation, less project-manager busywork, fewer misunderstood requirements, earlier risk detection, and substantially less commercial drift.
 
-## Initial ICP
+## Primary ICP
 
-Small software agencies and experienced freelancers that:
+Initial target: software development agencies, consultancies, outsourcing/product-engineering companies, and similar B2B software-delivery organizations with roughly **50–500 employees**.
 
-- deliver fixed-price or milestone-based software projects;
-- work from proposals, statements of work, or agreed requirement lists;
-- receive ongoing client requests through email, chat, meetings, or documents;
-- lose time or margin deciding whether requests are inside the agreed scope;
-- need a professional way to price and approve additional work.
+Strong-fit organizations typically:
 
-Initial buyer: agency founder, delivery/project manager, technical lead, or senior freelancer.
+- run multiple client projects concurrently;
+- have separate project/account managers, developers and QA/testers;
+- use fixed-price, milestone, retainer, time-and-materials, or mixed commercial models;
+- currently coordinate delivery across Jira/Linear/ClickUp/other PM tools plus documents, chat, email and repositories;
+- need clients to see and approve the right information without exposing internal delivery noise;
+- suffer from requirements, status, scope, QA and commercial decisions becoming disconnected across systems.
 
-## Core problem
+The initial product is designed for client software delivery. It is not a generic all-industry ERP.
 
-After a project begins, clients request additions or modifications. Teams often perform small additions without formally comparing them with the agreed scope, quantifying impact, or obtaining commercial approval. This creates margin leakage and client disputes.
+## Core customer problem
 
-The product must solve this operationally, not merely describe the problem. ScopeDelta must hold the agreed scope, compare new requests against it with evidence, support a human commercial review, create a change order, and preserve the client decision.
+The daily problem is broader than scope creep: **delivery context fragments across the entire project lifecycle**.
 
-## Product promise
+Common failure pattern:
 
-> Turn a new client request into a reviewable, billable change order in minutes while keeping the agency in control of the commercial decision.
+1. sales/proposal/SOW defines one version of the project;
+2. client requests and clarifications arrive later in different channels;
+3. PMs translate those requests into work items manually;
+4. developers and testers operate from a delivery backlog that may no longer match the commercial agreement;
+5. clients receive manually translated status updates because internal tickets are too technical or expose inappropriate detail;
+6. QA, acceptance and commercial approvals live in separate places;
+7. leaders discover schedule, margin or expectation drift after work has already been consumed.
 
-## Required self-serve workflow
+Current tools solve portions of this workflow. ScopeDelta's opportunity is to keep those layers continuously connected.
 
-A normal customer must be able to complete the product lifecycle without founder assistance:
+## Product thesis
 
-1. Create an account and workspace.
-2. Activate a subscription/entitlement for production use.
-3. Create a client and project.
-4. Upload or paste the agreed project scope/SOW.
-5. ScopeDelta securely stores the source and structures relevant deliverables, exclusions, constraints, assumptions, and other scope items with source traceability.
-6. The user submits a new client request.
-7. ScopeDelta compares the request with the agreed scope and proposes a classification:
-   - in scope;
-   - out of scope;
-   - partially in scope;
-   - insufficient information.
-8. ScopeDelta explains the reasoning, cites affected scope items/source evidence, identifies assumptions/clarifications, and estimates relevant delivery impact where the available information supports it.
-9. The agency reviews and edits the analysis and commercial impact before anything is sent to a client.
-10. ScopeDelta generates a professional client-facing change order.
-11. The agency shares a secure client approval link.
-12. The client can approve, reject, or request clarification.
-13. ScopeDelta preserves the approval/change history and exposes the current commercial state in the agency dashboard.
-14. The customer manages subscription and account lifecycle without founder intervention.
+### Daily-use thesis
 
-## Founder operating constraint
+A team should be able to use ScopeDelta as its primary project/delivery workspace instead of maintaining ScopeDelta beside Jira or Linear merely for scope checks.
 
-ScopeDelta is operated by a solo founder. The standard product must therefore not depend on:
+### Differentiating thesis
 
-- sales or onboarding calls;
-- concierge/manual scope processing;
-- manual account provisioning;
-- manual payment confirmation;
-- manual entitlement changes;
-- routine customer-support conversations;
-- founder intervention for normal retries, failures, or account recovery.
+> **ScopeDelta prevents unapproved or misunderstood client scope from silently becoming delivery work.**
 
-Founder involvement should be exception-only for material commercial decisions, legal/compliance matters, production incidents, abuse, or unusual account problems.
+The differentiating system is the **Commercial Delivery Graph**.
 
-## Critical product principles
+It links:
 
-### Human-controlled commercial decisions
+- client/engagement;
+- signed scope and baseline versions;
+- requirements and acceptance criteria;
+- client requests/clarifications;
+- commercial decisions and approved changes;
+- project milestones, cycles and work items;
+- repository/PR/CI evidence from integrations;
+- QA/test/defect evidence;
+- client approval/acceptance;
+- effort, schedule and commercial impact;
+- audit history.
 
-AI assists analysis; it does not autonomously make contractual or commercial commitments. The agency user must be able to review and edit conclusions before a client sees them.
+Every material delivery item should eventually be explainable by an approved baseline, an approved change, or an explicit authorized decision to absorb/swap/defer/reject the work. Missing relationships are commercial drift.
 
-### Evidence over unsupported AI conclusions
+## Product capability layers
 
-Every scope classification must trace back to the agreed scope. The product should prefer explicit citations/source references and identify uncertainty instead of presenting unsupported certainty.
+The product is intentionally built in layers. A later layer may depend on earlier layers, but earlier layers must remain useful and production-quality on their own.
 
-### Multi-tenant isolation
+### Layer 0 — Platform Kernel
 
-Every customer-owned project, scope document, request, analysis, change order, approval, usage record, and subscription entitlement must be isolated to the correct tenant at every read/write boundary.
+Foundation required by every other capability:
 
-### Economically bounded automation
+- account/authentication and recovery;
+- organization/workspace tenancy;
+- roles/permissions and strict tenant isolation;
+- production persistence and migrations;
+- audit/event model;
+- API/webhook boundaries;
+- feature/entitlement hooks;
+- cloud + self-host portability;
+- security, secrets and operational foundations.
 
-AI, storage, email, background processing, and other variable-cost operations must be metered and governed by subscription entitlements, plan limits, rate limits, and abuse controls so growth does not create unbounded founder-funded infrastructure cost.
+### Layer 1 — Delivery Core
 
-### Low-operations architecture
+The minimum product capable of replacing basic Jira/Linear-style day-to-day project tracking for the target ICP:
 
-Prefer managed, scalable, reversible infrastructure and automatic recovery/monitoring over systems that require regular founder administration.
+- clients and engagements;
+- projects;
+- milestones/releases;
+- cycles/sprints where used;
+- work items, subtasks, dependencies and acceptance criteria;
+- assignments, priority, estimates and statuses;
+- list/board views, filtering and search;
+- comments, decisions and activity history;
+- lightweight project knowledge/specification pages;
+- notifications and actionable personal/project views;
+- clean internal project workflows with excellent defaults.
 
-## Production launch success criteria
+Layer 1 should be opinionated and fast rather than exposing Jira-scale configuration complexity immediately.
 
-The product is not considered launch-ready merely because a landing page or demo works. General availability requires an end-to-end self-serve workflow in production.
+### Layer 2 — Commercial Delivery Graph
 
-At minimum:
+ScopeDelta's primary wedge:
 
-- a new customer can sign up without manual provisioning;
-- tenant isolation is enforced and tested;
-- a customer can activate a recurring subscription in the supported launch market(s);
-- plan state automatically controls product entitlement;
-- a customer can create a project and provide an agreed scope/SOW;
-- the system can structure the scope with traceable evidence;
-- a customer can submit a new request and receive a cited scope-impact analysis;
-- the customer can review/edit the result;
-- the customer can generate and send a change order;
-- the client can approve/reject/request clarification through a secure public flow;
-- approval history/audit state is preserved;
-- usage/cost-generating operations are metered and bounded;
-- user-facing failures are recoverable without founder intervention where practical;
-- monitoring, security, data-retention/deletion, backup/recovery expectations, and operational runbooks are adequate for paying customers;
-- the standard customer lifecycle can be completed without calls or concierge work.
+- versioned proposal/SOW/scope baseline;
+- evidence-backed requirements, deliverables, exclusions, assumptions and revision limits;
+- client request/change capture;
+- commercial decision taxonomy: included, defect/fix, revision allowance, absorb, swap, defer, paid change, clarify, reject;
+- links between commercial decisions and delivery work;
+- commercially unlinked work/drift detection;
+- warning-by-default with optional policy gates later;
+- schedule/effort/commercial impact with evidence separated from estimates.
 
-## “Enterprise-grade” boundary
+### Layer 3 — Client Collaboration & Negotiation
 
-The initial product should use production-grade security, reliability, auditability, scalability, and operational practices.
+A client-safe experience built into the same project rather than exposing the internal board directly:
 
-Do not confuse that with enterprise procurement scope. Unless customer evidence later requires them, the initial release does not need:
+- client request/clarification channel;
+- client-facing project status and milestones;
+- scope/change negotiation packets;
+- secure approve/reject/request-clarification flows;
+- deliverable/milestone acceptance;
+- immutable decision versions and audit history;
+- client-safe terminology separated from internal technical detail.
 
-- SAML/SSO or SCIM;
-- on-premise deployment;
-- complex enterprise RBAC;
-- custom SLAs;
-- bespoke procurement workflows;
-- a broad integration marketplace.
+### Layer 4 — Engineering & QA Delivery Loop
 
-## Initial product non-goals
+Connect delivery planning with engineering evidence without rebuilding source-control infrastructure:
 
-Do not add these merely because they appear useful:
+- GitHub/GitLab repository integration;
+- link work items to branches, commits, pull/merge requests and CI state;
+- development/review/release readiness;
+- bugs/defects and test evidence;
+- acceptance criteria and QA status;
+- environments/releases where useful;
+- trace requested → planned → implemented → tested → accepted.
 
-- full project management;
-- team chat;
-- time tracking;
-- CRM;
-- accounting/invoicing platform;
-- native iOS/Android applications;
-- automatic Gmail/Slack/WhatsApp ingestion;
-- simultaneous Jira/Linear/Slack/Notion integrations;
-- autonomous pricing commitments;
-- elaborate agent frameworks or speculative microservices.
+ScopeDelta does not initially host Git repositories or build its own CI/CD runner platform.
 
-## Commercial model
+### Layer 5 — AI-Native Delivery Intelligence
 
-The normal business model is recurring subscription SaaS. Subscription revenue should fund the ongoing variable infrastructure required to serve customers.
+AI is a system layer, not a decorative chatbot:
 
-Exact public subscription pricing and live payment-provider activation require founder approval before general availability. Pricing and usage allowances must be designed so expected cloud/AI/email/storage costs remain economically sustainable.
+- turn messy requests/specs into structured work with traceability;
+- scope/commercial comparison with citations and uncertainty;
+- PM assistance for backlog hygiene, dependency/risk detection and replanning;
+- developer context summaries and requirement/acceptance retrieval;
+- QA assistance for test scenarios, regression/risk and requirement coverage;
+- client-safe status/change explanations;
+- project health and drift detection;
+- bounded agent actions with permission, audit and cost controls;
+- managed AI plus BYO/local-model paths where practical.
 
-## Durable decision
+### Layer 6 — Portfolio, Operations & Enterprise Scale
 
-See `docs/decisions/ADR-004-self-serve-production-saas.md` for the founder decision that supersedes the concierge-first operating model.
+For larger organizations after the core workflow is strong:
+
+- multi-project/portfolio views;
+- capacity and workload;
+- project budget/margin visibility where supported by data;
+- reusable templates and organization standards;
+- advanced workflow/policy controls;
+- advanced RBAC;
+- SSO/SCIM and governance when justified;
+- audit/export, retention/data-residency capabilities;
+- enterprise administration and support features.
+
+## Role-specific product value
+
+### Project / delivery manager
+
+Less manual translation, backlog cleanup, status reporting, chasing approvals and reconstructing why work exists.
+
+### Account / commercial owner
+
+Clear relationship between agreement, requested changes, approved decisions, delivery impact and client acceptance.
+
+### Developer
+
+Clean actionable work with current context, requirements, dependencies and acceptance criteria without reading long client threads or contracts.
+
+### QA / tester
+
+Direct traceability from requirement/change to acceptance criteria, implementation and verification state.
+
+### Client
+
+A simple client-safe project surface for requests, decisions, progress and approvals instead of access to an internal engineering tool.
+
+## Product principles
+
+### Innovation over feature count
+
+Do not clone incumbents screen-for-screen. Build the minimum daily-work primitives required to replace them, then invest in handoffs and commercial/delivery intelligence incumbents do poorly.
+
+### Tech-first
+
+APIs, events, auditability, integrations and AI execution boundaries are first-class architecture.
+
+### Simple by default
+
+The product should feel closer to Linear's speed/opinionated workflow than Jira's configuration burden. Advanced configurability should be earned by real customer need.
+
+### Premium reliability at disruptive cost
+
+Low price must come from efficient architecture, open-source components, self-service operations and automation—not from accepting unreliable behavior or weak security.
+
+### Open/free-first distribution
+
+Prefer open-source dependencies, open standards and self-hostable infrastructure. The intended distribution model is a genuinely useful community/self-hosted edition plus managed cloud.
+
+Where practical, self-hosted customers should be able to bring their own AI provider or local model. Managed cloud can bundle AI and operational services.
+
+Exact public-source license is a later founder/legal decision.
+
+### Global architecture
+
+Core domain models must support global customers, currencies, time zones and regional deployment needs without country-specific assumptions.
+
+### Human authority
+
+AI may recommend and take bounded operational actions, but binding commercial commitments, client-visible approvals and destructive actions remain governed by authorized users/policies.
+
+## Commercial model direction
+
+The intended model is:
+
+- useful self-hosted/community edition at no software license cost;
+- low-friction hosted entry option;
+- recurring managed-cloud revenue;
+- usage limits that cover managed AI/storage/email/background-processing economics;
+- higher-value business/enterprise governance and managed capabilities.
+
+Avoid relying exclusively on per-seat pricing. For 50–500-person delivery organizations, a working hypothesis is to price managed cloud around active client-delivery capacity plus managed AI/usage, with generous collaboration/client access. Exact pricing is not yet approved.
+
+## Competitive boundary
+
+ScopeDelta must be able to replace the **project/delivery management** role of Jira/Linear for its target workflow.
+
+It should integrate with mature infrastructure rather than rebuild it where there is no strategic advantage, especially:
+
+- source-code hosting;
+- Git protocol/infrastructure;
+- CI/CD execution platforms;
+- cloud infrastructure providers;
+- accounting/payment rails;
+- video conferencing.
+
+## Production release principle
+
+A landing page or isolated AI demo is not a product release.
+
+Each capability layer must be production-quality before it becomes a dependency of the next layer. General availability requires a coherent self-service workflow with tested tenant isolation, recoverability, observability, cost controls and no routine founder intervention.
+
+## Durable decisions
+
+See:
+
+- `docs/decisions/ADR-004-self-serve-production-saas.md`
+- `docs/decisions/ADR-005-ai-native-client-delivery-os.md`
+- `docs/research/MARKET_PROBLEM_THESIS_2026-08.md`

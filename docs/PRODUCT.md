@@ -172,6 +172,38 @@ For larger organizations after the core workflow is strong:
 - audit/export, retention/data-residency capabilities;
 - enterprise administration and support features.
 
+## Product clients and deployment surfaces
+
+ScopeDelta is one product core with multiple clients/deployment modes.
+
+### Web client
+
+The browser experience is first-class and universal for ScopeDelta Cloud and customer-controlled servers. Client-facing project/approval surfaces remain web-native so an external client does not need to install software.
+
+### Desktop client
+
+A first-party Windows/macOS/Linux client is planned after the daily delivery core is stable. It must use the same server/domain/API authorization rules as web rather than becoming a separate backend/product.
+
+Desktop-specific value includes native notifications, deep links, persistent daily access, server selection and bounded secure local cache. Full peer-to-peer/offline collaborative databases are not an initial requirement.
+
+### ScopeDelta Cloud
+
+ScopeDelta operates the server, database, storage, upgrades, backups, managed AI, notifications/integration workers and observability subject to plan limits.
+
+### Self-hosted / private server
+
+A customer can run the same ScopeDelta core on its own server/VPC/private network. Core Local/LAN-class capabilities must not require ScopeDelta Cloud.
+
+### LAN/private team deployment
+
+A 50–500-person company may run one shared ScopeDelta server/database on its office/private infrastructure. Web and desktop clients connect to that server over the organization's LAN/VPN/network controls. The server remains authoritative for collaborative project/commercial/audit state.
+
+### Air-gapped direction
+
+Later enterprise/private deployments may replace external SaaS dependencies with local equivalents: local/BYO AI, local SMTP, self-hosted Git service and signed offline updates. Air-gapped support is not promised until production hardening validates it.
+
+See `docs/FEATURE_RUNTIME_MATRIX.md` and `docs/research/DEPLOYMENT_RUNTIME_LICENSE_THESIS_2026-08.md`.
+
 ## Role-specific product value
 
 ### Project / delivery manager
@@ -212,13 +244,15 @@ The product should feel closer to Linear's speed/opinionated workflow than Jira'
 
 Low price must come from efficient architecture, open-source components, self-service operations and automation—not from accepting unreliable behavior or weak security.
 
-### Open/free-first distribution
+### Open-dependency / self-host-first distribution
 
-Prefer open-source dependencies, open standards and self-hostable infrastructure. The intended distribution model is a genuinely useful community/self-hosted edition plus managed cloud.
+Prefer open-source dependencies, open standards and self-hostable infrastructure when they meet production requirements.
+
+The ScopeDelta product core itself is **not yet committed to an OSI-open-source license**. The current business requirement is a genuinely useful free/self-hosted path while protecting the managed-cloud business from direct commercial cloning. Until LIC-001 is resolved, describe the intended core distribution as **self-hosted/community/source-available direction**, not guaranteed open source.
 
 Where practical, self-hosted customers should be able to bring their own AI provider or local model. Managed cloud can bundle AI and operational services.
 
-Exact public-source license is a later founder/legal decision.
+Public SDKs, API clients and interoperability packages may use permissive open-source licenses where ecosystem value justifies it. Exact core/enterprise/public package licensing is a founder/legal decision before source publication.
 
 ### Global architecture
 
@@ -232,7 +266,7 @@ AI may recommend and take bounded operational actions, but binding commercial co
 
 The intended model is:
 
-- useful self-hosted/community edition at no software license cost;
+- useful self-hosted/community product at no software license cost for permitted internal use under the eventual license;
 - low-friction hosted entry option;
 - recurring managed-cloud revenue;
 - usage limits that cover managed AI/storage/email/background-processing economics;
@@ -266,3 +300,8 @@ See:
 - `docs/decisions/ADR-004-self-serve-production-saas.md`
 - `docs/decisions/ADR-005-ai-native-client-delivery-os.md`
 - `docs/research/MARKET_PROBLEM_THESIS_2026-08.md`
+- `docs/research/DEPLOYMENT_RUNTIME_LICENSE_THESIS_2026-08.md`
+- `docs/FEATURE_RUNTIME_MATRIX.md`
+- LIC-001
+- ARCH-001
+- DX-001

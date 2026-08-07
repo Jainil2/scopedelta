@@ -77,6 +77,7 @@ web_modules/
 # Next.js build output
 .next
 out
+.vercel
 
 # Nuxt.js build / generate output
 .nuxt
@@ -127,6 +128,10 @@ dist
 
 # pnpm
 .pnpm-store
+
+# Browser validation artifacts
+.playwright-cli
+output/playwright
 
 # yarn v3
 .pnp.*

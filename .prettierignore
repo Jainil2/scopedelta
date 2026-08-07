@@ -1,0 +1,11 @@
+.next
+.playwright-cli
+AGENTS.md
+coverage
+node_modules
+output/playwright
+pnpm-lock.yaml
+docs/screenshots
+docs/BUSINESS_RULES.md
+docs/PRODUCT.md
+docs/ROADMAP.md

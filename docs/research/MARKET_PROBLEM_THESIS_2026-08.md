@@ -34,6 +34,8 @@ Why this segment:
 
 Jira is not technologically stagnant. Current Jira includes boards/lists/timelines/calendars, forms, dependencies, automation, reporting, goals, Rovo AI, agent actions, AI-assisted work creation and more than 3,000 marketplace integrations.
 
+Verified source: Atlassian Jira features and Rovo AI product pages, reviewed 2026-08-07.
+
 Implication: ScopeDelta cannot win by claiming "Jira has no AI" or by offering basic boards/workflows.
 
 Its opportunity is a more opinionated client-delivery model with less configuration burden and a native commercial/client boundary.
@@ -42,7 +44,9 @@ Its opportunity is a more opinionated client-delivery model with less configurat
 
 Linear is fast, opinionated and increasingly AI-native. Linear Agent can create/update issues, projects, milestones and initiatives, summarize ongoing work and reason over workspace context. Linear also has Customer Requests linked to issues/projects.
 
-However public agency discussions repeatedly show friction when using Linear for external client delivery: teams use workaround structures, separate portals/status reports, or third-party tools because clients should not receive broad internal workspace access and technical tickets often require translation.
+Verified sources: Linear Agent, Customer Requests and pricing documentation, reviewed 2026-08-07.
+
+Public agency discussions repeatedly show friction when using Linear for external client delivery: teams use workaround structures, separate portals/status reports, or third-party tools because clients should not receive broad internal workspace access and technical tickets often require translation.
 
 Implication: "fast and modern" is not enough. ScopeDelta should combine that usability level with client-service semantics that Linear does not center.
 
@@ -50,17 +54,23 @@ Implication: "fast and modern" is not enough. ScopeDelta should combine that usa
 
 Plane is an especially important competitive warning. Its Community Edition is AGPL-licensed and self-hostable with unlimited projects/work items/users; it is AI-native and offers inexpensive managed plans. Business capabilities include external intake and customer records.
 
+Verified sources: Plane open-source, self-hosted and pricing pages, reviewed 2026-08-07.
+
 Implication: **open source + self-host + low price + AI project management is not a USP.** It is a strong distribution/product principle, but ScopeDelta still needs differentiated workflow value.
 
 ### OpenProject
 
 OpenProject proves that mature open-source project-management software can cover classic/agile/hybrid planning, boards, work breakdown, scheduling, workload and integrations with GitHub/GitLab while monetizing hosted/enterprise support.
 
+Verified sources: OpenProject product, task-management and pricing pages, reviewed 2026-08-07.
+
 Implication: open-core/self-host can support a sustainable business model, but ScopeDelta must be more specialized and AI-native rather than competing solely on licensing.
 
 ### GitLab
 
 GitLab demonstrates how deeply planning can integrate with engineering artifacts through issues, boards, epics and repository/CI context.
+
+Verified source: GitLab issue/issue-board documentation, reviewed 2026-08-07.
 
 Implication: implementation evidence is valuable to our graph, but building source hosting/CI would put ScopeDelta into an enormous infrastructure market with little initial differentiation. Integrate rather than rebuild this layer.
 
@@ -73,6 +83,8 @@ Client requests arrive in business language. PMs manually convert them into engi
 ### 2. Client visibility without exposing internal complexity
 
 Agencies often do not want to expose internal Jira/Linear boards directly. Developer-oriented work item descriptions are also poor client status communication. Teams therefore duplicate status updates and use extra portals/reports.
+
+Public agency/project-management discussions repeatedly describe this gap: teams use separate client portals, custom dashboards, weekly reports or email because direct Jira/Linear access exposes too much or does not map cleanly to individual clients/projects.
 
 ### 3. Commercial drift
 
@@ -173,7 +185,14 @@ The market already has strong open-source PM competitors, so free/open is a dist
 
 Founder direction is low-cost/high-volume with premium B2B quality.
 
-Competitive context: current public plans commonly use per-seat pricing (for example Jira Standard, Linear Basic/Business and Plane Pro/Business). For a 50–500-person organization, seat taxes become material and can discourage broad participation.
+Competitive context from current public pricing reviewed 2026-08-07:
+
+- Jira Standard: approximately $7.91/user/month on the public pricing page at review time;
+- Linear Basic/Business: $10/$16 per user/month billed yearly;
+- Plane Pro/Business: $6/$13 per seat/month on annual plans;
+- OpenProject Community: free self-hosted; paid plans begin around €5.95/user/month with plan-specific minimums.
+
+For a 50–500-person organization, seat taxes become material and can discourage broad participation.
 
 Working ScopeDelta hypothesis:
 

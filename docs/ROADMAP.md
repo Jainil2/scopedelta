@@ -1,154 +1,240 @@
-# ScopeDelta Production Roadmap
+# ScopeDelta Layered Production Roadmap
 
-This roadmap targets a complete self-serve subscription SaaS, not a concierge pilot or proof of concept. The product remains narrowly focused on scope-change management while the implementation is production-grade.
+This roadmap builds ScopeDelta as an AI-native client software delivery operating system for 50–500-person software service organizations.
+
+The product is built layer by layer. Each layer must be useful, secure and production-quality before downstream layers rely on it. We are not attempting to clone every Jira/Linear feature before shipping differentiation.
 
 ## Completed foundation
 
 Already complete:
 
 - deployable Next.js application foundation;
-- CI, tests, lint/typecheck/build gates;
-- public landing page and paid-interest form;
+- CI, lint/typecheck/test/build gates;
+- public landing page;
 - production Netlify deployment and basic operations runbook.
 
-These are infrastructure/marketing foundations only. They are not the core product.
+These are technical/marketing foundations only. They are not the delivery product.
 
-## Phase 1 — Identity, tenancy, persistence, and authorization
-
-### Outcome
-A customer can create an account/workspace and the application can safely persist tenant-owned data.
-
-### Product scope
-- authentication and account lifecycle;
-- organization/workspace creation;
-- production data store selected by engineering;
-- tenant membership/ownership model;
-- strict authorization boundaries;
-- foundational audit timestamps and identifiers;
-- minimum client/project persistence needed by later phases.
-
-### Exit criteria
-A test suite proves one tenant cannot read or mutate another tenant's data, and a real user can create/sign in to a workspace and persist a project.
-
-## Phase 2 — Project scope ingestion and evidence model
+## Layer 0 — Platform Kernel
 
 ### Outcome
-A paying customer can give ScopeDelta the source of truth for an active project.
+A production-capable cloud/self-host-compatible multi-tenant kernel that future delivery features can safely build on.
 
-### Product scope
-- create/manage clients and projects;
-- paste scope text and upload supported scope/SOW documents;
-- secure document storage and metadata;
-- structured scope items: deliverables, exclusions, constraints, assumptions, revision/change limits where present;
-- trace structured items back to source evidence;
-- ingestion/extraction status, errors, retry, and editing.
+### Scope
+- self-service authentication and recovery;
+- organizations/workspaces and membership;
+- initial role/permission model;
+- durable production database and migrations;
+- strict tenant isolation;
+- audit/event foundation;
+- stable identifier/time conventions;
+- server API/service boundaries and webhook/event conventions;
+- entitlement/feature hooks for later cloud plans;
+- environment/configuration conventions that work for managed cloud and self-hosted deployments;
+- production operations documentation.
 
 ### Exit criteria
-A customer can add a real project scope and inspect/edit structured scope items with source traceability.
+A fresh production-like environment can create accounts/workspaces, persist tenant-owned records and prove cross-tenant isolation through automated negative tests.
 
-## Phase 3 — Core change-request analysis engine
+## Layer 1 — Delivery Core
 
 ### Outcome
-ScopeDelta solves the central business problem: compare a new request against the agreed scope and produce a useful, defensible decision draft.
+A software-delivery team can manage normal client project work in ScopeDelta without needing Jira/Linear for basic issue/project tracking.
 
-### Product scope
-- submit/manage client change requests;
-- AI-assisted comparison against project scope;
-- classification: in scope / out of scope / partially in scope / insufficient information;
-- cited supporting scope evidence;
-- affected deliverables, assumptions, clarification questions, and relevant impact;
-- human review/edit before commercial action;
-- asynchronous processing/retry/idempotency where needed;
-- usage metering, limits, cost controls, and abuse protection for variable-cost operations.
+### Scope
+- clients and engagements;
+- projects;
+- milestones/releases;
+- cycles/sprints where enabled;
+- work items/subtasks;
+- assignments, priority, estimates and dependencies;
+- acceptance criteria;
+- configurable but opinionated statuses/workflows;
+- list and board views first; additional views only when justified;
+- comments, activity and explicit decisions;
+- lightweight project/specification pages;
+- filtering, search and personal/project action views;
+- useful defaults for software delivery rather than a blank workflow builder.
+
+### Differentiating requirement
+Even before the full Commercial Delivery Graph exists, domain relationships must be ready to connect work to client requests, requirements, scope and approvals later. Do not build a generic issue tracker with no client-delivery semantics.
 
 ### Exit criteria
-A customer can go from stored scope + new request to a reviewed scope decision without founder/concierge processing.
+A real software project can be planned and executed through milestones/cycles/work items with clean role-aware daily workflows and no cross-tenant leakage.
 
-## Phase 4 — Change order and client approval
+## Layer 2 — Commercial Delivery Graph
 
 ### Outcome
-The scope decision becomes commercially actionable without leaving the product.
+ScopeDelta becomes meaningfully different from generic PM systems: commercial intent and delivery execution stay connected.
 
-### Product scope
-- generate/edit client-facing change order;
-- capture commercial fields such as added deliverables, price/fee, timeline impact, assumptions, and validity where applicable;
-- secure public client approval link;
-- approve / reject / request clarification workflow;
-- tamper-resistant identifiers and appropriate access controls;
-- approval/change audit history;
-- notifications needed for the workflow;
-- dashboard status for pending/approved/rejected changes.
+### Scope
+- versioned proposal/SOW/scope baselines;
+- secure source/document ingestion;
+- evidence-backed requirements, deliverables, exclusions, assumptions and revision limits;
+- client request/change records;
+- commercial decision taxonomy: included, defect/fix, revision allowance, absorb, swap, defer, paid change, clarify, reject;
+- links between commercial decisions and work items;
+- traceability across scope versions;
+- commercially unlinked work detection;
+- warning-by-default drift UX;
+- configurable stricter gates as a later policy capability;
+- impact fields for effort/schedule/commercial consequences with facts separated from estimates.
 
 ### Exit criteria
-One complete production workflow can move from project scope to client approval without manual founder operations.
+A PM can answer why each material delivery item exists commercially, and ScopeDelta can surface work that has no approved commercial parent.
 
-## Phase 5 — Subscription billing and automatic entitlements
+## Layer 3 — Client Collaboration & Negotiation
 
 ### Outcome
-Customers fund their own ongoing usage through recurring subscription revenue.
+Client interaction becomes part of the same system without exposing the internal engineering workspace.
 
-### Product scope
-- recurring subscription checkout for the approved launch market/provider;
-- webhook-driven subscription state;
-- automatic product entitlements based on subscription state;
-- centrally configurable plan/usage allowances;
-- failed-payment/grace/cancellation behavior;
-- self-service billing/account management where provider capability permits;
-- usage enforcement before expensive operations exceed plan economics;
-- test/sandbox coverage before live activation.
-
-### Founder gate
-Exact public price, plan structure, and live payment-provider activation require founder approval. Engineering must not hard-code final pricing into core business logic.
+### Scope
+- secure project-specific client portal;
+- client request/clarification intake;
+- client-safe status/milestones;
+- commercial decision/change proposal packets;
+- approve/reject/request-clarification;
+- deliverable/milestone acceptance;
+- immutable shared versions and audit history;
+- notifications and recovery;
+- client-safe vocabulary/content separate from internal technical detail.
 
 ### Exit criteria
-A customer can subscribe, gain access automatically, use the product within plan limits, and cancel/manage the subscription without manual founder entitlement changes.
+A client can request, understand, review and approve relevant delivery/commercial changes without receiving an internal employee seat or seeing unrelated internal data.
 
-## Phase 6 — Self-service onboarding, operations, and production hardening
+## Layer 4 — Engineering & QA Delivery Loop
 
 ### Outcome
-The product can serve growing customer volume with minimal founder attention.
+Planning, implementation, QA and acceptance form one traceable delivery chain.
 
-### Product scope
-- first-run onboarding/checklist inside the product;
-- actionable error states and retry/recovery paths;
-- in-product help/documentation for core workflows;
-- account/data deletion and retention behavior;
-- rate limits and abuse controls;
-- observability for failures, latency, AI usage/cost, email/workflow delivery, and billing events without unnecessary customer-content logging;
-- backup/recovery expectations for persistent data;
-- production security review of tenant isolation, public approval links, file handling, secrets, and webhook endpoints;
-- end-to-end automated tests for revenue-critical workflows;
-- operational runbooks for exceptional incidents.
+### Scope
+- GitHub integration first, followed by GitLab when justified;
+- link work items to branches/commits/pull requests and CI state;
+- implementation/review readiness;
+- bugs/defects;
+- test cases/checklists or equivalent lightweight QA evidence;
+- requirement/acceptance-criteria coverage;
+- release/environment state where useful;
+- trace requested → planned → implemented → tested → accepted.
+
+### Boundary
+Do not build Git hosting or general CI/CD infrastructure in these layers. Integrate mature systems.
 
 ### Exit criteria
-Routine customer onboarding, usage, payment, and recovery do not depend on a founder call or manual backend changes.
+A PM/developer/QA/client can trace a meaningful requirement or approved change through implementation, verification and acceptance.
 
-## General-availability release gate
+## Layer 5 — AI-Native Delivery Intelligence
 
-ScopeDelta is ready for paying self-serve customers only when all of the following work together in production:
+### Outcome
+AI reduces coordination work across PM, developer, QA, commercial and client roles instead of acting as an isolated chatbot.
 
-1. sign up / sign in;
-2. workspace and tenant isolation;
-3. subscription entitlement;
-4. client/project creation;
-5. scope/SOW ingestion;
-6. structured scope with citations;
-7. new change request;
-8. AI-assisted cited analysis;
-9. human review/edit;
-10. change-order generation;
-11. secure client approval/rejection/clarification;
-12. audit/history/dashboard;
-13. usage limits/cost controls;
-14. account/billing lifecycle;
-15. monitoring, recoverability, and security checks.
+### Scope
+- structured requirement/work generation from messy input with citations;
+- commercial/scope reasoning against the graph;
+- PM backlog hygiene, dependency/risk and replanning assistance;
+- developer context/requirement retrieval and ambiguity detection;
+- QA test/risk/coverage assistance;
+- client-safe progress and change explanations;
+- project health summaries based on actual graph state;
+- drift/risk alerts;
+- bounded agent actions with permission/audit rules;
+- idempotent async execution and retries;
+- model/provider abstraction supporting managed AI and BYO/local options where practical;
+- per-tenant usage/cost accounting and hard limits.
 
-A landing page, demo, synthetic workflow, or concierge process does not satisfy this release gate.
+### Exit criteria
+AI demonstrably removes repetitive project-management/translation work while every material action remains attributable, reviewable and economically bounded.
+
+## Layer 6 — Subscription, Cloud Economics & Distribution
+
+### Outcome
+ScopeDelta can grow without founder-funded variable costs and can distribute through both self-hosted community and managed cloud.
+
+### Scope
+- community/self-host packaging and upgrade path;
+- automated cloud onboarding;
+- recurring billing in supported markets;
+- centrally configured plans/entitlements;
+- managed-AI/storage/email/processing allowances;
+- usage enforcement;
+- hosted billing management/cancellation;
+- failed-payment/grace behavior;
+- cloud operational limits and cost alerts;
+- no routine manual entitlement changes.
+
+### Commercial principle
+Avoid depending solely on seat-based pricing. Evaluate active client projects/delivery capacity plus managed AI/usage as primary economic units.
+
+### Founder gates
+Exact open-source license, public plan prices, included allowances, live billing provider/account activation and legal/customer terms require explicit founder approval before public activation.
+
+## Layer 7 — Portfolio, Operations & Self-Service Scale
+
+### Outcome
+Larger 50–500-person organizations can operate many concurrent projects with low administrative burden.
+
+### Scope
+- multi-project/portfolio health;
+- capacity/workload visibility;
+- project budget/margin visibility where trustworthy inputs exist;
+- reusable templates/standards;
+- onboarding/checklists and excellent empty states;
+- account/workspace/billing/data lifecycle self-service;
+- in-product help and recoverable errors;
+- advanced search/reporting focused on action rather than vanity dashboards;
+- organization-level policy controls only where real workflow needs justify them.
+
+### Exit criteria
+Routine user onboarding, project setup, delivery, billing and recovery do not require founder intervention.
+
+## Layer 8 — Enterprise & General-Availability Hardening
+
+### Outcome
+The product is safe and reliable for paying production customers at increasing scale.
+
+### Scope
+- full tenant-isolation audit;
+- public/client endpoint security review;
+- authorization/RBAC review;
+- data lifecycle, deletion and retention;
+- backup/recovery expectations;
+- provider outage and retry behavior;
+- webhook/event idempotency;
+- monitoring/alerts/privacy-safe telemetry;
+- rate/abuse/cost controls;
+- end-to-end tests for revenue-critical workflows;
+- load/performance testing against realistic customer/project/work-item volumes;
+- migration/rollback/incident runbooks;
+- SSO/SCIM/audit export/data-residency capabilities only as required for initial enterprise readiness.
+
+### Exit criteria
+Known production risks are documented and acceptable, critical workflows are automated/tested, and normal customer operations require minimal founder attention.
+
+## Competitive product rule
+
+Before implementing a major feature, classify it as one of:
+
+1. **Table stakes** — necessary to replace the incumbent for daily use.
+2. **Differentiator** — advances the Commercial Delivery Graph, client-delivery workflow or AI-native coordination advantage.
+3. **Later enterprise capability** — useful at scale but not needed for the current layer.
+4. **Do not build** — mature external infrastructure we should integrate instead.
+
+Table-stakes features should be implemented simply. Differentiators deserve disproportionate product/research effort.
 
 ## Engineering sequencing
 
-GitHub issues define the executable backlog. Only the highest-priority unblocked issue should be marked `READY FOR CODEX`; downstream issues should remain blocked until dependencies are merged.
+GitHub issues are the executable source of truth. Exactly one highest-priority unblocked issue should be `READY FOR CODEX` at a time.
 
-## Product discipline
+Current intended sequence:
 
-Production-grade does not mean building every enterprise feature. Prioritize the narrow scope-change workflow, tenant/data safety, commercial automation, cost control, and operational scalability. Defer unrelated PM/CRM/accounting/integration features until paying-customer evidence demonstrates a need.
+1. SC-004 — Layer 0 Platform Kernel
+2. SC-005 — Layer 1 Delivery Core
+3. SC-006 — Layer 2 Commercial Delivery Graph
+4. SC-007 — Layer 3 Client Collaboration & Negotiation
+5. SC-008 — Layer 4 Engineering & QA Delivery Loop
+6. SC-009 — Layer 5 AI-Native Delivery Intelligence
+7. SC-010 — Layer 6 Subscription, Cloud Economics & Distribution
+8. SC-011 — Layer 7 Portfolio, Operations & Self-Service Scale
+9. SC-012 — Layer 8 Enterprise & GA Hardening
+
+This sequence may be split into smaller executable issues as implementation evidence requires; the layers are product boundaries, not permission for giant PRs.

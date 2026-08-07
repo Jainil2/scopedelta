@@ -51,6 +51,7 @@ describe("POST /api/leads", () => {
     expect(request.method).toBe("POST");
     expect(request.redirect).toBe("error");
     expect(request.headers).toMatchObject({
+      Accept: "application/json",
       "Content-Type": "application/json",
       "Idempotency-Key": submissionId,
       "X-ScopeDelta-Event": "pilot_interest.submitted",

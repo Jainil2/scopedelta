@@ -97,7 +97,26 @@ retention boundary and must be operated accordingly.
   migration tool are selected by an approved issue.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the selected foundation and
-its tradeoffs.
+its tradeoffs. Production deployment, verification, lead handling, rollback,
+and emergency-disable procedures are in
+[docs/OPERATIONS.md](docs/OPERATIONS.md).
+
+## Production deployment
+
+The SC-003 production target is a founder-controlled Netlify Free project tied
+to this GitHub repository, with `main` as the production branch. The checked-in
+`netlify.toml` fixes the build command, output directory, Node version, frozen
+pnpm installation, and disabled Next.js telemetry. A founder-owned Formspree
+form is the initial JSON webhook receiver; it is configured only through the
+server-side `LEAD_WEBHOOK_URL` deployment variable.
+
+Deployment is not complete until the public HTTPS page returns 200 and one
+synthetic paid-pilot application is visibly received in the Formspree dashboard.
+Follow the full [production operations runbook](docs/OPERATIONS.md) for setup,
+environment scopes, verification, privacy handling, rollback, and disabling the
+site or lead intake. Do not commit the generated site URL as `APP_URL` or the
+receiver endpoint as `LEAD_WEBHOOK_URL`; production values belong in Netlify's
+environment controls.
 
 ## Troubleshooting
 

@@ -53,9 +53,14 @@ export default function Home() {
             <BrandMark />
             ScopeDelta
           </a>
-          <a className="header-link" href="#pilot">
-            Paid pilot <span aria-hidden="true">↘</span>
-          </a>
+          <nav className="site-header-actions" aria-label="Account and pilot">
+            <a className="header-link" href="/sign-in">
+              Sign in <span aria-hidden="true">→</span>
+            </a>
+            <a className="header-link" href="#pilot">
+              Paid pilot <span aria-hidden="true">↘</span>
+            </a>
+          </nav>
         </header>
 
         <div className="hero-content content-width" id="main-content">

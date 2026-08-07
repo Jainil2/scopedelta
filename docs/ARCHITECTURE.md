@@ -2,135 +2,194 @@
 
 ## Status
 
-Accepted for SC-001 and extended by SC-002 and SC-003. Revisit these decisions
-only when validated product needs or an approved issue require a material
-architectural change.
+Accepted for SC-004. This extends the single-application foundation from
+SC-001–SC-003 with the production platform kernel required by ADR-004 through
+ADR-006.
 
-## Context and goals
+## System decision
 
-ScopeDelta needs a low-cost foundation that one developer can run locally and
-ship quickly for paid-pilot validation. The initial repository contained only
-product documentation. Authentication, persistence, AI analysis, billing, and
-client approval workflows are intentionally outside this foundation.
+ScopeDelta remains one Next.js 16.2 App Router application on Node.js 24. React
+Server Components are the default; client components are limited to interactive
+forms and navigation. The same artifact serves the landing page, Better Auth,
+ScopeDelta APIs, and authenticated workspace UI. It can run through Netlify's
+Next.js adapter or as the checked-in production container.
 
-## Decision
+PostgreSQL is the durable system of record. Drizzle supplies the typed schema
+and forward-only SQL migrations. Better Auth uses the same database for users,
+credentials, verification tokens, sessions, and authentication rate limits.
+Generic SMTP carries verification, password-recovery, and invitation mail.
+None of these boundaries depend on a proprietary runtime SDK.
 
-ScopeDelta is a single Next.js 16.2 application using the App Router, React
-19.2, strict TypeScript, Node.js 24 LTS, and pnpm. Routes and server-rendered UI
-live together under `src/app`; React Server Components remain the default, and
-client components should be introduced only for browser interaction.
+The collaborative source of truth remains one server-side PostgreSQL database
+per deployment. Managed cloud, customer-controlled LAN/VPN deployments, future
+web clients, and a future first-party desktop client use the same versioned API
+and server domain rules. SC-004 does not add per-device project databases,
+peer-to-peer synchronization, or full offline collaborative writes.
 
-This structure provides server rendering, metadata, route handling, and a
-production build without adding a separate API service or paid infrastructure.
-Next.js can run on a standard Node.js host or a compatible serverless platform.
-SC-003 selects Netlify Free as the first production host because it supports the
-application's App Router and Node route-handler needs, permits commercial
-projects on the free plan, and imposes a hard usage limit without automatic
-overage charges. GitHub-connected production deploys follow `main`; the
-checked-in `netlify.toml` keeps the build contract reviewable and portable.
+```text
+Browser
+  ├─ public page + POST /api/leads ──> provider-neutral lead webhook
+  └─ Next.js UI/API
+       ├─ /api/auth/* ───────────────> Better Auth
+       ├─ /api/v1/* ────────────────> tenant-aware domain services
+       ├─ Server Components ─────────> the same domain services
+       ├─ node-postgres/Drizzle ─────> PostgreSQL
+       └─ Next after() + Nodemailer ─> SMTP
+```
 
-## Repository layout
+## Persistence and migrations
 
-- `src/app/`: routes, layouts, route-level components, and styles.
-- `src/test/`: shared test environment setup.
-- `*.test.ts` and `*.test.tsx`: tests colocated with their subject.
-- `docs/`: durable product and engineering decisions.
-- `db/migrations/`: reserved for future immutable migrations after an approved
-  issue selects a database and migration tool. The directory is not created
-  until then.
+Runtime connections use pooled `DATABASE_URL`. Schema migration, backup, and
+restore operations use direct `DATABASE_MIGRATION_URL`; transaction/session
+semantics required by schema tools must not traverse a transaction pooler.
+`db/migrations/` is immutable deployment history. Production applies pending
+migrations before building the new application; previews never receive
+production database credentials and therefore only build.
 
-Reusable interactive UI lives in `src/components/`; framework-independent
-validation and interface types live in `src/lib/`.
+Initial migrations are additive. Future changes use expand/contract:
 
-## Paid-pilot lead boundary
+1. expand with nullable/new structures compatible with the current release;
+2. deploy code that writes both shapes or backfills safely;
+3. move reads to the new shape and verify;
+4. contract only in a later release after old code cannot run.
 
-SC-002 adds one narrow write boundary: `POST /api/leads`. The browser submits a
-UUID, name, email, business type, optional company name, general scope challenge,
-and hidden honeypot. Shared validation normalizes the human fields, while the
-server caps the JSON body at 16 KiB and returns stable response codes for field
-validation, oversized payloads, unavailable configuration, and upstream
-failure.
+Rollback is by forward fix. Restoring older application code is safe only while
+its schema contract remains supported.
 
-Valid human submissions are forwarded to the server-only `LEAD_WEBHOOK_URL` as
-a `pilot_interest.submitted` event with schema version `1.0`. The request uses
-the submission UUID as its idempotency key, times out after eight seconds, and
-is not automatically retried. The browser retains that UUID and all entered
-fields after a failure, so a deliberate user retry remains deduplicatable. A
-filled honeypot returns success without forwarding.
+## Identity and session security
 
-Webhook transport requires HTTPS for every non-local receiver. Plain HTTP is
-accepted only for exact localhost, IPv4 loopback addresses in `127.0.0.0/8`, or
-IPv6 `::1` during local development. Other HTTP configurations are treated as
-unavailable before any lead data leaves the application. Webhook requests do
-not follow redirects, preventing a permitted URL from downgrading or changing
-the transport destination.
+Better Auth provides email/password identity with verified-email signup,
+one-hour verification and reset tokens, database-backed seven-day sliding
+sessions, database-backed rate limits, and session revocation after password
+reset. Cookie caching is disabled, so every protected server read validates the
+database session. Better Auth retains origin/CSRF checks. Production cookies
+are `Secure`, `HttpOnly`, and `SameSite=Lax`.
 
-This adapter remains provider-neutral. SC-003 configures a founder-owned
-Formspree form as the initial production receiver because it accepts the
-existing JSON event without application-specific client credentials or a new
-database. Formspree is an operational deployment choice, not a domain
-dependency: its URL is supplied only through `LEAD_WEBHOOK_URL`, and no SDK or
-provider type enters application code. The deployment owner secures the
-receiver, applies retention controls, and deduplicates submissions. The
-application never logs lead payloads or returns receiving-provider details to
-the browser.
+ScopeDelta-owned session-cookie mutations additionally require an exact
+same-origin `Origin` header, including the unauthenticated fragment-token
+staging exchange.
 
-## Quality and delivery
+Authentication responses avoid disclosing whether an account exists. Email
+delivery is scheduled with Next.js `after()` so request timing does not depend
+on SMTP. Delivery errors log only the fixed event
+`platform_email_delivery_failed`; recipients, tokens, message bodies, and
+provider responses are excluded.
 
-- Prettier defines repository formatting.
-- ESLint uses the Next.js Core Web Vitals and TypeScript rules.
-- TypeScript runs in strict, no-emit mode.
-- Vitest, jsdom, and React Testing Library provide colocated component and unit
-  tests.
-- Pull-request CI installs the locked dependency graph and runs formatting,
-  linting, type checking, tests, and the production build on Node.js 24.
-- Netlify installs the frozen pnpm graph, builds the same Next.js artifact on
-  Node.js 24, and publishes merged `main` commits as production deploys.
+Signup verification returns through `/verification-status`; its continuation
+target is restricted to a same-origin relative path before it is rendered.
 
-The committed `pnpm-lock.yaml`, pinned package-manager version, and `.nvmrc`
-keep local worktrees and CI reproducible.
+## Tenant model and authorization
 
-## Environment and security boundaries
+A user may belong to multiple workspaces. Every workspace has settings and at
+least one owner membership. The initial settings timezone is `UTC`; updates
+accept valid IANA timezone names without geographic assumptions. Stable slugs
+derive from workspace names and gain a non-semantic suffix on collision.
 
-`APP_URL` is the canonical absolute application URL. Local development falls
-back to `http://localhost:3000`; production deployments must set the real URL.
-`LEAD_WEBHOOK_URL` is required in deployments that accept paid-pilot
-applications; without it, the form safely preserves input and reports a
-recoverable error. The `.env.example` file contains variable names without
-credentials.
+Roles are enforced by server-side services shared by Server Components and API
+routes:
 
-The production values live in Netlify's Production deploy context. The
-Formspree endpoint is treated as secret operational configuration because
-direct disclosure would bypass ScopeDelta's server validation and honeypot.
-Netlify build and function logs must not contain lead request or webhook bodies.
-Detailed deployment, verification, lead-retention, rollback, and disable
-procedures live in `docs/OPERATIONS.md`.
+- owners invite any Layer-0 role, change roles, remove members, and transfer
+  ownership by promoting another user;
+- admins invite or remove members only and cannot affect admins/owners;
+- members have read-only workspace access;
+- demoting or removing the last owner always fails transactionally.
 
-Environment variables are server-only by default. A `NEXT_PUBLIC_` prefix is
-reserved for values deliberately exposed in browser bundles. Secrets, customer
-contracts, and customer content must never be committed, logged, or used as
-public fixtures. Future tenant-scoped features must enforce organization
-isolation at every read and mutation boundary.
+Membership is checked before each tenant read or write. A nonexistent resource
+and a resource outside the actor's tenant both return the same 404 envelope.
+Client UI visibility is convenience only, never authorization.
 
-## Tradeoffs
+`EntitlementPolicy` is invoked by domain mutations. The community policy allows
+all SC-004 Layer-0 operations. It intentionally contains no plan, price,
+billing-provider, or checkout logic; later entitlements can replace the policy
+without moving authorization into route handlers.
 
-- A single application minimizes deployment and coordination overhead, but it
-  couples UI and server routes in one release unit. That is appropriate for the
-  current team and MVP scope.
-- Next.js introduces framework conventions and a Node.js runtime dependency,
-  but supplies the routing, rendering, metadata, and build capabilities needed
-  for the planned product without bespoke infrastructure.
-- Component tests give fast confidence in the landing-page behavior. Browser
-  automation verifies the primary responsive conversion flow without adding a
-  persistent end-to-end suite yet.
-- No database or product data store is selected. This preserves reversibility
-  and leaves persistence decisions to later validated requirements. Netlify is
-  the selected validation host, but the standard Next.js build and
-  provider-free application boundary keep a future host move practical.
-- Webhook delivery avoids persistence and provider coupling, but availability
-  depends on the configured receiver. The stable event and idempotency key keep
-  a future adapter or durable queue possible without introducing one early.
-- Netlify Free and Formspree Free minimize launch cost and prohibit surprise
-  infrastructure spend, but they introduce external usage limits and a manual
-  lead-review workflow. A paid plan, durable queue, CRM, or database requires a
-  separate approved issue and founder approval where it creates spend.
+## Invitations
+
+An invitation stores a normalized email, role, expiry, and SHA-256 hash of a
+random token. The raw seven-day token exists only long enough to create the
+mail. Its URL uses `#token=...`, so browsers do not send the secret in HTTP
+request lines, referrers, access logs, or server-rendered route input.
+
+The acceptance client exchanges the fragment for a short-lived `HttpOnly`,
+`SameSite=Lax` cookie, clears the fragment, and then requests acceptance.
+Acceptance requires a signed-in, verified account whose normalized email
+matches the invitation. Token consumption and membership creation occur in one
+database transaction.
+
+## Audit and event contract
+
+Audit events are append-only records with UUID, workspace, actor type/ID,
+versioned event type, typed target reference, occurrence time, and allowlisted
+metadata. Workspace initialization emits both a human
+`workspace.created.v1` event and a system
+`workspace.settings.created.v1` event. Other examples include
+`workspace.settings.updated.v1`, `membership.role.updated.v1`, and
+`workspace.invitation.accepted.v1`.
+
+Names, emails, tokens, secrets, and arbitrary customer content are forbidden in
+audit metadata. Tests assert the allowlist. Future outbound webhooks will reuse
+this versioned envelope, but SC-004 implements no event delivery or queue.
+
+## API contract
+
+Better Auth is mounted at `/api/auth/*`. ScopeDelta owns `/api/v1` routes for
+workspaces, settings, memberships, invitations, fragment-token staging, and
+acceptance. Successful payloads are `{ data: ... }`; errors are
+`{ error: { code, message, fieldErrors? } }`. Route handlers parse bounded JSON,
+return stable public error codes, and do not expose database/provider details.
+
+All mutations and authorization live in `src/server/`. Routes are protocol
+adapters and Server Components are read adapters. This prevents UI and API
+authorization from drifting.
+
+## Repository and test boundaries
+
+- `src/app/`: UI and HTTP adapters.
+- `src/components/`: interactive UI.
+- `src/server/`: authorized domain services and transactions.
+- `src/db/`: Drizzle schema/connection.
+- `db/migrations/`: checked-in SQL history.
+- `e2e/`: real-browser journeys through PostgreSQL and Mailpit.
+- `docs/`: durable decisions and operations.
+
+Unit/component tests run in jsdom. PostgreSQL integration tests validate
+migrations, persistence, tenancy, roles, last-owner protection, and safe audit
+metadata. Playwright verifies verification, onboarding, re-login persistence,
+recovery, invitation acceptance, role changes, and responsive shell behavior.
+CI runs the full suite plus production and container builds.
+
+## Deployment and privacy boundaries
+
+`APP_URL`, both database URLs, `BETTER_AUTH_SECRET`, and SMTP configuration are
+server-only. `NEXT_PUBLIC_` remains reserved for deliberately public values.
+Database URLs, cookies, tokens, credentials, names, emails, lead payloads, and
+customer content must not enter logs or fixtures. Operational logs use fixed,
+non-PII event names.
+
+Netlify remains the managed host; Neon Free and Resend Free are optional
+reference providers, not application dependencies. A self-host uses the same
+container with PostgreSQL, SMTP, a TLS reverse proxy, and independent backups.
+The public lead webhook remains a separate no-database privacy boundary.
+
+Local/LAN operation does not call ScopeDelta Cloud for identity, authorization,
+workspace, membership, settings, or audit capabilities. The repository remains
+private until the separate LIC-001 founder/legal decision permits a protected
+source-visible release; this architecture makes no open-source license promise
+and does not rely on source secrecy for security.
+
+## Tradeoffs and explicit limits
+
+- One application minimizes operational surface and preserves portability, but
+  UI and server interfaces deploy as one unit.
+- Database session checks add a read to protected requests, but revocation and
+  tenant access changes take effect without a stale cookie cache.
+- Synchronous domain transactions keep authorization and audit writes atomic.
+  No job queue or webhook delivery is introduced before a requirement needs it.
+- PostgreSQL and SMTP require production operations, but replace hosted identity
+  lock-in and keep self-hosting credible.
+- Server-authoritative collaboration avoids premature offline conflict
+  resolution. A later desktop client can add bounded caching or retry behavior
+  without relocating authorization or durable tenant state onto user devices.
+- SC-004 deliberately excludes SC-005 commercial-delivery entities, AI,
+  billing, SSO/SCIM, client portals, document storage, analytics, and outbound
+  audit webhooks.

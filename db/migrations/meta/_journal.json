@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1786119233190,
+      "tag": "0000_platform_kernel",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786120442513,
+      "tag": "0001_uuid_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786122341420,
+      "tag": "0002_immutable_audit_events",
+      "breakpoints": true
+    }
+  ]
+}

@@ -6,3 +6,6 @@
   NODE_VERSION = "24"
   PNPM_FLAGS = "--frozen-lockfile --shamefully-hoist"
   NEXT_TELEMETRY_DISABLED = "1"
+
+[context.production]
+  command = "pnpm db:migrate && pnpm build"

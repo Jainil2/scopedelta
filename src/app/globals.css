@@ -132,6 +132,12 @@ a {
   text-decoration: none;
 }
 
+.site-header-actions {
+  display: flex;
+  align-items: center;
+  gap: clamp(1rem, 3vw, 2.5rem);
+}
+
 .brand-mark {
   width: 1.15rem;
   height: 1.15rem;
@@ -1004,5 +1010,576 @@ h2 {
     opacity: 1 !important;
     transform: none !important;
     animation: none !important;
+  }
+}
+
+/* Platform kernel */
+
+.app-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-decoration: none;
+}
+
+.app-brand-mark {
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  place-items: center;
+  background: var(--accent);
+  color: #142011;
+  font-family: var(--serif);
+  font-size: 1rem;
+}
+
+.app-eyebrow {
+  margin: 0 0 1rem;
+  color: var(--accent-dark);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.auth-page,
+.onboarding-page {
+  min-height: 100svh;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 49.9%,
+      var(--line) 50%,
+      transparent 50.1%
+    ),
+    var(--paper);
+}
+
+.auth-header {
+  display: flex;
+  width: min(100% - 3rem, 82rem);
+  min-height: 5rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-inline: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.auth-home-link,
+.app-secondary-link,
+.form-links a,
+.form-alternative a {
+  color: var(--accent-dark);
+  font-size: 0.82rem;
+  font-weight: 750;
+  text-underline-offset: 0.24rem;
+}
+
+.auth-layout,
+.onboarding-layout {
+  display: grid;
+  width: min(100% - 3rem, 82rem);
+  min-height: calc(100svh - 5rem);
+  grid-template-columns: minmax(0, 1fr) minmax(22rem, 0.85fr);
+  gap: clamp(4rem, 10vw, 10rem);
+  align-items: center;
+  margin-inline: auto;
+  padding-block: clamp(4rem, 10vh, 8rem);
+}
+
+.auth-context h1,
+.onboarding-layout h1,
+.app-page-header h1 {
+  max-width: 12ch;
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(3rem, 5vw, 5.5rem);
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+}
+
+.auth-context > p:not(.app-eyebrow),
+.onboarding-layout > div > p:not(.app-eyebrow) {
+  max-width: 36rem;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.auth-boundary {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.78rem;
+}
+
+.auth-form-region,
+.onboarding-layout > .platform-form {
+  width: min(100%, 31rem);
+}
+
+.platform-form,
+.invite-form {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.platform-field {
+  display: grid;
+  gap: 0.55rem;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.platform-field > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.platform-field small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.platform-field input,
+.platform-field select,
+.member-actions select {
+  width: 100%;
+  min-height: 3.15rem;
+  padding: 0.8rem 0;
+  border: 0;
+  border-bottom: 1px solid #8d8a80;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.platform-field input:disabled,
+.platform-field select:disabled {
+  color: var(--muted);
+}
+
+.app-primary-button {
+  display: inline-flex;
+  width: fit-content;
+  min-width: 12rem;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 0.9rem 1.1rem;
+  border: 0;
+  background: var(--accent-dark);
+  color: var(--white);
+  font-size: 0.8rem;
+  font-weight: 780;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+.app-primary-button:hover:not(:disabled) {
+  background: #203a1c;
+  transform: translateY(-2px);
+}
+
+.app-primary-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.platform-status {
+  min-height: 1.4rem;
+  margin: 0;
+  color: var(--accent-dark);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.platform-status-error {
+  color: #8a2b21;
+}
+
+.form-alternative {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.form-links,
+.invitation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.app-frame {
+  display: grid;
+  min-height: 100svh;
+  grid-template-columns: 17rem minmax(0, 1fr);
+  background: #f8f5ed;
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  height: 100svh;
+  flex-direction: column;
+  padding: 1.5rem;
+  border-right: 1px solid var(--line);
+  background: var(--night);
+  color: var(--white);
+}
+
+.workspace-switcher {
+  margin-top: 3.5rem;
+}
+
+.workspace-switcher > span {
+  color: rgb(255 253 245 / 45%);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.workspace-switcher details {
+  position: relative;
+  margin-top: 0.65rem;
+}
+
+.workspace-switcher summary {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid rgb(255 253 245 / 24%);
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+}
+
+.workspace-switcher summary small,
+.workspace-switcher nav small {
+  color: var(--accent);
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.workspace-switcher nav {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  left: 0;
+  display: grid;
+  border: 1px solid #3b4038;
+  background: var(--night-soft);
+}
+
+.workspace-switcher nav a {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem;
+  border-bottom: 1px solid #3b4038;
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+
+.workspace-switcher nav a:hover,
+.workspace-switcher nav a[aria-current="page"] {
+  background: #32382f;
+}
+
+.app-navigation {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 2.5rem;
+}
+
+.app-navigation a {
+  padding: 0.7rem 0;
+  color: rgb(255 253 245 / 68%);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.app-navigation a:hover {
+  color: var(--white);
+}
+
+.app-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid rgb(255 253 245 / 24%);
+  color: rgb(255 253 245 / 68%);
+  font-size: 0.72rem;
+}
+
+.app-text-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 720;
+  text-decoration: underline;
+  text-underline-offset: 0.2rem;
+}
+
+.app-main {
+  min-width: 0;
+}
+
+.app-content {
+  width: min(100% - 4rem, 72rem);
+  margin-inline: auto;
+  padding-block: clamp(3rem, 8vw, 7rem);
+}
+
+.app-page-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  padding-bottom: clamp(3rem, 7vw, 6rem);
+  border-bottom: 1px solid var(--line);
+}
+
+.app-page-header h1 {
+  font-size: clamp(2.8rem, 5vw, 5rem);
+}
+
+.app-page-header > div > p:last-child {
+  color: var(--muted);
+}
+
+.kernel-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 720;
+}
+
+.kernel-status i {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0.3rem rgb(151 180 91 / 18%);
+}
+
+.kernel-proof {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: clamp(3rem, 8vw, 8rem);
+  padding-top: clamp(3rem, 7vw, 6rem);
+}
+
+.kernel-proof h2 {
+  margin: 1rem 0 0;
+  font-size: clamp(2.2rem, 4vw, 4rem);
+}
+
+.kernel-proof dl {
+  margin: 0;
+}
+
+.kernel-proof dl div {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: 1.5rem;
+  padding: 1.2rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.kernel-proof dt {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.kernel-proof dd {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.kernel-proof > p {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.65;
+}
+
+.settings-section {
+  width: min(100%, 48rem);
+  padding-top: clamp(3rem, 7vw, 5rem);
+}
+
+.settings-form {
+  max-width: 34rem;
+}
+
+.settings-readonly {
+  padding: 1rem 0;
+  border-block: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.invite-form {
+  grid-template-columns: minmax(12rem, 1fr) 9rem auto;
+  align-items: end;
+  padding-bottom: 2.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.member-list,
+.pending-invitations {
+  margin-top: 2rem;
+}
+
+.member-row {
+  display: flex;
+  min-height: 4.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.member-row > div:first-child {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.member-row strong {
+  font-size: 0.84rem;
+}
+
+.member-row span {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.member-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.member-actions select {
+  min-height: 2.5rem;
+  font-size: 0.75rem;
+}
+
+.role-label {
+  text-transform: capitalize;
+}
+
+.danger-button {
+  color: #8a2b21;
+}
+
+.pending-invitations h3 {
+  margin: 3rem 0 0.5rem;
+  font-family: var(--serif);
+  font-size: 1.8rem;
+  font-weight: 500;
+}
+
+.invitation-state,
+.verification-status {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@media (max-width: 52rem) {
+  .auth-page,
+  .onboarding-page {
+    background: var(--paper);
+  }
+
+  .auth-layout,
+  .onboarding-layout {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+    align-items: start;
+  }
+
+  .auth-context h1,
+  .onboarding-layout h1 {
+    font-size: clamp(2.7rem, 12vw, 4.4rem);
+  }
+
+  .app-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .app-sidebar {
+    position: relative;
+    height: auto;
+    min-height: 0;
+    padding: 1rem 1.5rem;
+  }
+
+  .workspace-switcher {
+    margin-top: 1.5rem;
+  }
+
+  .app-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-top: 1rem;
+  }
+
+  .app-account {
+    margin-top: 1rem;
+  }
+
+  .app-content {
+    width: min(100% - 2rem, 72rem);
+  }
+
+  .app-page-header,
+  .kernel-proof {
+    grid-template-columns: 1fr;
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .kernel-proof > p {
+    grid-column: auto;
+  }
+
+  .invite-form {
+    grid-template-columns: 1fr;
+  }
+
+  .member-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 1rem;
+    padding-block: 1rem;
   }
 }

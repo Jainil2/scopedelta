@@ -12,11 +12,39 @@ concurrency:
 
 jobs:
   quality:
-    name: Quality checks
+    name: Platform checks
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: scopedelta_test
+          POSTGRES_USER: scopedelta
+          POSTGRES_PASSWORD: scopedelta_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U scopedelta -d scopedelta_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+      mailpit:
+        image: axllent/mailpit:v1.27
+        ports:
+          - 1025:1025
+          - 8025:8025
     env:
       NEXT_TELEMETRY_DISABLED: "1"
+      APP_URL: http://localhost:3100
+      DATABASE_URL: postgresql://scopedelta:scopedelta_ci_only@127.0.0.1:5432/scopedelta_test
+      DATABASE_MIGRATION_URL: postgresql://scopedelta:scopedelta_ci_only@127.0.0.1:5432/scopedelta_test
+      TEST_DATABASE_URL: postgresql://scopedelta:scopedelta_ci_only@127.0.0.1:5432/scopedelta_test
+      BETTER_AUTH_SECRET: ci-only-secret-with-at-least-thirty-two-characters
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "1025"
+      SMTP_SECURE: "false"
+      SMTP_FROM: ScopeDelta CI <no-reply@scopedelta.local>
 
     steps:
       - name: Check out repository
@@ -34,6 +62,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check migration definitions
+        run: pnpm db:check
+
+      - name: Apply migrations twice
+        run: |
+          pnpm db:migrate
+          pnpm db:migrate
+
       - name: Check formatting
         run: pnpm format:check
 
@@ -43,8 +79,33 @@ jobs:
       - name: Type-check
         run: pnpm typecheck
 
-      - name: Test
+      - name: Unit tests
         run: pnpm test
+
+      - name: PostgreSQL integration tests
+        run: pnpm test:integration
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Browser tests
+        run: pnpm test:e2e
 
       - name: Build
         run: pnpm build
+
+      - name: Production HTTP smoke test
+        run: |
+          pnpm start --port 3200 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3200/ | grep --quiet "Turn scope creep into approved"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - name: Build production container
+        run: docker build --tag scopedelta:ci .

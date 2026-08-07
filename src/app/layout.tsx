@@ -7,9 +7,9 @@ const appUrl = process.env.APP_URL || localAppUrl;
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
-  title: "ScopeDelta",
+  title: "ScopeDelta — Turn scope creep into billable work",
   description:
-    "AI-assisted scope-change and change-order workflow for software agencies and freelancers.",
+    "Help your software agency spot scope changes, review what is billable, and move toward a clear change order before margin disappears.",
 };
 
 export default function RootLayout({

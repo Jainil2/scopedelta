@@ -1,8 +1,9 @@
 # ScopeDelta
 
 ScopeDelta is an AI-assisted scope-change and change-order product for small
-software agencies and freelancers. This repository currently contains the
-single web application and the durable product and architecture documentation.
+software agencies and freelancers. This repository contains the single web
+application, paid-pilot interest flow, and durable product and architecture
+documentation.
 
 ## Prerequisites
 
@@ -23,10 +24,46 @@ Open [http://localhost:3000](http://localhost:3000). The local application URL
 defaults to that address when `APP_URL` is empty.
 
 For production deployments, set `APP_URL` to the canonical absolute URL, such
-as `https://app.example.com`. Keep secrets in the deployment environment or an
+as `https://app.example.com`. Set `LEAD_WEBHOOK_URL` to the HTTPS endpoint that
+will receive paid-pilot applications. An empty webhook value is acceptable for
+local UI work, but the form will show a recoverable error until it is configured.
+
+Keep webhook URLs and other secrets in the deployment environment or an
 untracked `.env.local` file. Variables are server-only unless their names begin
 with `NEXT_PUBLIC_`; use that prefix only for values intentionally exposed to
-the browser.
+the browser. `LEAD_WEBHOOK_URL` must never use that prefix.
+
+### Lead webhook
+
+`POST /api/leads` validates and normalizes the public form, then sends one JSON
+event to `LEAD_WEBHOOK_URL`:
+
+```json
+{
+  "event": "pilot_interest.submitted",
+  "schemaVersion": "1.0",
+  "submissionId": "uuid",
+  "submittedAt": "2026-08-07T00:00:00.000Z",
+  "source": "scopedelta_landing_page",
+  "lead": {
+    "name": "Alex Rivera",
+    "email": "alex@example.com",
+    "businessType": "agency",
+    "company": "River Studio",
+    "scopeChallenge": "A general, non-confidential description"
+  }
+}
+```
+
+The request uses the submission UUID as the `Idempotency-Key` header and sets
+`X-ScopeDelta-Event: pilot_interest.submitted`. Delivery has an eight-second
+timeout and no automatic retry; a person retrying the form reuses the same
+submission ID. Configure the receiving system to deduplicate on that ID.
+
+The endpoint is intentionally provider-neutral and stores no lead data in this
+application. It caps request bodies, suppresses honeypot submissions, and never
+logs form contents. The receiving webhook becomes a separate privacy and data
+retention boundary and must be operated accordingly.
 
 ## Commands
 
@@ -45,6 +82,9 @@ the browser.
 ## Repository conventions
 
 - `src/app/` contains application routes, layouts, styles, and route-level UI.
+- `src/components/` contains interactive, reusable UI such as the paid-pilot
+  form.
+- `src/lib/` contains framework-independent validation and interface types.
 - Tests are colocated with the code they exercise as `*.test.ts` or
   `*.test.tsx`.
 - `src/test/` contains shared test setup.
@@ -62,3 +102,6 @@ its tradeoffs.
 - If generated Next.js types are stale, remove `.next` and rerun `pnpm build`.
 - If port 3000 is occupied, start development with `pnpm dev --port 3001` and
   update `APP_URL` accordingly.
+- If paid-pilot submissions return a recoverable error, verify that
+  `LEAD_WEBHOOK_URL` is configured, reachable from the server runtime, and
+  accepts the documented JSON event within eight seconds.

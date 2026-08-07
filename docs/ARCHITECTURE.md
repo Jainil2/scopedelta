@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted for SC-001. Revisit this decision only when validated product needs or
-an approved issue require a material architectural change.
+Accepted for SC-001 and extended by SC-002. Revisit these decisions only when
+validated product needs or an approved issue require a material architectural
+change.
 
 ## Context and goals
 
@@ -34,9 +35,30 @@ the repository does not select or provision a hosting vendor.
   issue selects a database and migration tool. The directory is not created
   until then.
 
-Reusable UI may move to `src/components/` and framework-independent logic to
-`src/lib/` when real implementation requires them. These directories are not
-created speculatively.
+Reusable interactive UI lives in `src/components/`; framework-independent
+validation and interface types live in `src/lib/`.
+
+## Paid-pilot lead boundary
+
+SC-002 adds one narrow write boundary: `POST /api/leads`. The browser submits a
+UUID, name, email, business type, optional company name, general scope challenge,
+and hidden honeypot. Shared validation normalizes the human fields, while the
+server caps the JSON body at 16 KiB and returns stable response codes for field
+validation, oversized payloads, unavailable configuration, and upstream
+failure.
+
+Valid human submissions are forwarded to the server-only `LEAD_WEBHOOK_URL` as
+a `pilot_interest.submitted` event with schema version `1.0`. The request uses
+the submission UUID as its idempotency key, times out after eight seconds, and
+is not automatically retried. The browser retains that UUID and all entered
+fields after a failure, so a deliberate user retry remains deduplicatable. A
+filled honeypot returns success without forwarding.
+
+This adapter is intentionally provider-neutral. ScopeDelta does not select a
+CRM, email vendor, analytics service, or lead database in SC-002. The deployment
+owner selects and secures the receiving endpoint, applies retention controls,
+and deduplicates submissions. The application never logs lead payloads or
+returns receiving-provider details to the browser.
 
 ## Quality and delivery
 
@@ -55,7 +77,10 @@ keep local worktrees and CI reproducible.
 
 `APP_URL` is the canonical absolute application URL. Local development falls
 back to `http://localhost:3000`; production deployments must set the real URL.
-The `.env.example` file contains variable names without credentials.
+`LEAD_WEBHOOK_URL` is required in deployments that accept paid-pilot
+applications; without it, the form safely preserves input and reports a
+recoverable error. The `.env.example` file contains variable names without
+credentials.
 
 Environment variables are server-only by default. A `NEXT_PUBLIC_` prefix is
 reserved for values deliberately exposed in browser bundles. Secrets, customer
@@ -71,8 +96,11 @@ isolation at every read and mutation boundary.
 - Next.js introduces framework conventions and a Node.js runtime dependency,
   but supplies the routing, rendering, metadata, and build capabilities needed
   for the planned product without bespoke infrastructure.
-- Component tests give fast confidence in the bootstrap. End-to-end browser
-  tests are deferred until user workflows exist and justify their maintenance
-  and runtime cost.
+- Component tests give fast confidence in the landing-page behavior. Browser
+  automation verifies the primary responsive conversion flow without adding a
+  persistent end-to-end suite yet.
 - No database or hosting vendor is selected. This preserves reversibility but
   leaves those deployment decisions to later validated requirements.
+- Webhook delivery avoids persistence and provider coupling, but availability
+  depends on the configured receiver. The stable event and idempotency key keep
+  a future adapter or durable queue possible without introducing one early.

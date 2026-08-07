@@ -1,0 +1,37 @@
+# ScopeDelta Business Rules
+
+## Scope analysis
+
+- Every AI scope conclusion must be reviewable by an authorized agency user before it becomes client-facing.
+- Prefer traceability: conclusions should reference the relevant agreed scope item(s) or explicitly say when no supporting scope item was found.
+- Supported classifications for the initial product are: `in_scope`, `out_of_scope`, `partially_in_scope`, and `insufficient_information`.
+- Uncertainty should be surfaced rather than hidden. When evidence is insufficient, ask for clarification instead of fabricating certainty.
+
+## Commercial information
+
+- Internal engineering cost, margin, internal notes, and internal estimates must never appear on client-facing pages unless explicitly designed as client-visible fields.
+- Client-facing quoted price and timeline are controlled by the agency user.
+- AI may suggest impact but must not automatically send or commit a commercial quote.
+
+## Approvals
+
+- A client approval record must be attributable to a specific change order/version.
+- Material edits to a previously approved change order must not silently retain the old approval state.
+- The system should preserve enough history to reconstruct what the client approved.
+
+## Tenant isolation
+
+- Data belonging to one organization/workspace must not be readable or mutable by another organization/workspace.
+- Public approval links must expose only the minimum data needed for the intended client workflow.
+
+## Customer data
+
+- Do not use confidential customer contracts or client content as public fixtures, examples, or logs.
+- Synthetic/anonymized examples are preferred for development and tests.
+- Production AI providers must have acceptable data handling terms before real confidential customer documents are processed.
+
+## MVP operating constraints
+
+- Optimize for a fast paid-pilot launch.
+- Avoid introducing paid infrastructure without a clear reason and founder approval when material.
+- Avoid broad integrations until a pilot/customer demonstrates that the integration is necessary for conversion, activation, or retention.

@@ -4,6 +4,8 @@ This roadmap builds ScopeDelta as an AI-native client software delivery operatin
 
 The product is built layer by layer. Each layer must be useful, secure and production-quality before downstream layers rely on it. We are not attempting to clone every Jira/Linear feature before shipping differentiation.
 
+The runtime model is **one server-authoritative product core with multiple clients/deployments**: ScopeDelta Cloud, customer self-hosted/VPC, company LAN/private server, web client and a later first-party desktop client. Core Local/LAN capabilities must not require ScopeDelta Cloud.
+
 ## Completed foundation
 
 Already complete:
@@ -18,7 +20,7 @@ These are technical/marketing foundations only. They are not the delivery produc
 ## Layer 0 — Platform Kernel
 
 ### Outcome
-A production-capable cloud/self-host-compatible multi-tenant kernel that future delivery features can safely build on.
+A production-capable cloud/self-host-compatible multi-tenant kernel that future delivery features and clients can safely build on.
 
 ### Scope
 - self-service authentication and recovery;
@@ -31,10 +33,11 @@ A production-capable cloud/self-host-compatible multi-tenant kernel that future 
 - server API/service boundaries and webhook/event conventions;
 - entitlement/feature hooks for later cloud plans;
 - environment/configuration conventions that work for managed cloud and self-hosted deployments;
+- compatibility with a future desktop client over the same server/domain/API boundary;
 - production operations documentation.
 
 ### Exit criteria
-A fresh production-like environment can create accounts/workspaces, persist tenant-owned records and prove cross-tenant isolation through automated negative tests.
+A fresh production-like environment can create accounts/workspaces, persist tenant-owned records and prove cross-tenant isolation through automated negative tests. Architecture does not depend on a closed hosted-only service and does not assume the browser is the only first-party client.
 
 ## Layer 1 — Delivery Core
 
@@ -61,6 +64,26 @@ Even before the full Commercial Delivery Graph exists, domain relationships must
 
 ### Exit criteria
 A real software project can be planned and executed through milestones/cycles/work items with clean role-aware daily workflows and no cross-tenant leakage.
+
+## Cross-cutting track — Desktop Client
+
+### Outcome
+Give daily users a first-party Windows/macOS/Linux client without creating a second product backend or requiring ScopeDelta Cloud.
+
+### Timing
+DX-001 remains blocked until Layer 1 has a stable, useful daily workflow and shared API/domain boundary. It is not automatically prioritized ahead of the Commercial Delivery Graph; CEO/product decides when the incremental desktop value justifies the engineering slot.
+
+### Scope
+- reuse the same product/frontend semantics where practical;
+- connect to ScopeDelta Cloud, customer self-hosted HTTPS server, or approved LAN/private server;
+- native deep links and notifications;
+- secure server/session selection;
+- bounded encrypted local cache;
+- signed builds and controlled update path;
+- no authoritative per-user project database;
+- no full offline peer-to-peer/CRDT collaboration requirement initially.
+
+Current preferred technology candidate is Tauri 2, subject to Codex security/maintenance review at implementation time.
 
 ## Layer 2 — Commercial Delivery Graph
 
@@ -118,7 +141,7 @@ Planning, implementation, QA and acceptance form one traceable delivery chain.
 - trace requested → planned → implemented → tested → accepted.
 
 ### Boundary
-Do not build Git hosting or general CI/CD infrastructure in these layers. Integrate mature systems.
+Do not build Git hosting or general CI/CD infrastructure in these layers. Integrate mature systems. For private/self-host deployments, support local provider equivalents where practical rather than forcing public SaaS APIs.
 
 ### Exit criteria
 A PM/developer/QA/client can trace a meaningful requirement or approved change through implementation, verification and acceptance.
@@ -143,15 +166,15 @@ AI reduces coordination work across PM, developer, QA, commercial and client rol
 - per-tenant usage/cost accounting and hard limits.
 
 ### Exit criteria
-AI demonstrably removes repetitive project-management/translation work while every material action remains attributable, reviewable and economically bounded.
+AI demonstrably removes repetitive project-management/translation work while every material action remains attributable, reviewable and economically bounded. Self-host customers can use approved BYO/local inference paths without requiring ScopeDelta managed AI where technically practical.
 
-## Layer 6 — Subscription, Cloud Economics & Distribution
+## Layer 6 — Subscription, Cloud Economics & Source Distribution
 
 ### Outcome
-ScopeDelta can grow without founder-funded variable costs and can distribute through both self-hosted community and managed cloud.
+ScopeDelta can grow without founder-funded variable costs while supporting a useful free/self-hosted product and protected managed-cloud business.
 
 ### Scope
-- community/self-host packaging and upgrade path;
+- self-host packaging and upgrade path;
 - automated cloud onboarding;
 - recurring billing in supported markets;
 - centrally configured plans/entitlements;
@@ -160,13 +183,18 @@ ScopeDelta can grow without founder-funded variable costs and can distribute thr
 - hosted billing management/cancellation;
 - failed-payment/grace behavior;
 - cloud operational limits and cost alerts;
-- no routine manual entitlement changes.
+- no routine manual entitlement changes;
+- source/package boundaries aligned with LIC-001.
 
 ### Commercial principle
 Avoid depending solely on seat-based pricing. Evaluate active client projects/delivery capacity plus managed AI/usage as primary economic units.
 
-### Founder gates
-Exact open-source license, public plan prices, included allowances, live billing provider/account activation and legal/customer terms require explicit founder approval before public activation.
+ScopeDelta Cloud monetizes operations and managed resources: hosting, upgrades, backups, managed AI, notifications/integration workers, observability and higher operational limits. Do not create unnecessary ScopeDelta-Cloud dependencies solely to force conversion.
+
+### Founder/legal gates
+Exact **source-available/open-source/proprietary package boundary and license**, public plan prices, included allowances, live billing provider/account activation and legal/customer terms require explicit founder approval before public source or paid-cloud activation.
+
+LIC-001 must be resolved before publishing the core source. Until then, the product repository remains private and docs must not promise an OSI-open-source core.
 
 ## Layer 7 — Portfolio, Operations & Self-Service Scale
 
@@ -205,10 +233,24 @@ The product is safe and reliable for paying production customers at increasing s
 - end-to-end tests for revenue-critical workflows;
 - load/performance testing against realistic customer/project/work-item volumes;
 - migration/rollback/incident runbooks;
+- self-host upgrade/backup validation;
+- air-gapped/private deployment hardening only when justified;
 - SSO/SCIM/audit export/data-residency capabilities only as required for initial enterprise readiness.
 
 ### Exit criteria
 Known production risks are documented and acceptable, critical workflows are automated/tested, and normal customer operations require minimal founder attention.
+
+## Runtime classification rule
+
+Every capability must be classified before implementation as one of:
+
+1. **Local/LAN** — fully runnable on customer-controlled ScopeDelta infrastructure without ScopeDelta Cloud.
+2. **Hybrid/optional external** — local core with optional customer-selected local/external provider.
+3. **External API/service** — capability inherently depends on an outside system, such as GitHub.com or payment rails.
+4. **Managed-cloud only** — ScopeDelta-operated convenience/operations rather than unique product logic.
+5. **Desktop client** — client-side feature using the shared server/domain rules.
+
+The current planning baseline contains 97 capability units. `docs/FEATURE_RUNTIME_MATRIX.md` is the durable inventory and RS-002 maintains it.
 
 ## Competitive product rule
 
@@ -223,18 +265,25 @@ Table-stakes features should be implemented simply. Differentiators deserve disp
 
 ## Engineering sequencing
 
-GitHub issues are the executable source of truth. Exactly one highest-priority unblocked issue should be `READY FOR CODEX` at a time.
+GitHub issues are the executable source of truth. Exactly one highest-priority unblocked engineering issue should be `READY FOR CODEX` at a time.
 
 Current intended sequence:
 
 1. SC-004 — Layer 0 Platform Kernel
 2. SC-005 — Layer 1 Delivery Core
-3. SC-006 — Layer 2 Commercial Delivery Graph
-4. SC-007 — Layer 3 Client Collaboration & Negotiation
-5. SC-008 — Layer 4 Engineering & QA Delivery Loop
-6. SC-009 — Layer 5 AI-Native Delivery Intelligence
-7. SC-010 — Layer 6 Subscription, Cloud Economics & Distribution
-8. SC-011 — Layer 7 Portfolio, Operations & Self-Service Scale
-9. SC-012 — Layer 8 Enterprise & GA Hardening
+3. CEO decision: either DX-001 desktop track or SC-006 Commercial Delivery Graph is next based on product value/engineering readiness; desktop is not allowed to delay the core differentiator without evidence.
+4. SC-006 — Layer 2 Commercial Delivery Graph
+5. SC-007 — Layer 3 Client Collaboration & Negotiation
+6. SC-008 — Layer 4 Engineering & QA Delivery Loop
+7. SC-009 — Layer 5 AI-Native Delivery Intelligence
+8. SC-010 — Layer 6 Subscription, Cloud Economics & Source Distribution
+9. SC-011 — Layer 7 Portfolio, Operations & Self-Service Scale
+10. SC-012 — Layer 8 Enterprise & GA Hardening
+
+Cross-cutting control work:
+
+- ARCH-001 — verify runtime topology during SC-004 review;
+- RS-002 — maintain feature/runtime/cost classification;
+- LIC-001 — founder/legal source-license gate before public core-source release.
 
 This sequence may be split into smaller executable issues as implementation evidence requires; the layers are product boundaries, not permission for giant PRs.

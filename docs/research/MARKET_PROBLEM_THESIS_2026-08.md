@@ -2,257 +2,259 @@
 
 ## Status
 
-Working CEO research thesis. Engineering execution beyond basic reversible foundation work should follow the differentiated problem defined here, not the older generic "AI scope creep detector" concept.
+Accepted product-research direction after founder strategy review on 2026-08-07. Continue market monitoring as each product layer is specified.
 
 ## Executive finding
 
-Scope creep is a real and recurring commercial problem for client-service businesses, especially fixed-price and milestone software delivery. However, the simple product pattern "upload SOW + paste client request + AI says in/out of scope + generate a change order" is already crowded in 2026.
+The market validates two things simultaneously:
 
-The stronger opportunity is not another standalone scope checker. It is a **commercial control plane between agreement and delivery** that continuously reconciles what was sold, what the client is asking for, and what the team is actually preparing to execute.
+1. software delivery organizations have persistent problems with project complexity, client visibility, requirements drift, scope/change control, coordination and margin leakage;
+2. no single generic feature such as AI issue creation, open-source project management, SOW comparison, client portals or change-order generation is unique in 2026.
 
-### Working product thesis
+Therefore ScopeDelta should not be built as a narrow AI scope checker or as a generic Jira clone.
 
-> ScopeDelta prevents unapproved scope from silently becoming work.
+The opportunity is an **AI-native client software delivery operating system** whose daily project-management core is useful enough to replace basic Jira/Linear usage for service teams, while its durable differentiation is a **Commercial Delivery Graph** connecting client intent to delivery execution and acceptance.
 
-A stronger one-line category definition:
+## Target customer
 
-> **ScopeDelta is the commercial control plane for client delivery: it continuously reconciles the signed scope, incoming requests, and delivery work so every task is either covered by the agreement or backed by an explicit commercial decision.**
+Primary ICP: software agencies, consultancies, outsourcing/product-engineering firms and similar B2B software-delivery organizations with roughly 50–500 employees.
 
-This is a materially different product from a one-off scope classifier or change-order generator.
+Why this segment:
 
-## Evidence that the problem is real
+- enough projects/users for coordination failures to become expensive;
+- commercial/client and delivery authority are separated across roles;
+- repeated client requests and status translation create PM overhead;
+- project margin and utilization matter;
+- they can support meaningful recurring software spend;
+- they are large enough to need governance but often small enough to feel pain from heavyweight enterprise tooling.
 
-### 1. Margin sensitivity makes small leaks important
+## Evidence: incumbent strengths and gaps
 
-Promethean Research's 2026 digital-agency research reports an average 2025 net margin of about 13% for digital agencies, with pricing pressure increasing as clients expect AI-related efficiency. At margins like these, a few percentage points of unbilled work matter materially.
+### Jira
 
-Teamwork's July 2026 scope-creep guidance describes agency projects going financially wrong through small, undocumented additions rather than bad initial estimates. Their example: if 10 projects each absorb only 5% more unbilled work, the agency has effectively given away half a project's revenue.
+Jira is not technologically stagnant. Current Jira includes boards/lists/timelines/calendars, forms, dependencies, automation, reporting, goals, Rovo AI, agent actions, AI-assisted work creation and more than 3,000 marketplace integrations.
 
-### 2. The problem occurs at the moment of request, not at month-end reporting
+Implication: ScopeDelta cannot win by claiming "Jira has no AI" or by offering basic boards/workflows.
 
-Repeated practitioner discussions show the same operational pattern:
+Its opportunity is a more opinionated client-delivery model with less configuration burden and a native commercial/client boundary.
 
-- a client asks for a "small" change in Slack/email/call;
-- a delivery person wants to preserve the relationship and says yes;
-- nobody has time to re-read the SOW and assess impact immediately;
-- the request becomes a task or gets discussed/started;
-- the commercial process catches up later, if at all;
-- profitability reports reveal the damage after leverage has been lost.
+### Linear
 
-High-engagement examples include web-development discussions where teams describe approved requirements being changed after development starts, and where formal change requests only happen after a buffer is exhausted.
+Linear is fast, opinionated and increasingly AI-native. Linear Agent can create/update issues, projects, milestones and initiatives, summarize ongoing work and reason over workspace context. Linear also has Customer Requests linked to issues/projects.
 
-A July/August 2026 project-management discussion identifies the missing chain as **scope → delivery → acceptance → payment**. Jira is useful delivery evidence, but by itself it does not settle what was commercially authorized.
+However public agency discussions repeatedly show friction when using Linear for external client delivery: teams use workaround structures, separate portals/status reports, or third-party tools because clients should not receive broad internal workspace access and technical tickets often require translation.
 
-### 3. Existing PS/agency systems acknowledge the gap
+Implication: "fast and modern" is not enough. ScopeDelta should combine that usability level with client-service semantics that Linear does not center.
 
-Established products already market project profitability, budget warnings, change-request tracking, and sign-off because this is a genuine operational problem:
+### Plane
 
-- Teamwork tracks project profitability and explicitly recommends a formal change-request process.
-- Productive focuses on real-time budget/profitability monitoring and budget-overrun alerts.
-- Scoro added a Change Request Log in 2026 to capture impact, sign-off and links to projects.
-- Accelo describes uncontrolled scope change as a profitability threat requiring structured change control.
-- Kantata notes that scope changes that never make it into the system create revenue leakage between delivery and billing.
+Plane is an especially important competitive warning. Its Community Edition is AGPL-licensed and self-hostable with unlimited projects/work items/users; it is AI-native and offers inexpensive managed plans. Business capabilities include external intake and customer records.
 
-These products validate the need, but much of their control is manual and/or downstream of the initial request.
+Implication: **open source + self-host + low price + AI project management is not a USP.** It is a strong distribution/product principle, but ScopeDelta still needs differentiated workflow value.
 
-## Competitive landscape
+### OpenProject
 
-### A. Pre-sales / CPQ / PSA
+OpenProject proves that mature open-source project-management software can cover classic/agile/hybrid planning, boards, work breakdown, scheduling, workload and integrations with GitHub/GitLab while monetizing hosted/enterprise support.
 
-#### ScopeStack
+Implication: open-core/self-host can support a sustainable business model, but ScopeDelta must be more specialized and AI-native rather than competing solely on licensing.
 
-Strong capabilities:
+### GitLab
 
-- detailed service scoping, effort, pricing, margin and SOW generation;
-- approvals and project versions;
-- integrations with PSA/CRM/project systems;
-- approved scopes can become delivery tasks;
-- marketing now explicitly discusses change-request tracking and proper billing approval in Asana/Teamwork workflows.
+GitLab demonstrates how deeply planning can integrate with engineering artifacts through issues, boards, epics and repository/CI context.
 
-Implication: our older claim that "ScopeStack is only pre-sales while ScopeDelta is post-contract" is no longer sufficiently accurate or differentiated.
+Implication: implementation evidence is valuable to our graph, but building source hosting/CI would put ScopeDelta into an enormous infrastructure market with little initial differentiation. Integrate rather than rebuild this layer.
 
-ScopeStack is also a comparatively heavyweight, sales-assisted CPQ/PSA product. Current public pricing is credit-based, with a 250-credit minimum order and optional paid onboarding/integration services. This leaves room for a much simpler self-serve product, but simplicity alone is not a durable USP.
+## Real recurring problems worth solving
 
-#### Teamwork / Productive / Scoro / Accelo / Kantata
+### 1. Translation loss between client and delivery team
 
-These products are broad operational systems. Their strengths are budgets, time, utilization, tasks, financial visibility and change logs. Their weakness for our target workflow is that they generally depend on a human recognizing a request as commercially significant and recording it correctly.
+Client requests arrive in business language. PMs manually convert them into engineering work. Context, constraints and commercial meaning are often lost.
 
-They are excellent systems of record **after work becomes work**. ScopeDelta should own the decision boundary **before unapproved work enters delivery**.
+### 2. Client visibility without exposing internal complexity
 
-### B. New scope-creep-specific products
+Agencies often do not want to expose internal Jira/Linear boards directly. Developer-oriented work item descriptions are also poor client status communication. Teams therefore duplicate status updates and use extra portals/reports.
 
-The 2026 market contains many narrow tools with overlapping promises, including Fenscope, Ersilia, Sentra, ScopeGuard, ScopeStamp, ScopeFrame, ScopeKit, ScopeDue, Dairakar, MarginRail, Boundix, Clovert, ScopeOrNope and several early-stage/waitlist products.
+### 3. Commercial drift
 
-Common feature set across this group:
+A request can become a task and then active work before anyone verifies whether it belongs to the original agreement or an approved change.
 
-- store/upload contract or scope;
-- paste/log a client request;
-- classify as in/out of scope;
-- cite a clause in some products;
-- generate a response/change order;
-- send a public approval link;
-- track recovered revenue;
-- some monitor communication channels such as email, Slack or WhatsApp.
+### 4. Requirements drift and stale execution context
 
-Conclusion: **contract upload + AI classification + change-order generation is category parity, not innovation.** Even automatic monitoring of client messages is emerging in multiple products.
+The SOW, client discussions, current backlog, code and test state may all describe different versions of reality.
 
-## The unmet operational problem
+### 5. PM coordination tax
 
-The strongest white space found in this research is **closed-loop commercial reconciliation**.
+Project managers spend significant time creating/cleaning tickets, updating status, chasing clarification, preparing reports, identifying blockers, coordinating QA and maintaining alignment across tools.
 
-Most products reason about one of these layers:
+### 6. Delivery evidence is fragmented
 
-1. the agreement/SOW;
-2. the client's request;
-3. project tasks/work;
-4. delivery evidence;
-5. approval/payment.
+Requirements, work items, pull requests, CI results, defects, test evidence and client acceptance live in separate systems. When a project goes wrong, reconstructing what was requested, implemented, verified and accepted is expensive.
 
-The real failure occurs because these layers drift apart.
+## Accepted product thesis
 
-A client request can be discussed and converted into Jira/Linear tasks before anybody verifies that the task maps to the signed scope or an approved change. Profitability software notices later. Change-order tools help only if somebody manually invokes them. Communication-monitoring tools can flag messages, but do not necessarily prove that execution stayed aligned afterwards.
+### Category
 
-## Proposed innovation: the ScopeDelta Commercial Graph
+> **ScopeDelta is an AI-native client software delivery operating system.**
 
-ScopeDelta should model the customer engagement as a traceable graph rather than a stack of documents.
+### Wedge
 
-### Core entities
+> **ScopeDelta prevents unapproved or misunderstood client scope from silently becoming delivery work.**
 
-- signed scope / baseline versions;
-- atomic scope commitments and exclusions with source evidence;
-- client requests and their originating evidence/channel;
-- commercial decisions;
-- approved change versions;
-- delivery work items (for example Jira/Linear issue, milestone, or later GitHub evidence);
-- client acceptance decisions;
-- monetary/timeline impact.
+### USP
 
-### Required relationship
+> **ScopeDelta keeps client intent, commercial authorization and actual software delivery connected in one graph — from signed requirement to work item, code/QA evidence and client acceptance — while AI continuously reduces the coordination work required to keep them aligned.**
 
-Every delivery work item should be explainable by one of:
+This is more defensible than "AI says whether a request is in scope."
 
-- an original approved scope item;
-- an approved change;
-- an explicitly recorded agency decision to absorb/swap/defer the work.
+## The Commercial Delivery Graph
 
-Anything else is **commercially unlinked work** and should be surfaced as drift.
+Core relationship chain:
 
-## Proposed USP
+client/engagement → commercial baseline → requirement → client request/clarification → commercial decision → delivery work → implementation evidence → QA evidence → client acceptance
 
-### USP statement
+Important properties:
 
-> **ScopeDelta catches the gap between what the client asked for, what the contract allows, and what the team is about to build — before unapproved work consumes margin.**
+- versioned evidence, not mutable blobs;
+- tenant isolation;
+- explicit internal/client visibility boundaries;
+- immutable/shared decision versions where appropriate;
+- clear difference between evidence-backed facts, estimates and AI suggestions;
+- every material delivery item can explain why it exists;
+- missing commercial/requirement links create actionable drift signals.
 
-### Product behavior that makes the USP real
+## Commercial decision taxonomy
 
-1. **Versioned commercial baseline**
-   - ingest SOW/proposal/approved scope;
-   - create evidence-backed atomic commitments, exclusions, revision limits and assumptions;
-   - preserve versions and source traceability.
+ScopeDelta should not treat every scope difference as an upsell.
 
-2. **Continuous request capture**
-   - start with one high-value integration/channel rather than every integration;
-   - capture requests without making the PM copy/paste everything manually;
-   - manual input remains available as fallback.
+Initial taxonomy:
 
-3. **Commercial decision engine**
-   - classify request against the baseline with citations;
-   - distinguish new scope from clarification, defect/fix, revision allowance, dependency/client responsibility and insufficient evidence;
-   - expose uncertainty instead of fake certainty.
+- included in baseline;
+- defect/fix obligation;
+- allowed revision;
+- absorbed by provider;
+- swap/reprioritize existing scope;
+- defer to future phase;
+- paid change;
+- clarification required;
+- reject/do not perform.
 
-4. **Decision options, not only "charge extra"**
-   - included / absorb from buffer;
-   - swap for existing scope;
-   - defer to later phase;
-   - paid change;
-   - request clarification;
-   - reject.
+This better matches real delivery behavior and preserves client trust.
 
-   This matches real agency behavior better than forcing every delta into a change order.
+## AI-first product behavior
 
-5. **Delivery gate / drift detection**
-   - link approved scope/change items to delivery work;
-   - flag work items that have no approved commercial parent;
-   - warn before the work is marked ready/in progress where integration capabilities permit;
-   - never silently block a customer's project without an explicit configured policy.
+AI should operate on graph state and workflow context rather than exist as an isolated chat box.
 
-6. **Impact graph**
-   - use existing project work/dependencies/estimates where available to show what the change affects;
-   - separate evidence-backed facts from AI estimates;
-   - show timeline/resource/testing/dependency consequences.
+High-value AI jobs include:
 
-7. **Closed-loop reconciliation**
-   - at milestone/project level show: sold → changed → approved → delivered → accepted;
-   - expose commercially unlinked work and pending decisions;
-   - provide defensible history without reconstructing Slack, Jira and old PDFs manually.
+- convert messy business requests into structured requirements/work;
+- detect missing acceptance criteria and ambiguity before development;
+- compare client requests to baseline/current commitments;
+- identify commercial drift and stale requirements;
+- summarize project state differently for PM/developer/QA/client audiences;
+- surface risks/dependencies from current execution evidence;
+- propose test coverage from requirements/changes;
+- identify work that lacks requirement, commercial or QA traceability;
+- take bounded project-management actions only with permissions/audit/cost controls.
 
-## Recommended initial ICP
+## Open/free strategy
 
-### Primary
+Accepted direction:
 
-Software development agencies / consultancies roughly 5–50 people that:
+- prefer open-source infrastructure and open standards;
+- maintain a useful self-hosted/community path;
+- support BYO/local AI where technically practical;
+- sell managed cloud convenience, managed AI, reliability and higher operational capability;
+- keep quality/security equivalent in the shared core rather than making free synonymous with unreliable;
+- final product license and commercial feature boundary require a separate legal/business decision before public source release.
 
-- deliver fixed-price or milestone projects;
-- run multiple concurrent client engagements;
-- use a PM/delivery system such as Jira, Linear, Teamwork or similar;
-- receive client requests through email/Slack/meetings;
-- have PM/account/delivery people who can accidentally authorize work socially before commercial review;
-- care materially about project margin.
+The market already has strong open-source PM competitors, so free/open is a distribution advantage rather than the sole product differentiation.
 
-### Why not lead with solo freelancers
+## Pricing direction
 
-Freelancers clearly experience the pain, but the current market is crowded with inexpensive freelancer-focused change-order tools. The highest-value differentiated problem appears when **commercial authority and delivery execution are split across people and systems**. That makes small agencies/consultancies a stronger initial wedge and supports higher recurring willingness to pay.
+Founder direction is low-cost/high-volume with premium B2B quality.
 
-Solo users may still be supported later through a lighter plan.
+Competitive context: current public plans commonly use per-seat pricing (for example Jira Standard, Linear Basic/Business and Plane Pro/Business). For a 50–500-person organization, seat taxes become material and can discourage broad participation.
 
-## Backlog implications
+Working ScopeDelta hypothesis:
 
-### SC-004 — identity, tenancy, persistence
+- free self-hosted community edition;
+- low-friction hosted entry tier;
+- paid managed cloud priced primarily around active client-delivery capacity and managed AI/usage rather than only seats;
+- generous/free client participants/viewers;
+- enterprise governance/support as a higher-value tier.
 
-Keep. This is enabling infrastructure and remains necessary under almost any B2B SaaS direction.
+Exact prices/limits remain unapproved until unit economics and billing-provider constraints are known.
 
-However, it should stay blocked until this research checkpoint is accepted so we do not accidentally encode the wrong product model into client/project entities.
+## What is table stakes versus differentiation
 
-### SC-005 — scope ingestion
+### Table stakes
 
-Needs revision before execution.
+- projects/work items;
+- assignment/status/priority;
+- milestones/cycles;
+- basic dependency/estimate support;
+- boards/lists/search/filters;
+- comments/activity;
+- docs/specs;
+- notifications;
+- secure tenancy;
+- Git/repository links/integration;
+- reasonable APIs/webhooks.
 
-Change from generic "document ingestion" toward **versioned commercial baseline ingestion**. The model must preserve atomic scope commitments/exclusions/revision limits/assumptions and citations. It should be designed for later linking to requests and delivery work.
+These must be excellent but implemented without unnecessary complexity.
 
-### SC-006 — analysis engine
+### Differentiators
 
-Needs major revision.
+- first-class client/internal dual-view model;
+- Commercial Delivery Graph;
+- scope/request/work/QA/acceptance traceability;
+- commercial-drift detection;
+- client negotiation and acceptance inside the delivery lifecycle;
+- AI reasoning/actions over the complete delivery graph;
+- role-specific context for PM/developer/QA/client;
+- open/self-host + managed cloud without creating two separate products;
+- disruptive economics that do not punish broad team/client participation.
 
-A one-off pasted request classifier is insufficient. Reframe as the **commercial decision engine** and ScopeDelta Commercial Graph. The classification taxonomy should cover clarification/defect/revision allowance and commercial options, not only in/out/partial/insufficient.
+## What not to build initially
 
-### New P0 capability required — request/work integration
+Even under the larger ambition, ScopeDelta should not initially rebuild:
 
-Add a dedicated issue for the first continuous integration surface and delivery reconciliation. The exact first integration should be chosen from target-ICP evidence and implementation economics. Likely candidates are Jira/Linear for delivery work and Slack/email for request intake.
+- Git repository hosting;
+- CI/CD runner infrastructure;
+- a Slack/Teams replacement;
+- video conferencing;
+- full accounting/payments infrastructure;
+- generic CRM/marketing automation;
+- every Jira workflow/configuration primitive;
+- every industry-specific project-management use case.
 
-Do not build four integrations simultaneously.
+The target is an end-to-end **client software delivery** system, not an all-purpose enterprise suite on day one.
 
-### SC-007 — change order
+## Roadmap implication
 
-Keep but revise around a broader **commercial decision packet**. Paid change order is one outcome, not the only valid outcome.
+Build in product layers:
 
-### SC-008 — approval/audit
+0. platform kernel;
+1. delivery core;
+2. Commercial Delivery Graph;
+3. client collaboration/negotiation;
+4. engineering + QA loop;
+5. AI-native delivery intelligence;
+6. subscription/cloud economics/distribution;
+7. portfolio/operations/self-service scale;
+8. enterprise/GA hardening.
 
-Keep. This is central to the closed-loop evidence chain.
+See `docs/ROADMAP.md` and `docs/decisions/ADR-005-ai-native-client-delivery-os.md`.
 
-### SC-009 — subscription/entitlements
+## Research discipline going forward
 
-Keep. Consider implementation earlier than the old roadmap if variable AI/integration costs become material. Test-mode billing architecture can proceed before public pricing is finalized.
+Before each major layer moves to `READY FOR CODEX`, perform a focused competitor/problem review for that layer and explicitly identify:
 
-### SC-010 / SC-011
+- user pain;
+- incumbent best-in-class behavior we must match;
+- incumbent complexity we should avoid;
+- ScopeDelta differentiation;
+- non-goals;
+- measurable product outcome.
 
-Keep. Self-service onboarding and production hardening remain mandatory for the founder operating model.
-
-## Research caveats
-
-- Public Reddit research contains genuine practitioner discussion but also many 2026 founder-validation posts promoting newly built scope-creep products. Promotional threads were treated primarily as competitor/category evidence, not proof of demand.
-- Stronger demand evidence comes from high-engagement practitioner threads, established PSA/agency products, and industry profitability research.
-- No direct buyer interviews have been performed. The founder operating model makes synchronous interviews impractical, so the product should later collect asynchronous behavioral evidence and reasons for conversion/cancellation in-product.
-
-## Decision checkpoint
-
-Before unblocking SC-004, confirm the founder-level constraints/questions recorded in the CEO conversation and then revise `docs/PRODUCT.md`, `docs/ROADMAP.md`, and SC-004–SC-011 around the accepted commercial-control thesis.
+Research is therefore continuous and tied to engineering sequencing, not a one-time market document.

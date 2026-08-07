@@ -123,6 +123,18 @@ This is a product-economics principle, not approved final pricing.
 - **Global:** multi-currency and international-ready data model from the start.
 - **Portable:** self-host and managed cloud should share the same core product model; avoid unnecessary provider lock-in.
 
+## Layer research discipline
+
+Before a major product layer moves to `READY FOR CODEX`, the CEO/product role must perform a focused research review for that layer:
+
+1. identify the daily user pain and role affected;
+2. identify best-in-class incumbent behavior that is table stakes;
+3. identify incumbent complexity or failure modes ScopeDelta should avoid;
+4. define the ScopeDelta-specific differentiator/USP for the layer;
+5. define measurable acceptance outcomes and explicit non-goals.
+
+This prevents the broader ambition from becoming an unresearched feature backlog.
+
 ## Consequences
 
 - The older narrow scope-change roadmap is superseded.

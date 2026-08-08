@@ -1,132 +1,249 @@
 # Production Operations
 
-## Status
+## Status and change boundary
 
-Accepted for SC-003. This runbook covers the public landing page and paid-pilot
-lead path only. It does not authorize a custom domain, paid plan, database, CRM,
-analytics, authentication, or any Week-2 product capability.
+Accepted for SC-004. This runbook covers the existing public lead flow and the
+production platform kernel. It does not authorize production credentials,
+database creation, DNS changes, a paid service, or destructive database work
+without founder approval. It does not cover SC-005 product data, AI, billing,
+SSO, or client portals.
 
-## Production services
+## Supported deployment shapes
 
-- **Application host:** Netlify Free, connected to the `Jainil2/scopedelta`
-  GitHub repository. Netlify's Free plan permits commercial projects and has a
-  hard monthly limit rather than automatic overage charges.
-- **Lead receiver:** a founder-owned Formspree form on its free plan. It accepts
-  the existing versioned JSON webhook without adding client-side credentials or
-  coupling application code to the provider.
-- **Canonical origin:** the public `https://<site-name>.netlify.app` URL. A
-  custom domain is optional and is not a launch dependency.
+### Managed application
 
-The production branch is `main`. Netlify builds each merged `main` commit using
-the checked-in `netlify.toml`, `.nvmrc`, `packageManager` declaration, and pnpm
-lockfile. Deploy previews and branch deploys should remain disabled while they
-are not needed so the free build allowance is reserved for production.
+Netlify remains the application host. Production is the merged `main` branch.
+The GitHub `Production deploy` workflow applies migrations, then
+performs a manual Netlify CLI deploy. Netlify receives only runtime credentials;
+the direct migration credential exists only for the migration step. Automatic
+Netlify production builds are skipped by `netlify.toml` so code cannot publish
+before its migration. Branch/deploy previews still build and receive no
+production database credentials.
 
-## Required production environment
+PostgreSQL and SMTP remain provider-neutral. Neon Free is an optional managed
+PostgreSQL reference and Resend Free is an optional SMTP reference; their SDKs
+are not used. Confirm current limits and production suitability before relying
+on a free tier, and do not attach billing without founder approval.
 
-Set these variables in Netlify for the Production deploy context only:
+### Self-hosted
 
-| Variable           | Value                                      | Exposure                 |
-| ------------------ | ------------------------------------------ | ------------------------ |
-| `APP_URL`          | Exact public Netlify origin, without slash | Builds and Functions     |
-| `LEAD_WEBHOOK_URL` | Founder-owned Formspree form endpoint      | Builds and Functions[^1] |
+The `Dockerfile` builds a multi-stage Node.js 24 production image that runs as
+the unprivileged `node` user. `compose.yaml` demonstrates the app, PostgreSQL
+17, a one-shot migration service, and development-only Mailpit; secrets are
+supplied from an untracked environment file. A production self-host must omit
+Mailpit, persist PostgreSQL on protected storage, and
+place the app behind a maintained reverse proxy that terminates TLS, redirects
+HTTP to HTTPS, preserves the original host/scheme, and supplies a trustworthy
+client-IP header.
 
-[^1]:
-    Netlify Free does not offer per-variable scope restrictions. Use only the
-    Production deploy-context value and mark it as containing secret values.
+## Production environment
 
-Do not prefix either variable with `NEXT_PUBLIC_`. Treat the Formspree endpoint
-as an operational secret even though it is not a bearer credential: exposing it
-would allow submissions to bypass ScopeDelta's validation and honeypot. Never
-copy lead values into Netlify build logs, function logs, issue comments, test
-fixtures, or deployment screenshots.
+Set these runtime values only in the Netlify Production deploy context or the
+self-host secret manager:
 
-After changing environment variables, trigger a new production deploy. Next.js
-server functions do not receive a changed deploy environment until the new
-deploy is published.
+| Variable                                | Requirement                                                       |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| `APP_URL`                               | Exact canonical HTTPS origin, no trailing slash.                  |
+| `DATABASE_URL`                          | Pooled runtime PostgreSQL URL with least-privilege app access.    |
+| `BETTER_AUTH_SECRET`                    | At least 32 cryptographically random characters.                  |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` | Transactional SMTP endpoint and TLS mode.                         |
+| `SMTP_USER`, `SMTP_PASSWORD`            | Set together when authentication is required.                     |
+| `SMTP_FROM`                             | Verified sender, for example `ScopeDelta <no-reply@example.com>`. |
+| `LEAD_WEBHOOK_URL`                      | Existing paid-pilot JSON receiver.                                |
 
-## First deployment
+Set these separately as GitHub Actions **repository secrets** used by
+`.github/workflows/production-deploy.yml`. Repository secrets work for a
+private repository on GitHub Free and do not require a paid GitHub environment:
 
-1. In a founder-controlled Netlify account, import `Jainil2/scopedelta` from
-   GitHub and select the Free plan. Do not add billing details or accept a paid
-   upgrade.
-2. Confirm `main` is the production branch, `pnpm build` is the build command,
-   and `.next` is the publish directory. Repository configuration should supply
-   these values; do not override it with different dashboard values.
-3. Keep the generated `netlify.app` URL. Set project visibility to Public, and
-   disable unneeded deploy previews and branch deploys.
-4. In a founder-controlled Formspree account, create one form named
-   `ScopeDelta paid-pilot applications`. Keep notification recipients limited
-   to founder/company-controlled mailboxes.
-5. Add `APP_URL` and `LEAD_WEBHOOK_URL` in the Netlify Production deploy context,
-   mark the webhook value secret, and deploy `main`.
-6. Record the public origin and successful delivery evidence in the SC-003 pull
-   request. Do not paste the webhook URL or submitted lead fields.
+| Secret                   | Requirement                                                                |
+| ------------------------ | -------------------------------------------------------------------------- |
+| `DATABASE_MIGRATION_URL` | Direct schema-owner URL; exposed only to the migration step.               |
+| `NETLIFY_AUTH_TOKEN`     | Netlify user personal access token; exposed only to the deployment step.   |
+| `NETLIFY_SITE_ID`        | Target ScopeDelta Netlify project identifier; this does not scope the PAT. |
 
-## Launch verification
+GitHub repository secrets do not provide an environment approval gate or
+environment-specific access control. Protect `main`, require review where the
+repository plan permits it, restrict repository write access, and treat changes
+to Actions workflows as privileged deployment changes. Pull requests from
+forks do not receive repository secrets, and this deployment workflow runs only
+after code reaches `main` or an authorized maintainer dispatches it. The
+workflow uses the private repository's included GitHub Actions minutes; monitor
+that quota and do not enable paid overages without founder approval.
 
-Use synthetic, non-confidential data dedicated to this check.
+Netlify CLI authentication uses a user-scoped personal access token. It may be
+able to operate on every Netlify resource available to that user;
+`NETLIFY_SITE_ID` selects the deployment target but does not reduce that
+authority. Prefer a dedicated deployment identity limited to the ScopeDelta
+team/site when that is available without an unapproved paid commitment.
+Otherwise use the shortest practical token expiry, rotate it regularly and
+after personnel/access changes, review Netlify access logs, and revoke it
+immediately on suspected exposure.
 
-1. Open the public origin in a private browser window and confirm HTTPS, a 200
-   response, the ScopeDelta heading, the hero image, and the paid-pilot form.
-2. Submit one test application with a unique address or plus-tag, such as
-   `founder+sc003-<date>@your-company-domain.com`, and a scope challenge that
-   says it is synthetic launch verification. Never use a real prospect's data.
-3. Confirm the browser shows the success state exactly once.
-4. In Formspree, confirm one new submission has the event name
-   `pilot_interest.submitted`, schema version `1.0`, matching submission UUID,
-   timestamp, source, and normalized lead fields.
-5. Confirm the Formspree notification arrives at the controlled mailbox, if
-   notifications are enabled.
-6. Check the Netlify function logs only for execution errors. Do not add logging
-   of request bodies, webhook bodies, email addresses, names, or challenges.
+Do not use `NEXT_PUBLIC_`. Keep production values out of commits, tickets,
+screenshots, command history, and build output. Rotate `BETTER_AUTH_SECRET` only
+as an incident operation: rotation invalidates sessions and may affect pending
+tokens. Never configure `DATABASE_MIGRATION_URL` in Netlify. After any Netlify
+runtime-environment change, run the production workflow again.
 
-The public flow is operational only after steps 1-4 pass. A 200 page response
-alone does not prove lead delivery.
+## PostgreSQL provisioning and permissions
 
-## Routine lead handling
+1. Create a production PostgreSQL 17-compatible database in a founder-controlled
+   project and region suitable for users and policy requirements.
+2. Require TLS. Restrict network access where the host permits it.
+3. Create separate runtime and migration credentials. Runtime needs DML access
+   to application tables; the migration role needs schema-change rights and is
+   not exposed to the running app.
+4. Put the pooled endpoint in Netlify `DATABASE_URL` and the direct endpoint in
+   GitHub Actions repository secrets as `DATABASE_MIGRATION_URL`. For Neon,
+   use its pooled hostname for runtime and unpooled/direct hostname for
+   migration and `pg_dump`.
+5. Verify automated provider backups or configure the direct backup procedure
+   below before accepting customer accounts.
 
-Review new submissions in the founder-controlled Formspree dashboard. Use the
-submission UUID to identify duplicates; the application sends it as both a
-field and `Idempotency-Key`, but the receiver may not enforce idempotency. Export
-only when necessary, store exports in approved company storage, and delete
-synthetic verification entries after the check. Apply the shortest practical
-retention period and remove stale prospect data regularly.
+Do not run migrations from multiple production jobs concurrently. GitHub
+workflow concurrency makes `Production deploy` the single managed migration
+runner; self-hosted releases run the migration image once before replacing
+application containers.
 
-Formspree plan or rate-limit failures appear to visitors as the same recoverable
-submission error as other upstream failures. The form preserves their fields
-and reuses the submission UUID when they retry. Investigate receiver status and
-limits before asking anyone to resubmit.
+## Migration release procedure
 
-## Rollback and disable procedures
+Before merging:
 
-### Roll back a bad application deploy
+1. Review generated SQL and verify it contains only the approved schema change.
+2. Run `pnpm db:check`.
+3. Apply migrations twice to a fresh disposable database; both runs must pass.
+4. Run integration/browser tests against that migrated database.
+5. For future non-additive changes, document the expand/backfill/contract
+   releases and restoration implications in the PR.
 
-1. In Netlify, open **Deploys** and select the last known-good production deploy.
-2. Publish that deploy as the current production deploy.
-3. Verify the public origin and submit a new synthetic lead end to end.
-4. Revert the faulty Git commit through a pull request so the repository and
-   deployed state converge. Do not force-push `main`.
+For managed production, the workflow maps `DATABASE_MIGRATION_URL` only into
+the environment of `pnpm db:migrate`. The following Netlify CLI step receives
+only `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, and a non-secret orchestration
+marker.
+If migration fails, deployment does not start. `netlify.toml` cancels any
+automatic production build not carrying that marker, preventing the repository
+integration from racing the workflow. Preview builds intentionally do not
+validate a live production database.
 
-### Disable lead intake only
+For self-hosting:
 
-Remove `LEAD_WEBHOOK_URL` from the Production deploy context and publish a new
-deploy. The landing page remains available, while submissions fail safely and
-retain the visitor's input. Restore the value and redeploy to re-enable intake.
+```bash
+docker compose --env-file .env.compose build
+docker compose --env-file .env.compose run --rm migrate
+docker compose --env-file .env.compose up -d app
+```
 
-### Disable the public site
+Never edit a migration that has reached any shared environment. Fix forward
+with a new migration.
 
-Stop Netlify auto-publishing, then unpublish the project in Netlify. This is the
-emergency path for a privacy or security incident. Do not delete the Netlify or
-Formspree project; preserving reversible history is safer than destructive
-cleanup. Re-enable publishing only after the incident is resolved and the full
-launch verification passes.
+## SMTP and DNS readiness
 
-## Service limits and follow-up triggers
+Use a transactional sender and a company-controlled domain. Before enabling
+self-service signup:
 
-The selected services are intentionally low-cost validation infrastructure.
-Monitor the Netlify credit allowance and Formspree submission allowance in their
-dashboards. Do not add billing or upgrade either plan without founder approval.
-Revisit the receiver architecture only after validated volume, retention,
-workflow, or reliability needs justify a database, queue, CRM, or another
-approved integration.
+1. Verify the `SMTP_FROM` domain and publish provider-supplied SPF and DKIM
+   records; add an appropriate DMARC policy and monitored reporting address.
+2. Verify port, TLS mode, credentials, and server egress. Prefer TLS from the
+   first byte (`SMTP_SECURE=true`) when the provider requires port 465;
+   otherwise use the provider's documented STARTTLS port.
+3. Send synthetic verification, reset, and invitation messages to controlled
+   mailboxes and check delivered links use the exact `APP_URL` HTTPS origin.
+4. Confirm bounce/complaint handling in the provider dashboard without adding
+   message bodies or recipients to application logs.
+
+Mailpit is development-only and must never be public or connected to production.
+
+## First platform deployment
+
+1. Obtain founder approval for the chosen PostgreSQL/SMTP projects and any DNS
+   changes; do not change the current production site beforehand.
+2. Provision and back up PostgreSQL, configure SMTP/DNS, and create secrets.
+3. Add runtime variables in Netlify, explicitly excluding
+   `DATABASE_MIGRATION_URL`. Do not add database or SMTP credentials to preview
+   contexts.
+4. Add the three deployment values above as GitHub Actions repository secrets.
+   This is compatible with a private repository on GitHub Free and deliberately
+   does not claim an environment approval gate. Protect `main` and tightly
+   review workflow changes; if stronger deployment approval is later required,
+   obtain founder approval for any plan or platform change first.
+5. Merge `main`. Confirm `Production deploy` applies migrations before the
+   manual Netlify deployment. The automatic Netlify production build should be
+   reported as intentionally skipped.
+6. Run the verification checklist below with synthetic identities and no
+   customer content.
+7. Record only pass/fail evidence and sanitized identifiers in the release/PR.
+
+## Release verification
+
+- Public `/` returns 200 and the existing paid-pilot flow remains usable.
+- A new synthetic account receives one verification email; unverified sign-in
+  is rejected without account-enumeration detail.
+- Verification opens onboarding; workspace creation emits a stable slug and
+  opens `/app/[workspaceSlug]`.
+- Reload, sign-out, and re-login preserve workspace access.
+- A second workspace appears in the switcher.
+- Owner/member/admin restrictions match the documented role matrix and the last
+  owner cannot be removed or demoted.
+- An invitation token is in the URL fragment, disappears after staging, and is
+  accepted only by a verified matching email.
+- Password recovery succeeds and prior sessions are revoked.
+- Desktop and mobile shell layouts are keyboard-operable with visible focus.
+- Browser console and Netlify logs contain no secrets, tokens, names, emails,
+  message bodies, provider responses, or customer content.
+
+## Logging and incident-safe diagnostics
+
+Application logs use fixed technical event names only. Never add raw request
+bodies, headers/cookies, SQL values, auth responses, SMTP envelopes, invitation
+URLs, webhook payloads, or exception objects that may contain provider data.
+API failures expose stable public codes, not database/provider details.
+
+For an incident, correlate by timestamp, route, HTTP status, and sanitized audit
+event UUID/type. Query tenant/customer content only with explicit authorization
+and the minimum scope necessary.
+
+## Backup and restore
+
+Use the direct connection and a secure operator environment. Never place a
+password inline in a shared command or committed script.
+
+```bash
+pg_dump --dbname="$DATABASE_MIGRATION_URL" --format=custom --no-owner --file=scopedelta-UTC_TIMESTAMP.dump
+pg_restore --list scopedelta-UTC_TIMESTAMP.dump
+```
+
+Encrypt backups, restrict access, and store them outside the primary database
+project according to the approved retention policy. Test restore into a new,
+isolated database regularly:
+
+```bash
+createdb scopedelta_restore_test
+pg_restore --dbname=postgresql://.../scopedelta_restore_test --no-owner --clean --if-exists scopedelta-UTC_TIMESTAMP.dump
+```
+
+Point a non-production application at the restored database and perform the
+release verification. Never use `--clean` against production. A production
+restore is destructive and requires founder approval, an incident plan, and an
+explicitly resolved target.
+
+## Rollback and recovery
+
+Schema rollback is forward-only. If a migration fails before publish, fix the
+migration code and rerun; do not partially publish the app. If the application
+fails after an additive migration, restore the last known-good Netlify deploy
+only if its schema contract remains compatible, then ship a forward fix through
+a PR. Do not force-push `main` or manually delete schema objects.
+
+To disable new identity traffic during an auth/email incident, stop production
+publishing and use Netlify access controls or unpublish the site; removing SMTP
+configuration causes safe delivery failure but is not a complete signup lock.
+To disable only paid-pilot intake, remove `LEAD_WEBHOOK_URL` and redeploy. Keep
+projects and data intact for investigation rather than deleting them.
+
+## Existing lead receiver boundary
+
+The lead endpoint sends the versioned `pilot_interest.submitted` event with an
+idempotency key, eight-second timeout, no redirect following, and no automatic
+retry. It persists no lead data. The configured receiver remains an independent
+privacy/retention boundary. Review and delete synthetic checks, deduplicate by
+submission UUID, and never inspect lead bodies in Netlify logs.

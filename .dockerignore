@@ -1,0 +1,8 @@
+.git
+.next
+.playwright-cli
+node_modules
+output
+.env
+.env.local
+docs/screenshots

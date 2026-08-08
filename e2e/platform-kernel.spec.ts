@@ -247,6 +247,23 @@ test("client project, milestone, and backlog work through the production UI", as
   await expect(
     plannedCard.locator(".kanban-card-context").getByText("August delivery"),
   ).toBeVisible();
+  const boardEditorOpener = plannedCard.getByRole("button", {
+    name: /Implement secure account shell/,
+  });
+  await boardEditorOpener.click();
+  const boardEditor = page.getByRole("dialog", { name: "Edit work item" });
+  const closeEditor = boardEditor.getByRole("button", { name: "Close" });
+  const saveChanges = boardEditor.getByRole("button", {
+    name: "Save changes",
+  });
+  await expect(closeEditor).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(saveChanges).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(closeEditor).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(boardEditor).toBeHidden();
+  await expect(boardEditorOpener).toBeFocused();
   await plannedCard.getByRole("button", { name: "In review →" }).click();
   await expect(page.getByRole("status")).toHaveText("Moved to In review.");
 

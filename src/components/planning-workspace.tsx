@@ -864,35 +864,64 @@ function WorkEditor({
   close,
   children,
 }: Readonly<{ item: WorkItem; close: () => void; children: React.ReactNode }>) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const supportsModalDialog = typeof dialog.showModal === "function";
+    if (supportsModalDialog) dialog.showModal();
+    else dialog.setAttribute("open", "");
+
     closeRef.current?.focus();
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") close();
+      if (!supportsModalDialog && event.key === "Escape") close();
     }
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (supportsModalDialog && dialog.open) dialog.close();
+    };
   }, [close]);
   return (
-    <div className="work-editor-backdrop" role="presentation">
-      <section
-        className="work-editor"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="planning-editor-title"
-      >
-        <header>
-          <div>
-            <span className="work-identifier">{item.identifier}</span>
-            <h2 id="planning-editor-title">Edit work item</h2>
-          </div>
-          <button ref={closeRef} className="button-secondary" onClick={close}>
-            Close
-          </button>
-        </header>
-        {children}
-      </section>
-    </div>
+    <dialog
+      ref={dialogRef}
+      className="work-editor"
+      aria-labelledby="planning-editor-title"
+      onKeyDown={(event) => {
+        if (event.key !== "Tab") return;
+        const focusable = Array.from(
+          event.currentTarget.querySelectorAll<HTMLElement>(
+            "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+          ),
+        );
+        const first = focusable.at(0);
+        const last = focusable.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }}
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
+    >
+      <header>
+        <div>
+          <span className="work-identifier">{item.identifier}</span>
+          <h2 id="planning-editor-title">Edit work item</h2>
+        </div>
+        <button ref={closeRef} className="button-secondary" onClick={close}>
+          Close
+        </button>
+      </header>
+      {children}
+    </dialog>
   );
 }
 

@@ -61,7 +61,7 @@ describe("planning workspace", () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.unstubAllGlobals());
 
-  it("moves board work through the shared API and restores focus after Escape", async () => {
+  it("moves board work and contains editor focus in both Tab directions", async () => {
     const fetchMock = vi.fn().mockImplementation(
       async () =>
         new Response(JSON.stringify({ data: item }), {
@@ -122,9 +122,17 @@ describe("planning workspace", () => {
       name: /Build authenticated shell/,
     });
     await user.click(opener);
-    expect(
-      screen.getByRole("dialog", { name: "Edit work item" }),
-    ).toBeVisible();
+    const editor = screen.getByRole("dialog", { name: "Edit work item" });
+    const closeEditor = within(editor).getByRole("button", { name: "Close" });
+    const saveChanges = within(editor).getByRole("button", {
+      name: "Save changes",
+    });
+    expect(editor).toBeVisible();
+    expect(closeEditor).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(saveChanges).toHaveFocus();
+    await user.tab();
+    expect(closeEditor).toHaveFocus();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await waitFor(() => expect(opener).toHaveFocus());

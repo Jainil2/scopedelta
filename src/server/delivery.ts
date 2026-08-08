@@ -1920,6 +1920,24 @@ async function assertProjectMember(
   }
 }
 
+async function validateMilestoneReference(
+  database: Executor,
+  projectId: string,
+  milestoneId: string,
+) {
+  const rows = await database
+    .select({ status: milestones.status })
+    .from(milestones)
+    .where(
+      and(eq(milestones.id, milestoneId), eq(milestones.projectId, projectId)),
+    )
+    .limit(1);
+  if (!rows[0]) throw notFound();
+  if (rows[0].status === "archived") {
+    throw conflict("milestone_archived", "Choose an active milestone.");
+  }
+}
+
 async function validateWorkReferences(
   database: Executor,
   projectId: string,
@@ -1929,20 +1947,7 @@ async function validateWorkReferences(
     await assertProjectMember(database, projectId, input.assigneeUserId);
   }
   if (input.milestoneId) {
-    const rows = await database
-      .select({ status: milestones.status })
-      .from(milestones)
-      .where(
-        and(
-          eq(milestones.id, input.milestoneId),
-          eq(milestones.projectId, projectId),
-        ),
-      )
-      .limit(1);
-    if (!rows[0]) throw notFound();
-    if (rows[0].status === "archived") {
-      throw conflict("milestone_archived", "Choose an active milestone.");
-    }
+    await validateMilestoneReference(database, projectId, input.milestoneId);
   }
   if (input.cycleId) {
     const rows = await database

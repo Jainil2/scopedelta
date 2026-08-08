@@ -6,6 +6,8 @@ import {
   count,
   desc,
   eq,
+  gt,
+  ilike,
   inArray,
   isNotNull,
   isNull,
@@ -50,6 +52,7 @@ import {
 import type { UserActor } from "@/server/workspaces";
 
 const MAX_ACTIVE_PROJECT_NOTES = 20;
+const COLLABORATION_BATCH_SIZE = 100;
 const MENTION =
   /@\[([^\]\n]{1,100})\]\(user:([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\)/gi;
 
@@ -114,36 +117,54 @@ async function getScopedWorkItem(
   return rows[0];
 }
 
-async function authorizedProjectUsers(
+function authorizedProjectUserScope(workspaceId: string) {
+  return and(
+    eq(memberships.workspaceId, workspaceId),
+    or(
+      inArray(memberships.role, ["owner", "admin"]),
+      isNotNull(projectMemberships.userId),
+    ),
+  );
+}
+
+function escapeLike(value: string) {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
+
+async function authorizedProjectUsersById(
   database: Executor,
   workspaceId: string,
   projectId: string,
-  userIds?: string[],
+  userIds: string[],
 ) {
-  if (userIds && userIds.length === 0) return [];
-  const rows = await database
-    .select({ userId: memberships.userId, name: users.name })
-    .from(memberships)
-    .innerJoin(users, eq(users.id, memberships.userId))
-    .leftJoin(
-      projectMemberships,
-      and(
-        eq(projectMemberships.projectId, projectId),
-        eq(projectMemberships.userId, memberships.userId),
-      ),
-    )
-    .where(
-      and(
-        eq(memberships.workspaceId, workspaceId),
-        or(
-          inArray(memberships.role, ["owner", "admin"]),
-          isNotNull(projectMemberships.userId),
+  const uniqueIds = [...new Set(userIds)];
+  const rows: Array<{ userId: string; name: string }> = [];
+  for (
+    let offset = 0;
+    offset < uniqueIds.length;
+    offset += COLLABORATION_BATCH_SIZE
+  ) {
+    const batch = uniqueIds.slice(offset, offset + COLLABORATION_BATCH_SIZE);
+    const authorized = await database
+      .select({ userId: memberships.userId, name: users.name })
+      .from(memberships)
+      .innerJoin(users, eq(users.id, memberships.userId))
+      .leftJoin(
+        projectMemberships,
+        and(
+          eq(projectMemberships.projectId, projectId),
+          eq(projectMemberships.userId, memberships.userId),
         ),
-        userIds ? inArray(memberships.userId, userIds) : undefined,
-      ),
-    )
-    .orderBy(asc(users.name), asc(users.id))
-    .limit(100);
+      )
+      .where(
+        and(
+          authorizedProjectUserScope(workspaceId),
+          inArray(memberships.userId, batch),
+        ),
+      )
+      .limit(batch.length);
+    rows.push(...authorized);
+  }
   return rows;
 }
 
@@ -158,7 +179,7 @@ async function validateMentions(
   body: string,
 ) {
   const ids = [...new Set(mentionIds(body))];
-  const authorized = await authorizedProjectUsers(
+  const authorized = await authorizedProjectUsersById(
     database,
     workspaceId,
     projectId,
@@ -194,18 +215,67 @@ async function createNotifications(
     projectNoteId?: string;
     eventKey: string;
     recipients: Map<string, NotificationKind>;
+    notifyWatchers?: boolean;
   },
 ) {
   input.recipients.delete(input.actorUserId);
-  if (!input.recipients.size) return;
-  const recipients = await authorizedProjectUsers(
+  const directRecipientIds = new Set(input.recipients.keys());
+  await insertAuthorizedNotifications(transaction, input, input.recipients);
+  if (!input.notifyWatchers || !input.workItemId) return;
+
+  let afterUserId: string | undefined;
+  do {
+    const watchers = await transaction
+      .select({ userId: workItemSubscriptions.userId })
+      .from(workItemSubscriptions)
+      .where(
+        and(
+          eq(workItemSubscriptions.workItemId, input.workItemId),
+          eq(workItemSubscriptions.state, "watching"),
+          afterUserId
+            ? gt(workItemSubscriptions.userId, afterUserId)
+            : undefined,
+        ),
+      )
+      .orderBy(asc(workItemSubscriptions.userId))
+      .limit(COLLABORATION_BATCH_SIZE);
+    const recipients = new Map<string, NotificationKind>();
+    for (const watcher of watchers) {
+      if (
+        watcher.userId !== input.actorUserId &&
+        !directRecipientIds.has(watcher.userId)
+      ) {
+        recipients.set(watcher.userId, "comment_added");
+      }
+    }
+    await insertAuthorizedNotifications(transaction, input, recipients);
+    afterUserId = watchers.at(-1)?.userId;
+    if (watchers.length < COLLABORATION_BATCH_SIZE) break;
+  } while (afterUserId);
+}
+
+async function insertAuthorizedNotifications(
+  transaction: Transaction,
+  input: {
+    workspaceId: string;
+    projectId: string;
+    actorUserId: string;
+    workItemId?: string;
+    commentId?: string;
+    projectNoteId?: string;
+    eventKey: string;
+  },
+  recipients: Map<string, NotificationKind>,
+) {
+  if (!recipients.size) return;
+  const authorized = await authorizedProjectUsersById(
     transaction,
     input.workspaceId,
     input.projectId,
-    [...input.recipients.keys()],
+    [...recipients.keys()],
   );
-  const allowed = new Set(recipients.map((recipient) => recipient.userId));
-  const values = [...input.recipients]
+  const allowed = new Set(authorized.map((recipient) => recipient.userId));
+  const values = [...recipients]
     .filter(([userId]) => allowed.has(userId))
     .map(([userId, kind]) => ({
       id: randomUUID(),
@@ -219,10 +289,14 @@ async function createNotifications(
       projectNoteId: input.projectNoteId,
       dedupeKey: `${input.eventKey}:${kind}:${userId}`,
     }));
-  if (values.length) {
+  for (
+    let offset = 0;
+    offset < values.length;
+    offset += COLLABORATION_BATCH_SIZE
+  ) {
     await transaction
       .insert(notifications)
-      .values(values)
+      .values(values.slice(offset, offset + COLLABORATION_BATCH_SIZE))
       .onConflictDoNothing();
   }
 }
@@ -231,10 +305,52 @@ export async function listMentionableMembers(
   actor: UserActor,
   workspaceId: string,
   projectId: string,
+  filters: { page: number; pageSize: number; query?: string } = {
+    page: 1,
+    pageSize: 50,
+  },
 ) {
   await getProjectAccess(getDb(), actor, workspaceId, projectId);
-  const rows = await authorizedProjectUsers(getDb(), workspaceId, projectId);
-  return { data: rows };
+  const query = filters.query?.trim();
+  const where = and(
+    authorizedProjectUserScope(workspaceId),
+    query ? ilike(users.name, `%${escapeLike(query)}%`) : undefined,
+  );
+  const [rows, totals] = await Promise.all([
+    getDb()
+      .select({ userId: memberships.userId, name: users.name })
+      .from(memberships)
+      .innerJoin(users, eq(users.id, memberships.userId))
+      .leftJoin(
+        projectMemberships,
+        and(
+          eq(projectMemberships.projectId, projectId),
+          eq(projectMemberships.userId, memberships.userId),
+        ),
+      )
+      .where(where)
+      .orderBy(asc(users.name), asc(users.id))
+      .limit(filters.pageSize)
+      .offset((filters.page - 1) * filters.pageSize),
+    getDb()
+      .select({ total: count() })
+      .from(memberships)
+      .innerJoin(users, eq(users.id, memberships.userId))
+      .leftJoin(
+        projectMemberships,
+        and(
+          eq(projectMemberships.projectId, projectId),
+          eq(projectMemberships.userId, memberships.userId),
+        ),
+      )
+      .where(where),
+  ]);
+  return pageResult(
+    rows,
+    filters.page,
+    filters.pageSize,
+    totals[0]?.total ?? 0,
+  );
 }
 
 export async function listComments(
@@ -251,29 +367,63 @@ export async function listComments(
     eq(workItemComments.projectId, projectId),
     eq(workItemComments.workItemId, workItemId),
   );
-  const [rows, totals] = await Promise.all([
+  const fields = {
+    id: workItemComments.id,
+    parentCommentId: workItemComments.parentCommentId,
+    authorUserId: workItemComments.authorUserId,
+    authorName: users.name,
+    body: workItemComments.body,
+    version: workItemComments.version,
+    editedAt: workItemComments.editedAt,
+    deletedAt: workItemComments.deletedAt,
+    createdAt: workItemComments.createdAt,
+    updatedAt: workItemComments.updatedAt,
+  };
+  const [pageRows, totals] = await Promise.all([
     getDb()
-      .select({
-        id: workItemComments.id,
-        parentCommentId: workItemComments.parentCommentId,
-        authorUserId: workItemComments.authorUserId,
-        authorName: users.name,
-        body: workItemComments.body,
-        version: workItemComments.version,
-        editedAt: workItemComments.editedAt,
-        deletedAt: workItemComments.deletedAt,
-        createdAt: workItemComments.createdAt,
-        updatedAt: workItemComments.updatedAt,
-      })
+      .select(fields)
       .from(workItemComments)
       .innerJoin(users, eq(users.id, workItemComments.authorUserId))
       .where(where)
-      .orderBy(asc(workItemComments.createdAt), asc(workItemComments.id))
+      .orderBy(desc(workItemComments.createdAt), desc(workItemComments.id))
       .limit(pageSize)
       .offset((page - 1) * pageSize),
     getDb().select({ total: count() }).from(workItemComments).where(where),
   ]);
-  return pageResult(rows, page, pageSize, totals[0]?.total ?? 0);
+  const pageIds = new Set(pageRows.map((comment) => comment.id));
+  const missingParentIds = [
+    ...new Set(
+      pageRows
+        .map((comment) => comment.parentCommentId)
+        .filter(
+          (parentId): parentId is string =>
+            Boolean(parentId) && !pageIds.has(parentId!),
+        ),
+    ),
+  ];
+  const parentRows = missingParentIds.length
+    ? await getDb()
+        .select(fields)
+        .from(workItemComments)
+        .innerJoin(users, eq(users.id, workItemComments.authorUserId))
+        .where(
+          and(
+            eq(workItemComments.projectId, projectId),
+            eq(workItemComments.workItemId, workItemId),
+            inArray(workItemComments.id, missingParentIds),
+          ),
+        )
+        .limit(pageSize)
+    : [];
+  return pageResult(
+    [
+      ...pageRows.map((comment) => ({ ...comment, contextOnly: false })),
+      ...parentRows.map((comment) => ({ ...comment, contextOnly: true })),
+    ],
+    page,
+    pageSize,
+    totals[0]?.total ?? 0,
+  );
 }
 
 export async function createComment(
@@ -406,22 +556,19 @@ export async function createComment(
       .onConflictDoNothing();
 
     const recipients = new Map<string, NotificationKind>();
-    const watchers = await transaction
-      .select({
-        userId: workItemSubscriptions.userId,
-        state: workItemSubscriptions.state,
-      })
-      .from(workItemSubscriptions)
-      .where(eq(workItemSubscriptions.workItemId, workItemId));
-    for (const watcher of watchers) {
-      if (watcher.state === "watching")
-        recipients.set(watcher.userId, "comment_added");
-    }
-    const assigneeMuted = watchers.some(
-      (subscription) =>
-        subscription.userId === workItem.assigneeUserId &&
-        subscription.state === "muted",
-    );
+    const assigneeSubscription = workItem.assigneeUserId
+      ? await transaction
+          .select({ state: workItemSubscriptions.state })
+          .from(workItemSubscriptions)
+          .where(
+            and(
+              eq(workItemSubscriptions.workItemId, workItemId),
+              eq(workItemSubscriptions.userId, workItem.assigneeUserId),
+            ),
+          )
+          .limit(1)
+      : [];
+    const assigneeMuted = assigneeSubscription[0]?.state === "muted";
     if (workItem.assigneeUserId && !assigneeMuted)
       recipients.set(workItem.assigneeUserId, "comment_added");
     if (parentAuthorUserId) recipients.set(parentAuthorUserId, "comment_reply");
@@ -434,6 +581,7 @@ export async function createComment(
       commentId,
       eventKey: `comment:${commentId}:v1`,
       recipients,
+      notifyWatchers: true,
     });
     await insertAudit(transaction, actor, workspaceId, {
       eventType: "work_item.comment.created.v1",

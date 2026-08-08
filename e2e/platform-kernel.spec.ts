@@ -357,7 +357,7 @@ test("project brief, work discussion, activity, and inbox are accessible and bou
   page,
   request,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   const email = `collaboration-${suffix}@example.test`;
   const password = "test-password-123";
@@ -422,6 +422,53 @@ test("project brief, work discussion, activity, and inbox are accessible and bou
   await expectBasicAccessibility(page);
 
   const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
+  const workItemId = await workItemIdFor(email, "TEAM");
+  await seedCollaborationVolume(email, "TEAM");
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "107 comments" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Parent context from another page"),
+  ).toBeVisible();
+  await expect(page.getByText("Acknowledged and captured.")).toBeVisible();
+  await page.getByRole("button", { name: "Search members" }).click();
+  await expect(page.getByText("106 matching project members.")).toBeVisible();
+  await page.getByRole("button", { name: "Next matches" }).click();
+  await page.getByRole("button", { name: "Next matches" }).click();
+  await expect(page.getByText("Page 3 of 3")).toBeVisible();
+  await page.getByLabel("Mention").selectOption({ label: "Volume member 105" });
+  await page
+    .getByLabel("Add a comment")
+    .fill("High-volume collaboration remains reachable.");
+  await page.getByRole("button", { name: "Insert mention" }).click();
+  await page.getByRole("button", { name: "Comment" }).click();
+  await expect(
+    page.getByText(/High-volume collaboration remains reachable/),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByText(/High-volume collaboration remains reachable/),
+  ).toBeVisible();
+  const discussionPages = page.getByRole("navigation", {
+    name: "Discussion pages",
+  });
+  await discussionPages.getByRole("link", { name: "Next" }).click();
+  await expect(page).toHaveURL(/commentPage=2/);
+  await expect(page.getByText("Seeded discussion 105")).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Discussion pages" })
+    .getByRole("link", { name: "Previous" })
+    .click();
+  const workActivityPages = page.getByRole("navigation", {
+    name: "Work activity pages",
+  });
+  await workActivityPages.getByRole("link", { name: "Next" }).click();
+  await expect(page).toHaveURL(/activityPage=2/);
+  await expect(
+    page.getByRole("navigation", { name: "Work activity pages" }),
+  ).toContainText("Page 2");
+
   if (process.env.UPDATE_SCREENSHOTS === "1") {
     await removeDevIndicator(page);
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -466,6 +513,14 @@ test("project brief, work discussion, activity, and inbox are accessible and bou
 
   await page.goto(`/app/${workspaceSlug}/projects/TEAM/activity`);
   await expect(page.getByText("created a project note")).toBeVisible();
+  const projectActivityPages = page.getByRole("navigation", {
+    name: "Project activity pages",
+  });
+  await projectActivityPages.getByRole("link", { name: "Next" }).click();
+  await expect(page).toHaveURL(/activity\?page=2/);
+  await expect(
+    page.getByRole("navigation", { name: "Project activity pages" }),
+  ).toContainText("Page 2");
   await seedCollaborationNotifications(email, "TEAM", 55);
   await page.goto(`/app/${workspaceSlug}/inbox`);
   await expect(page.locator("article.notification-row")).toHaveCount(50);
@@ -491,9 +546,7 @@ test("project brief, work discussion, activity, and inbox are accessible and bou
       path: "docs/screenshots/sc-005c-inbox-mobile.png",
       fullPage: true,
     });
-    await page.goto(
-      `/app/${workspaceSlug}/projects/TEAM/work/${await workItemIdFor(email, "TEAM")}`,
-    );
+    await page.goto(`/app/${workspaceSlug}/projects/TEAM/work/${workItemId}`);
     await removeDevIndicator(page);
     await page.screenshot({
       path: "docs/screenshots/sc-005c-discussion-mobile.png",
@@ -782,6 +835,109 @@ async function seedCollaborationNotifications(
               now() - (series || ' minutes')::interval
        from target cross join actor cross join generate_series(1, $3::int) as series`,
       [email, projectKey, total],
+    );
+  });
+}
+
+async function seedCollaborationVolume(email: string, projectKey: string) {
+  await withTestDatabase(async (pool) => {
+    await pool.query(
+      `with target as (
+         select workspaces.id as workspace_id,
+                users.id as owner_id,
+                projects.id as project_id,
+                work_items.id as work_item_id
+         from users
+         inner join memberships on memberships.user_id = users.id
+         inner join workspaces on workspaces.id = memberships.workspace_id
+         inner join projects on projects.workspace_id = workspaces.id and projects.key = $2
+         inner join work_items on work_items.project_id = projects.id
+         where users.email = $1
+         limit 1
+       ), volume_users as (
+         insert into users (name, email, email_verified)
+         select 'Volume member ' || lpad(series::text, 3, '0'),
+                'mention-volume-' || series || '-' || substr(target.owner_id::text, 1, 8) || '@example.test',
+                true
+         from target cross join generate_series(1, 105) as series
+         returning id
+       ), workspace_access as (
+         insert into memberships (workspace_id, user_id, role)
+         select target.workspace_id, volume_users.id, 'member'::workspace_role
+         from target cross join volume_users
+         returning user_id
+       )
+       insert into project_memberships (
+         project_id, workspace_id, user_id, added_by_user_id
+       )
+       select target.project_id,
+              target.workspace_id,
+              workspace_access.user_id,
+              target.owner_id
+       from target cross join workspace_access`,
+      [email, projectKey],
+    );
+    await pool.query(
+      `with target as (
+         select workspaces.id as workspace_id,
+                users.id as owner_id,
+                projects.id as project_id,
+                work_items.id as work_item_id
+         from users
+         inner join memberships on memberships.user_id = users.id
+         inner join workspaces on workspaces.id = memberships.workspace_id
+         inner join projects on projects.workspace_id = workspaces.id and projects.key = $2
+         inner join work_items on work_items.project_id = projects.id
+         where users.email = $1
+         limit 1
+       ), aged_parent as (
+         update work_item_comments
+         set created_at = now() - interval '300 minutes',
+             updated_at = now() - interval '300 minutes'
+         where id = (
+           select work_item_comments.id
+           from work_item_comments cross join target
+           where work_item_comments.work_item_id = target.work_item_id
+             and work_item_comments.parent_comment_id is null
+           order by work_item_comments.created_at
+           limit 1
+         )
+         returning id
+       ), seeded_comments as (
+         insert into work_item_comments (
+           project_id, work_item_id, author_user_id,
+           request_id, body, created_at, updated_at
+         )
+         select target.project_id,
+                target.work_item_id,
+                target.owner_id,
+                gen_random_uuid(),
+                'Seeded discussion ' || lpad(series::text, 3, '0'),
+                now() - (series || ' minutes')::interval,
+                now() - (series || ' minutes')::interval
+         from target cross join aged_parent
+         cross join generate_series(1, 105) as series
+         returning id
+       )
+       insert into audit_events (
+         workspace_id, actor_type, actor_id, event_type,
+         target_type, target_id, occurred_at, metadata
+       )
+       select target.workspace_id,
+              'human'::audit_actor_type,
+              target.owner_id,
+              'work_item.comment.created.v1',
+              'work_item_comment',
+              gen_random_uuid(),
+              now() - (series || ' minutes')::interval,
+              jsonb_build_object(
+                'projectId', target.project_id::text,
+                'workItemId', target.work_item_id::text
+              )
+       from target cross join seeded_comments
+       cross join generate_series(1, 55) as series
+       limit 55`,
+      [email, projectKey],
     );
   });
 }

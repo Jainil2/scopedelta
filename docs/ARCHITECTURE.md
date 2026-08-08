@@ -174,12 +174,23 @@ deleted body.
 
 Mention identity comes from an encoded user ID selected from the authorized
 project audience, not from display text. The service rejects a crafted ID that
-does not currently have project access. Comment retries use a caller UUID and
-notification writes use recipient-specific dedupe keys. Comment participants
-and assignees are subscribed automatically unless they explicitly mute the
-work item; a new assignment still creates one direct notification. Inbox reads
-join current project access, so removing membership immediately hides stale
-links and direct navigation retains the indistinguishable 404 boundary.
+does not currently have project access. Mention selection is a bounded,
+name-searchable directory rather than a fixed audience snapshot. Comment
+retries use a caller UUID and notification writes use recipient-specific dedupe
+keys. Comment participants and assignees are subscribed automatically unless
+they explicitly mute the work item; a new assignment still creates one direct
+notification. Watcher authorization and notification inserts advance in
+100-user keyset batches so every valid recipient is reached without an
+unbounded query or a first-100 cutoff. Inbox reads join current project access,
+so removing membership immediately hides stale links and direct navigation
+retains the indistinguishable 404 boundary.
+
+Discussion pages are ordered newest-first so a successful post remains visible
+after reload. When a reply and its root fall on different pages, the service
+hydrates that root as bounded read-only parent context; the selected page still
+contains at most 100 comments plus at most one context root per selected reply.
+Discussion, work activity, and project activity expose normal URL-backed page
+navigation so the complete retained history remains reachable.
 
 Activity is a bounded, allowlisted projection of immutable audit events. It
 returns factual descriptions and historical actor names but never exposes raw

@@ -39,6 +39,10 @@ export const projectNoteFilterSchema = paginationSchema.extend({
 
 export const activityFilterSchema = paginationSchema;
 
+export const mentionableMemberFilterSchema = paginationSchema.extend({
+  query: z.string().trim().max(100).optional(),
+});
+
 export const notificationFilterSchema = paginationSchema.extend({
   unread: z
     .enum(["true", "false"])
@@ -65,4 +69,7 @@ export type CreateProjectNoteInput = z.output<typeof createProjectNoteSchema>;
 export type UpdateProjectNoteInput = z.output<typeof updateProjectNoteSchema>;
 export type ProjectNoteFilters = z.output<typeof projectNoteFilterSchema>;
 export type ActivityFilters = z.output<typeof activityFilterSchema>;
+export type MentionableMemberFilters = z.output<
+  typeof mentionableMemberFilterSchema
+>;
 export type NotificationFilters = z.output<typeof notificationFilterSchema>;

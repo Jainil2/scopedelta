@@ -1019,7 +1019,8 @@ h2 {
 
 .context-composer label,
 .comment-composer label,
-.mention-control label {
+.mention-control label,
+.mention-search label {
   display: grid;
   gap: 0.4rem;
   color: var(--muted);
@@ -1032,7 +1033,8 @@ h2 {
 .context-composer input,
 .context-composer textarea,
 .comment-composer textarea,
-.mention-control select {
+.mention-control select,
+.mention-search input {
   width: 100%;
   border: 1px solid var(--line-strong);
   border-radius: 0.45rem;
@@ -1044,7 +1046,8 @@ h2 {
 }
 
 .context-composer input,
-.mention-control select {
+.mention-control select,
+.mention-search input {
   padding: 0.72rem;
 }
 .context-composer textarea,
@@ -1058,6 +1061,25 @@ h2 {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 0.65rem;
+}
+
+.mention-picker {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.mention-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.65rem;
+}
+
+.mention-result-pages {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .context-ledger,
@@ -1307,6 +1329,7 @@ h2 {
     border-left: 0;
   }
   .mention-control,
+  .mention-search,
   .notification-row {
     grid-template-columns: 1fr;
   }

@@ -1519,22 +1519,11 @@ export async function updateWorkItem(
         metadata: { changedFields: Object.keys(input) },
       });
     }
-    for (const event of events) {
-      const eventId = await insertAudit(transaction, actor, workspaceId, event);
-      if (
-        event.eventType === "work_item.assignee.updated.v1" &&
-        values.assigneeUserId
-      ) {
-        await recordWorkItemAssignment(transaction, {
-          workspaceId,
-          projectId,
-          workItemId,
-          assigneeUserId: values.assigneeUserId,
-          actorUserId: actor.userId,
-          eventId,
-        });
-      }
-    }
+    await insertWorkItemAudits(transaction, actor, workspaceId, projectId, {
+      workItemId,
+      assigneeUserId: values.assigneeUserId,
+      events,
+    });
   });
   return getWorkItem(actor, workspaceId, projectId, workItemId);
 }
@@ -2063,6 +2052,35 @@ export async function insertAudit(
     ...event,
   });
   return id;
+}
+
+async function insertWorkItemAudits(
+  transaction: Transaction,
+  actor: UserActor,
+  workspaceId: string,
+  projectId: string,
+  input: {
+    workItemId: string;
+    assigneeUserId?: string | null;
+    events: Array<Parameters<typeof insertAudit>[3]>;
+  },
+) {
+  for (const event of input.events) {
+    const eventId = await insertAudit(transaction, actor, workspaceId, event);
+    if (
+      event.eventType === "work_item.assignee.updated.v1" &&
+      input.assigneeUserId
+    ) {
+      await recordWorkItemAssignment(transaction, {
+        workspaceId,
+        projectId,
+        workItemId: input.workItemId,
+        assigneeUserId: input.assigneeUserId,
+        actorUserId: actor.userId,
+        eventId,
+      });
+    }
+  }
 }
 
 function pageResult<T>(

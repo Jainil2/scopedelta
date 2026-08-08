@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { ProjectTabs } from "@/components/planning-workspace";
@@ -32,6 +33,7 @@ type Comment = {
   editedAt: string | Date | null;
   deletedAt: string | Date | null;
   createdAt: string | Date;
+  contextOnly?: boolean;
 };
 type CommentRevision = {
   id: string;
@@ -116,38 +118,143 @@ function ProjectHeader({
 
 function MentionControl({
   members,
+  workspaceId,
+  projectId,
   onInsert,
-}: Readonly<{ members: Member[]; onInsert: (value: string) => void }>) {
+}: Readonly<{
+  members: Member[];
+  workspaceId: string;
+  projectId: string;
+  onInsert: (value: string) => void;
+}>) {
+  const [options, setOptions] = useState(members);
   const [userId, setUserId] = useState("");
-  return (
-    <div className="mention-control">
-      <label>
-        Mention
-        <select
-          value={userId}
-          onChange={(event) => setUserId(event.target.value)}
-        >
-          <option value="">Choose a project member</option>
-          {members.map((member) => (
-            <option key={member.userId} value={member.userId}>
-              {member.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button
-        type="button"
-        className="button-secondary"
-        disabled={!userId}
-        onClick={() => {
-          const member = members.find(
-            (candidate) => candidate.userId === userId,
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("");
+  const [resultPage, setResultPage] = useState<PageInfo | null>(null);
+  const [searching, startSearch] = useTransition();
+  const search = (page = 1) =>
+    startSearch(async () => {
+      try {
+        setStatus("");
+        const params = new URLSearchParams({
+          page: String(page),
+          pageSize: "50",
+        });
+        if (query.trim()) params.set("query", query.trim());
+        const response = await fetch(
+          `/api/v1/workspaces/${workspaceId}/projects/${projectId}/mentionable-members?${params}`,
+        );
+        const payload = (await response.json()) as {
+          data?: { data: Member[]; page: PageInfo };
+          error?: { message?: string };
+        };
+        if (!response.ok || !payload.data) {
+          throw new Error(
+            payload.error?.message ?? "Unable to find project members.",
           );
-          if (member) onInsert(`@[${member.name}](user:${member.userId})`);
-        }}
-      >
-        Insert mention
-      </button>
+        }
+        setOptions(payload.data.data);
+        setResultPage(payload.data.page);
+        setUserId("");
+        setStatus(
+          payload.data.page.total
+            ? `${payload.data.page.total} matching project members.`
+            : "No matching project members.",
+        );
+      } catch (cause) {
+        setResultPage(null);
+        setStatus(
+          cause instanceof Error
+            ? cause.message
+            : "Unable to find project members.",
+        );
+      }
+    });
+  return (
+    <div className="mention-picker">
+      <div className="mention-search">
+        <label>
+          Find member
+          <input
+            value={query}
+            maxLength={100}
+            placeholder="Search by name"
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                search(1);
+              }
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          className="button-secondary"
+          disabled={searching}
+          onClick={() => search(1)}
+        >
+          {searching ? "Searching…" : "Search members"}
+        </button>
+      </div>
+      <div className="mention-control">
+        <label>
+          Mention
+          <select
+            value={userId}
+            onChange={(event) => setUserId(event.target.value)}
+          >
+            <option value="">Choose a project member</option>
+            {options.map((member) => (
+              <option key={member.userId} value={member.userId}>
+                {member.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="button-secondary"
+          disabled={!userId}
+          onClick={() => {
+            const member = options.find(
+              (candidate) => candidate.userId === userId,
+            );
+            if (member) onInsert(`@[${member.name}](user:${member.userId})`);
+          }}
+        >
+          Insert mention
+        </button>
+      </div>
+      {status ? (
+        <p className="metadata" role="status">
+          {status}
+        </p>
+      ) : null}
+      {resultPage && resultPage.pages > 1 ? (
+        <div className="mention-result-pages">
+          <button
+            type="button"
+            className="text-button"
+            disabled={searching || resultPage.number <= 1}
+            onClick={() => search(resultPage.number - 1)}
+          >
+            Previous matches
+          </button>
+          <span className="metadata">
+            Page {resultPage.number} of {resultPage.pages}
+          </span>
+          <button
+            type="button"
+            className="text-button"
+            disabled={searching || resultPage.number >= resultPage.pages}
+            onClick={() => search(resultPage.number + 1)}
+          >
+            Next matches
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -284,6 +391,8 @@ export function ProjectBriefWorkspace({
           </label>
           <MentionControl
             members={members}
+            workspaceId={workspaceId}
+            projectId={project.id}
             onInsert={(mention) =>
               setBody((value) => `${value}${value ? " " : ""}${mention} `)
             }
@@ -403,8 +512,59 @@ export function ActivityWorkspace({
       <p className="metadata">
         Showing {activities.length} of {page.total} events.
       </p>
+      <Pagination
+        page={page}
+        ariaLabel="Project activity pages"
+        href={(number) =>
+          `/app/${workspaceSlug}/projects/${project.key}/activity?page=${number}`
+        }
+      />
     </section>
   );
+}
+
+function Pagination({
+  page,
+  ariaLabel,
+  href,
+}: Readonly<{
+  page: PageInfo;
+  ariaLabel: string;
+  href: (page: number) => string;
+}>) {
+  if (page.pages <= 1) return null;
+  return (
+    <nav className="pagination" aria-label={ariaLabel}>
+      {page.number > 1 ? (
+        <Link href={href(page.number - 1)}>Previous</Link>
+      ) : (
+        <span />
+      )}
+      <span>
+        Page {page.number} of {page.pages}
+      </span>
+      {page.number < page.pages ? (
+        <Link href={href(page.number + 1)}>Next</Link>
+      ) : (
+        <span />
+      )}
+    </nav>
+  );
+}
+
+function workCollaborationHref(
+  workspaceSlug: string,
+  projectKey: string,
+  workItemId: string,
+  commentPage: number,
+  activityPage: number,
+) {
+  const params = new URLSearchParams();
+  if (commentPage > 1) params.set("commentPage", String(commentPage));
+  if (activityPage > 1) params.set("activityPage", String(activityPage));
+  const query = params.toString();
+  const path = `/app/${workspaceSlug}/projects/${projectKey}/work/${workItemId}`;
+  return query ? `${path}?${query}` : path;
 }
 
 function ActivityLedger({ activities }: Readonly<{ activities: Activity[] }>) {
@@ -438,7 +598,9 @@ export function WorkCollaborationWorkspace({
   project,
   workItem,
   initialComments,
+  commentPage,
   activities,
+  activityPage,
   members,
   initialWatching,
 }: Readonly<{
@@ -448,10 +610,13 @@ export function WorkCollaborationWorkspace({
   project: Project;
   workItem: WorkItem;
   initialComments: Comment[];
+  commentPage: PageInfo;
   activities: Activity[];
+  activityPage: PageInfo;
   members: Member[];
   initialWatching: boolean;
 }>) {
+  const router = useRouter();
   const [comments, setComments] = useState(initialComments);
   const [body, setBody] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -459,17 +624,24 @@ export function WorkCollaborationWorkspace({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const base = `/api/v1/workspaces/${workspaceId}/projects/${project.id}/work-items/${workItem.id}`;
-  const roots = useMemo(
-    () =>
-      comments.filter(
-        (comment) =>
-          !comment.parentCommentId ||
-          !comments.some(
-            (candidate) => candidate.id === comment.parentCommentId,
-          ),
-      ),
-    [comments],
-  );
+  const roots = useMemo(() => {
+    const byId = new Map(comments.map((comment) => [comment.id, comment]));
+    const rootIds: string[] = [];
+    const seen = new Set<string>();
+    for (const comment of comments) {
+      const rootId =
+        comment.parentCommentId && byId.has(comment.parentCommentId)
+          ? comment.parentCommentId
+          : comment.id;
+      if (!seen.has(rootId)) {
+        seen.add(rootId);
+        rootIds.push(rootId);
+      }
+    }
+    return rootIds
+      .map((rootId) => byId.get(rootId))
+      .filter((comment): comment is Comment => Boolean(comment));
+  }, [comments]);
   const submit = () =>
     startTransition(async () => {
       try {
@@ -479,10 +651,23 @@ export function WorkCollaborationWorkspace({
           body,
           parentCommentId: replyTo,
         });
-        setComments((current) => [...current, comment]);
+        setComments((current) => [comment, ...current]);
         setWatching(true);
         setBody("");
         setReplyTo(null);
+        if (commentPage.number > 1) {
+          router.replace(
+            workCollaborationHref(
+              workspaceSlug,
+              project.key,
+              workItem.id,
+              1,
+              activityPage.number,
+            ),
+          );
+        } else {
+          router.refresh();
+        }
       } catch (cause) {
         setError(
           cause instanceof Error ? cause.message : "Unable to add comment.",
@@ -563,18 +748,25 @@ export function WorkCollaborationWorkspace({
           <div className="section-heading">
             <div>
               <p className="eyebrow">Discussion</p>
-              <h2>{comments.length} comments</h2>
+              <h2>{commentPage.total} comments</h2>
             </div>
           </div>
           {roots.map((comment) => (
             <div key={comment.id} className="thread-group">
+              {comment.contextOnly ? (
+                <p className="metadata">Parent context from another page</p>
+              ) : null}
               <CommentRow
                 comment={comment}
-                canDelete={comment.authorUserId === actorUserId}
+                canDelete={
+                  !comment.contextOnly && comment.authorUserId === actorUserId
+                }
                 onDelete={remove}
                 onEdit={edit}
                 historyUrl={`${base}/comments/${comment.id}/history`}
-                onReply={() => setReplyTo(comment.id)}
+                onReply={
+                  comment.contextOnly ? undefined : () => setReplyTo(comment.id)
+                }
               />
               {comments
                 .filter((reply) => reply.parentCommentId === comment.id)
@@ -591,6 +783,22 @@ export function WorkCollaborationWorkspace({
                 ))}
             </div>
           ))}
+          <p className="metadata">
+            Showing page {commentPage.number} of {commentPage.pages || 1}.
+          </p>
+          <Pagination
+            page={commentPage}
+            ariaLabel="Discussion pages"
+            href={(number) =>
+              workCollaborationHref(
+                workspaceSlug,
+                project.key,
+                workItem.id,
+                number,
+                activityPage.number,
+              )
+            }
+          />
           <form
             className="comment-composer"
             onSubmit={(event) => {
@@ -623,6 +831,8 @@ export function WorkCollaborationWorkspace({
             />
             <MentionControl
               members={members}
+              workspaceId={workspaceId}
+              projectId={project.id}
               onInsert={(mention) =>
                 setBody((value) => `${value}${value ? " " : ""}${mention} `)
               }
@@ -649,6 +859,22 @@ export function WorkCollaborationWorkspace({
           <p className="eyebrow">Activity</p>
           <h2>Delivery history</h2>
           <ActivityLedger activities={activities} />
+          <p className="metadata">
+            Showing page {activityPage.number} of {activityPage.pages || 1}.
+          </p>
+          <Pagination
+            page={activityPage}
+            ariaLabel="Work activity pages"
+            href={(number) =>
+              workCollaborationHref(
+                workspaceSlug,
+                project.key,
+                workItem.id,
+                commentPage.number,
+                number,
+              )
+            }
+          />
         </aside>
       </div>
     </section>

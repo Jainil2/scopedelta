@@ -12,6 +12,7 @@ import {
   users,
   workItemCommentRevisions,
   workItemComments,
+  workItemSubscriptions,
 } from "@/db/schema";
 import {
   createComment,
@@ -19,6 +20,7 @@ import {
   deleteComment,
   listCommentHistory,
   listComments,
+  listMentionableMembers,
   listNotifications,
   updateComment,
   updateNotifications,
@@ -266,10 +268,16 @@ describe("SC-005C collaboration boundary", () => {
     await updateWorkItem(owner, workspace.id, project.id, item.id, {
       assigneeUserId: member.userId,
     });
-    await createComment(owner, workspace.id, project.id, item.id, {
-      requestId: randomUUID(),
-      body: "Assignment context",
-    });
+    const original = await createComment(
+      owner,
+      workspace.id,
+      project.id,
+      item.id,
+      {
+        requestId: randomUUID(),
+        body: "Assignment context",
+      },
+    );
     const inbox = await listNotifications(member, workspace.id, {
       page: 1,
       pageSize: 50,
@@ -288,6 +296,17 @@ describe("SC-005C collaboration boundary", () => {
         body: `Seeded collaboration event ${index + 1}`,
       })),
     );
+    const recentReply = await createComment(
+      owner,
+      workspace.id,
+      project.id,
+      item.id,
+      {
+        requestId: randomUUID(),
+        body: "Recent reply with older parent context",
+        parentCommentId: original.id,
+      },
+    );
     const page = await listComments(
       owner,
       workspace.id,
@@ -296,8 +315,24 @@ describe("SC-005C collaboration boundary", () => {
       1,
       50,
     );
-    expect(page.data).toHaveLength(50);
-    expect(page.page).toMatchObject({ total: 56, pages: 2, size: 50 });
+    expect(page.data).toHaveLength(51);
+    expect(page.data[0]).toMatchObject({ id: recentReply.id });
+    expect(page.data.at(-1)).toMatchObject({
+      id: original.id,
+      contextOnly: true,
+    });
+    expect(page.page).toMatchObject({ total: 57, pages: 2, size: 50 });
+    const olderPage = await listComments(
+      owner,
+      workspace.id,
+      project.id,
+      item.id,
+      2,
+      50,
+    );
+    expect(olderPage.data).toContainEqual(
+      expect.objectContaining({ id: original.id, contextOnly: false }),
+    );
 
     await expect(
       createProjectNote(owner, workspace.id, project.id, {
@@ -306,6 +341,90 @@ describe("SC-005C collaboration boundary", () => {
         body: "Internal context only",
       }),
     ).resolves.toMatchObject({ title: "Delivery constraint" });
+  });
+
+  it("searches and notifies authorized project members beyond the first 100", async () => {
+    const { owner, workspace, project, item } = await createFixture(false);
+    const volumeMembers = Array.from({ length: 105 }, (_, index) => ({
+      userId: randomUUID(),
+      email: `volume-${index + 1}@example.test`,
+      name: `Volume member ${String(index + 1).padStart(3, "0")}`,
+    }));
+    await db.insert(users).values(
+      volumeMembers.map((member) => ({
+        id: member.userId,
+        email: member.email,
+        name: member.name,
+        emailVerified: true,
+      })),
+    );
+    await db.insert(memberships).values(
+      volumeMembers.map((member) => ({
+        id: randomUUID(),
+        workspaceId: workspace.id,
+        userId: member.userId,
+        role: "member" as const,
+      })),
+    );
+    await db.insert(projectMemberships).values(
+      volumeMembers.map((member) => ({
+        projectId: project.id,
+        workspaceId: workspace.id,
+        userId: member.userId,
+        addedByUserId: owner.userId,
+      })),
+    );
+    await db.insert(workItemSubscriptions).values(
+      volumeMembers.map((member) => ({
+        workspaceId: workspace.id,
+        projectId: project.id,
+        workItemId: item.id,
+        userId: member.userId,
+      })),
+    );
+
+    const searched = await listMentionableMembers(
+      owner,
+      workspace.id,
+      project.id,
+      { page: 1, pageSize: 50, query: "Volume member 105" },
+    );
+    expect(searched.data).toEqual([
+      {
+        userId: volumeMembers[104]!.userId,
+        name: "Volume member 105",
+      },
+    ]);
+    const finalDirectoryPage = await listMentionableMembers(
+      owner,
+      workspace.id,
+      project.id,
+      { page: 3, pageSize: 50 },
+    );
+    expect(finalDirectoryPage.page).toMatchObject({ total: 107, pages: 3 });
+    expect(finalDirectoryPage.data).toContainEqual(
+      expect.objectContaining({ userId: volumeMembers[104]!.userId }),
+    );
+    const comment = await createComment(
+      owner,
+      workspace.id,
+      project.id,
+      item.id,
+      {
+        requestId: randomUUID(),
+        body: "Bounded watcher delivery",
+      },
+    );
+    const finalRecipient = await db
+      .select({ kind: notifications.kind })
+      .from(notifications)
+      .where(eq(notifications.userId, volumeMembers[104]!.userId));
+    expect(finalRecipient).toEqual([{ kind: "comment_added" }]);
+    const delivered = await db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(notifications)
+      .where(eq(notifications.commentId, comment.id));
+    expect(delivered[0]?.total).toBe(105);
   });
 });
 

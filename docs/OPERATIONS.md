@@ -197,7 +197,12 @@ Comments, notes, activity, subscriptions, and the inbox require no outbound
 provider. Do not configure SMTP jobs for collaboration notifications. Inbox and
 activity requests default to 50 rows and cap at 100; comment history caps at
 100 revisions and project notes cap at 20 active records. Investigate indexes
-and query plans before changing those limits.
+and query plans before changing those limits. Discussion reads select at most
+100 newest-first comments and may add at most one read-only parent context row
+per selected reply. Mention directories use bounded name searches. Watcher
+authorization and notification delivery use 100-user keyset batches rather
+than truncating the valid project audience; monitor batch counts if a workspace
+grows materially beyond the current 500-person target.
 
 ## SMTP and DNS readiness
 

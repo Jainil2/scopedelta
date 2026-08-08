@@ -305,13 +305,12 @@ export async function listMentionableMembers(
   actor: UserActor,
   workspaceId: string,
   projectId: string,
-  filters: { page: number; pageSize: number; query?: string } = {
-    page: 1,
-    pageSize: 50,
-  },
+  filters?: { page: number; pageSize: number; query?: string },
 ) {
   await getProjectAccess(getDb(), actor, workspaceId, projectId);
-  const query = filters.query?.trim();
+  const page = filters?.page ?? 1;
+  const pageSize = filters?.pageSize ?? 50;
+  const query = filters?.query?.trim();
   const where = and(
     authorizedProjectUserScope(workspaceId),
     query ? ilike(users.name, `%${escapeLike(query)}%`) : undefined,
@@ -330,8 +329,8 @@ export async function listMentionableMembers(
       )
       .where(where)
       .orderBy(asc(users.name), asc(users.id))
-      .limit(filters.pageSize)
-      .offset((filters.page - 1) * filters.pageSize),
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
     getDb()
       .select({ total: count() })
       .from(memberships)
@@ -345,12 +344,7 @@ export async function listMentionableMembers(
       )
       .where(where),
   ]);
-  return pageResult(
-    rows,
-    filters.page,
-    filters.pageSize,
-    totals[0]?.total ?? 0,
-  );
+  return pageResult(rows, page, pageSize, totals[0]?.total ?? 0);
 }
 
 export async function listComments(
@@ -1078,26 +1072,13 @@ export async function updateProjectNote(
       input.archived !== undefined &&
       input.archived !== Boolean(current[0].archivedAt);
     if (!titleChanged && !bodyChanged && !archiveChanged) return;
-    if (archiveChanged && input.archived === false && current[0].archivedAt) {
-      await transaction.execute(
-        sql`select 1 from ${projects} where ${projects.id} = ${projectId} for update`,
-      );
-      const totals = await transaction
-        .select({ total: count() })
-        .from(projectNotes)
-        .where(
-          and(
-            eq(projectNotes.projectId, projectId),
-            isNull(projectNotes.archivedAt),
-          ),
-        );
-      if ((totals[0]?.total ?? 0) >= MAX_ACTIVE_PROJECT_NOTES) {
-        throw conflict(
-          "project_note_limit",
-          "Archive a project note before restoring another.",
-        );
-      }
-    }
+    await assertProjectNoteRestoreCapacity(
+      transaction,
+      projectId,
+      archiveChanged &&
+        input.archived === false &&
+        Boolean(current[0].archivedAt),
+    );
     await transaction
       .update(projectNotes)
       .set({
@@ -1110,46 +1091,108 @@ export async function updateProjectNote(
         updatedAt: new Date(),
       })
       .where(eq(projectNotes.id, noteId));
-    if (bodyChanged) {
-      await transaction
-        .delete(projectNoteMentions)
-        .where(eq(projectNoteMentions.noteId, noteId));
-      if (mentionResult!.ids.length) {
-        await transaction
-          .insert(projectNoteMentions)
-          .values(mentionResult!.ids.map((userId) => ({ noteId, userId })));
-      }
-      await createNotifications(transaction, {
-        workspaceId,
-        projectId,
-        actorUserId: actor.userId,
-        projectNoteId: noteId,
-        eventKey: `project-note:${noteId}:${current[0].updatedAt.toISOString()}`,
-        recipients: new Map(
-          mentionResult!.ids.map((userId) => [userId, "mention"]),
-        ),
-      });
-    }
+    await syncProjectNoteMentions(transaction, {
+      workspaceId,
+      projectId,
+      noteId,
+      actorUserId: actor.userId,
+      previousUpdatedAt: current[0].updatedAt,
+      mentionResult: bodyChanged ? mentionResult : null,
+    });
     await insertAudit(transaction, actor, workspaceId, {
-      eventType:
-        input.archived === true
-          ? "project.note.archived.v1"
-          : input.archived === false
-            ? "project.note.restored.v1"
-            : "project.note.updated.v1",
+      eventType: projectNoteEventType(input.archived),
       targetType: "project_note",
       targetId: noteId,
       metadata: {
-        changedFields: [
-          ...(titleChanged ? ["title"] : []),
-          ...(bodyChanged ? ["body"] : []),
-          ...(archiveChanged ? ["archived"] : []),
-        ],
+        changedFields: projectNoteChangedFields(
+          titleChanged,
+          bodyChanged,
+          archiveChanged,
+        ),
         projectId,
       },
     });
   });
   return getProjectNote(actor, workspaceId, projectId, noteId);
+}
+
+async function assertProjectNoteRestoreCapacity(
+  transaction: Transaction,
+  projectId: string,
+  restoring: boolean,
+) {
+  if (!restoring) return;
+  await transaction.execute(
+    sql`select 1 from ${projects} where ${projects.id} = ${projectId} for update`,
+  );
+  const totals = await transaction
+    .select({ total: count() })
+    .from(projectNotes)
+    .where(
+      and(
+        eq(projectNotes.projectId, projectId),
+        isNull(projectNotes.archivedAt),
+      ),
+    );
+  if ((totals[0]?.total ?? 0) >= MAX_ACTIVE_PROJECT_NOTES) {
+    throw conflict(
+      "project_note_limit",
+      "Archive a project note before restoring another.",
+    );
+  }
+}
+
+async function syncProjectNoteMentions(
+  transaction: Transaction,
+  input: {
+    workspaceId: string;
+    projectId: string;
+    noteId: string;
+    actorUserId: string;
+    previousUpdatedAt: Date;
+    mentionResult: { ids: string[]; body: string } | null;
+  },
+) {
+  if (!input.mentionResult) return;
+  await transaction
+    .delete(projectNoteMentions)
+    .where(eq(projectNoteMentions.noteId, input.noteId));
+  if (input.mentionResult.ids.length) {
+    await transaction.insert(projectNoteMentions).values(
+      input.mentionResult.ids.map((userId) => ({
+        noteId: input.noteId,
+        userId,
+      })),
+    );
+  }
+  await createNotifications(transaction, {
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    actorUserId: input.actorUserId,
+    projectNoteId: input.noteId,
+    eventKey: `project-note:${input.noteId}:${input.previousUpdatedAt.toISOString()}`,
+    recipients: new Map(
+      input.mentionResult.ids.map((userId) => [userId, "mention"]),
+    ),
+  });
+}
+
+function projectNoteEventType(archived: boolean | undefined) {
+  if (archived === true) return "project.note.archived.v1";
+  if (archived === false) return "project.note.restored.v1";
+  return "project.note.updated.v1";
+}
+
+function projectNoteChangedFields(
+  titleChanged: boolean,
+  bodyChanged: boolean,
+  archiveChanged: boolean,
+) {
+  const fields: string[] = [];
+  if (titleChanged) fields.push("title");
+  if (bodyChanged) fields.push("body");
+  if (archiveChanged) fields.push("archived");
+  return fields;
 }
 
 export async function listNotifications(

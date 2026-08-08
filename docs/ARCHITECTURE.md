@@ -42,7 +42,7 @@ Browser
 Runtime connections use pooled `DATABASE_URL`. Schema migration, backup, and
 restore operations use direct `DATABASE_MIGRATION_URL`; transaction/session
 semantics required by schema tools must not traverse a transaction pooler.
-`db/migrations/` is immutable deployment history. A protected GitHub production
+`db/migrations/` is immutable deployment history. A GitHub production
 workflow applies pending migrations, then manually deploys the Netlify build.
 The direct credential is scoped only to the migration step and is neither
 stored in Netlify nor inherited by application Functions. Automatic Netlify
@@ -165,7 +165,7 @@ CI runs the full suite plus production and container builds.
 
 `APP_URL`, database URLs, `BETTER_AUTH_SECRET`, and SMTP configuration are
 server-only. `DATABASE_URL` is a least-privilege Netlify runtime value;
-`DATABASE_MIGRATION_URL` exists only in a protected GitHub migration step or a
+`DATABASE_MIGRATION_URL` exists only in a GitHub migration step or a
 self-host operator environment. `NEXT_PUBLIC_` remains reserved for deliberately
 public values. Database URLs, cookies, tokens, credentials, names, emails, lead
 payloads, and customer content must not enter logs or fixtures. Operational logs
@@ -175,6 +175,15 @@ Netlify remains the managed host; Neon Free and Resend Free are optional
 reference providers, not application dependencies. A self-host uses the same
 container with PostgreSQL, SMTP, a TLS reverse proxy, and independent backups.
 The public lead webhook remains a separate no-database privacy boundary.
+
+Managed deployment secrets are GitHub Actions repository secrets so the private
+repository remains compatible with GitHub Free. This choice has no deployment
+approval gate: `main`, repository write access, and workflow changes are the
+security boundary. The Netlify CLI credential is a user-scoped personal access
+token whose authority may extend beyond this site; `NETLIFY_SITE_ID` selects a
+target but does not narrow the token. Operational controls therefore minimize
+the deployment identity's access and require short expiry, rotation, and
+revocation procedures.
 
 Local/LAN operation does not call ScopeDelta Cloud for identity, authorization,
 workspace, membership, settings, or audit capabilities. The repository remains

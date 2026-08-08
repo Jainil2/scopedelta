@@ -17,9 +17,11 @@ Preview builds must not gain production database access merely to compile.
 - Use direct `DATABASE_MIGRATION_URL` for Drizzle migrations and operator
   backup/restore tooling.
 - Commit immutable SQL in `db/migrations/`; never rewrite deployed history.
-- Run migrations in a protected GitHub production workflow, then deploy through
-  the pinned Netlify CLI. Scope the direct credential only to the migration
-  step; never store it in Netlify or expose it to application Functions.
+- Run migrations in a GitHub production workflow, then deploy through the
+  pinned Netlify CLI. Store deployment values as GitHub Actions repository
+  secrets so private repositories on GitHub Free are supported. Map the direct
+  credential only into the migration step; never store it in Netlify or expose
+  it to application Functions.
 - Skip repository-triggered Netlify production builds so they cannot race the
   migrate-then-deploy workflow. Preview contexts continue to build without
   production database credentials.
@@ -31,10 +33,13 @@ Preview builds must not gain production database access merely to compile.
 
 Production schema changes are reviewable and portable, previews remain isolated
 from production data, and the elevated role is absent from the running host.
-Operators must protect the GitHub production environment, rotate its Netlify
-deploy token, and ensure only one production migration runner operates. An old
-application deploy may be restored only while additive schema compatibility
-remains; otherwise a new forward fix is required.
+Repository secrets do not provide a deployment approval gate, so operators must
+protect `main`, restrict workflow write access, and review Actions changes as
+privileged. The Netlify CLI token is a user-scoped personal access token rather
+than a site-scoped credential; operators must minimize that user's access,
+shorten and rotate the token, and ensure only one production migration runner
+operates. An old application deploy may be restored only while additive schema
+compatibility remains; otherwise a new forward fix is required.
 
 ## References
 

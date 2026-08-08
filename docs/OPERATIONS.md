@@ -13,7 +13,7 @@ SSO, or client portals.
 ### Managed application
 
 Netlify remains the application host. Production is the merged `main` branch.
-The protected GitHub `Production deploy` workflow applies migrations, then
+The GitHub `Production deploy` workflow applies migrations, then
 performs a manual Netlify CLI deploy. Netlify receives only runtime credentials;
 the direct migration credential exists only for the migration step. Automatic
 Netlify production builds are skipped by `netlify.toml` so code cannot publish
@@ -51,20 +51,39 @@ self-host secret manager:
 | `SMTP_FROM`                             | Verified sender, for example `ScopeDelta <no-reply@example.com>`. |
 | `LEAD_WEBHOOK_URL`                      | Existing paid-pilot JSON receiver.                                |
 
-Set these separately in the GitHub `production` environment used by
-`.github/workflows/production-deploy.yml`:
+Set these separately as GitHub Actions **repository secrets** used by
+`.github/workflows/production-deploy.yml`. Repository secrets work for a
+private repository on GitHub Free and do not require a paid GitHub environment:
 
-| Secret                   | Requirement                                                       |
-| ------------------------ | ----------------------------------------------------------------- |
-| `DATABASE_MIGRATION_URL` | Direct schema-owner URL; scoped only to the migration step.       |
-| `NETLIFY_AUTH_TOKEN`     | Least-scope deploy token for the founder-controlled Netlify team. |
-| `NETLIFY_SITE_ID`        | Target ScopeDelta Netlify project identifier.                     |
+| Secret                   | Requirement                                                                |
+| ------------------------ | -------------------------------------------------------------------------- |
+| `DATABASE_MIGRATION_URL` | Direct schema-owner URL; exposed only to the migration step.               |
+| `NETLIFY_AUTH_TOKEN`     | Netlify user personal access token; exposed only to the deployment step.   |
+| `NETLIFY_SITE_ID`        | Target ScopeDelta Netlify project identifier; this does not scope the PAT. |
+
+GitHub repository secrets do not provide an environment approval gate or
+environment-specific access control. Protect `main`, require review where the
+repository plan permits it, restrict repository write access, and treat changes
+to Actions workflows as privileged deployment changes. Pull requests from
+forks do not receive repository secrets, and this deployment workflow runs only
+after code reaches `main` or an authorized maintainer dispatches it. The
+workflow uses the private repository's included GitHub Actions minutes; monitor
+that quota and do not enable paid overages without founder approval.
+
+Netlify CLI authentication uses a user-scoped personal access token. It may be
+able to operate on every Netlify resource available to that user;
+`NETLIFY_SITE_ID` selects the deployment target but does not reduce that
+authority. Prefer a dedicated deployment identity limited to the ScopeDelta
+team/site when that is available without an unapproved paid commitment.
+Otherwise use the shortest practical token expiry, rotate it regularly and
+after personnel/access changes, review Netlify access logs, and revoke it
+immediately on suspected exposure.
 
 Do not use `NEXT_PUBLIC_`. Keep production values out of commits, tickets,
 screenshots, command history, and build output. Rotate `BETTER_AUTH_SECRET` only
 as an incident operation: rotation invalidates sessions and may affect pending
 tokens. Never configure `DATABASE_MIGRATION_URL` in Netlify. After any Netlify
-runtime-environment change, run the protected production workflow again.
+runtime-environment change, run the production workflow again.
 
 ## PostgreSQL provisioning and permissions
 
@@ -75,7 +94,7 @@ runtime-environment change, run the protected production workflow again.
    to application tables; the migration role needs schema-change rights and is
    not exposed to the running app.
 4. Put the pooled endpoint in Netlify `DATABASE_URL` and the direct endpoint in
-   the GitHub `production` environment as `DATABASE_MIGRATION_URL`. For Neon,
+   GitHub Actions repository secrets as `DATABASE_MIGRATION_URL`. For Neon,
    use its pooled hostname for runtime and unpooled/direct hostname for
    migration and `pg_dump`.
 5. Verify automated provider backups or configure the direct backup procedure
@@ -97,9 +116,10 @@ Before merging:
 5. For future non-additive changes, document the expand/backfill/contract
    releases and restoration implications in the PR.
 
-For managed production, GitHub scopes `DATABASE_MIGRATION_URL` only to
-`pnpm db:migrate`. The following Netlify CLI step receives only
-`NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, and a non-secret orchestration marker.
+For managed production, the workflow maps `DATABASE_MIGRATION_URL` only into
+the environment of `pnpm db:migrate`. The following Netlify CLI step receives
+only `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, and a non-secret orchestration
+marker.
 If migration fails, deployment does not start. `netlify.toml` cancels any
 automatic production build not carrying that marker, preventing the repository
 integration from racing the workflow. Preview builds intentionally do not
@@ -141,9 +161,11 @@ Mailpit is development-only and must never be public or connected to production.
 3. Add runtime variables in Netlify, explicitly excluding
    `DATABASE_MIGRATION_URL`. Do not add database or SMTP credentials to preview
    contexts.
-4. Create the GitHub `production` environment with the three deployment secrets
-   above. Add founder approval protection where the repository plan supports
-   it, and restrict the environment to `main`.
+4. Add the three deployment values above as GitHub Actions repository secrets.
+   This is compatible with a private repository on GitHub Free and deliberately
+   does not claim an environment approval gate. Protect `main` and tightly
+   review workflow changes; if stronger deployment approval is later required,
+   obtain founder approval for any plan or platform change first.
 5. Merge `main`. Confirm `Production deploy` applies migrations before the
    manual Netlify deployment. The automatic Netlify production build should be
    reported as intentionally skipped.

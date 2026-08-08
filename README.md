@@ -83,8 +83,9 @@ credentials, or webhook endpoints with that prefix.
 Normal authentication and workspace flows require PostgreSQL and SMTP.
 Deployments must set `APP_URL`, pooled `DATABASE_URL`, `BETTER_AUTH_SECRET`, and
 the SMTP variables in the application host. The privileged
-`DATABASE_MIGRATION_URL` belongs only in the protected production deployment
-workflow or a self-host operator environment—never in Netlify. The public
+`DATABASE_MIGRATION_URL` belongs only in the GitHub production deployment
+workflow's repository secrets or a self-host operator environment—never in
+Netlify. The public
 landing page still renders when platform services are unavailable.
 `LEAD_WEBHOOK_URL` is independently required only to accept paid-pilot
 submissions.
@@ -154,14 +155,20 @@ separate privacy and retention boundary; see
 ## Deployment
 
 Netlify remains the managed application host. Merges to `main` trigger the
-protected GitHub `Production deploy` workflow: it applies migrations with a
-GitHub-only direct credential, then performs a manual Netlify CLI production
+GitHub `Production deploy` workflow: it applies migrations with a GitHub-only
+direct credential, then performs a manual Netlify CLI production
 deploy without that credential. `netlify.toml` skips automatic production
 builds so application code cannot race ahead of migrations; deploy previews
 continue to build without production credentials. The same runtime can be
 self-hosted with the multi-stage `Dockerfile` and Compose stack. PostgreSQL and
 SMTP are the only runtime protocols—no hosted identity, database, or mail SDK
 is embedded.
+
+The managed workflow uses GitHub Actions repository secrets so it works for a
+private repository on GitHub Free; it does not provide an environment approval
+gate. Netlify CLI authentication is a user-scoped personal access token, not a
+site-scoped credential, so minimize that identity's access and use short-lived,
+regularly rotated credentials as detailed in `docs/OPERATIONS.md`.
 
 For production configuration, backups, SMTP/DNS, rollback, logging, and TLS,
 follow [docs/OPERATIONS.md](docs/OPERATIONS.md). Architecture and security

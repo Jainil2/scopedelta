@@ -2,16 +2,18 @@
 
 ## Status
 
-Planning baseline, 2026-08-07. Counts are product capabilities, not individual screens or API endpoints. The inventory will be refined before each layer enters engineering.
+Planning baseline, updated 2026-08-08 after the Layer-1 delivery-core research checkpoint. Counts are product capabilities, not individual screens or API endpoints. The inventory will be refined before each layer enters engineering.
 
 ## Current capability count
 
-- **Total planned capability units: 97**
-- **Local/LAN: 54**
+- **Total planned capability units: 98**
+- **Local/LAN: 55**
 - **Hybrid/optional external: 30**
 - **External API/service: 5**
 - **Managed-cloud only: 4**
 - **Desktop client: 4**
+
+The Layer-1 review split the previous combined `Notifications/inbox` capability into a Local/LAN in-app inbox plus an optional Hybrid outbound-email capability. This increases the inventory by one capability and correctly separates software capability from provider delivery.
 
 ### Runtime meaning
 
@@ -32,7 +34,7 @@ This avoids fragile peer-to-peer conflict resolution for core project/commercial
 | Layer | Capability units |
 |---|---:|
 | Layer 0 — Platform Kernel | 9 |
-| Layer 1 — Delivery Core | 15 |
+| Layer 1 — Delivery Core | 16 |
 | Layer 2 — Commercial Delivery Graph | 12 |
 | Layer 3 — Client Collaboration & Negotiation | 10 |
 | Layer 4 — Engineering & QA Delivery Loop | 9 |
@@ -58,23 +60,28 @@ This avoids fragile peer-to-peer conflict resolution for core project/commercial
 
 ## Layer 1 — Delivery Core
 
-| Capability | Runtime class |
-|---|---|
-| Clients/engagements | Local/LAN |
-| Projects | Local/LAN |
-| Milestones/releases | Local/LAN |
-| Cycles/sprints | Local/LAN |
-| Work items | Local/LAN |
-| Subtasks | Local/LAN |
-| Dependencies | Local/LAN |
-| Acceptance criteria | Local/LAN |
-| Assignments/priority/estimates | Local/LAN |
-| List/backlog view | Local/LAN |
-| Board view | Local/LAN |
-| Search/filtering | Local/LAN |
-| Comments/activity | Local/LAN |
-| Project/spec notes | Local/LAN |
-| Notifications/inbox | Hybrid/optional external |
+Layer-1 implementation is intentionally split into SC-005A → SC-005B → SC-005C. The product model is client-project-first: `Workspace → Client → Project → Milestone → Work item`, with cycles as an optional project planning overlay.
+
+| Capability | Runtime class | Planned slice |
+|---|---|---|
+| Clients/engagements | Local/LAN | SC-005A |
+| Projects | Local/LAN | SC-005A |
+| Milestones/releases | Local/LAN | SC-005A |
+| Work items | Local/LAN | SC-005A |
+| Subtasks | Local/LAN | SC-005A |
+| Dependencies | Local/LAN | SC-005A |
+| Acceptance criteria | Local/LAN | SC-005A |
+| Assignments/priority/estimates | Local/LAN | SC-005A |
+| List/backlog view | Local/LAN | SC-005A |
+| Cycles/sprints | Local/LAN | SC-005B |
+| Board view | Local/LAN | SC-005B |
+| Search/filtering + personal work views | Local/LAN | SC-005B |
+| Comments/activity | Local/LAN | SC-005C |
+| Project/spec notes | Local/LAN | SC-005C |
+| In-app notifications/inbox | Local/LAN | SC-005C |
+| Optional outbound email notifications | Hybrid/optional external | SC-005C |
+
+Layer-1 has **no mandatory external API or paid service dependency**. The required collaboration loop must work entirely on customer-controlled infrastructure. Optional outbound email can use customer SMTP or a later ScopeDelta-managed email path.
 
 ## Layer 2 — Commercial Delivery Graph
 

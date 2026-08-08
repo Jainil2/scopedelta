@@ -426,6 +426,113 @@ export async function listComments(
   );
 }
 
+function storedCommentMatches(
+  row: { body: string | null; parentCommentId: string | null } | undefined,
+  body: string,
+  parentCommentId: string | null,
+) {
+  return row?.body === body && row.parentCommentId === parentCommentId;
+}
+
+async function existingCommentId(
+  transaction: Transaction,
+  workItemId: string,
+  requestId: string,
+  body: string,
+  parentCommentId: string | null,
+) {
+  const rows = await transaction
+    .select({
+      id: workItemComments.id,
+      body: workItemComments.body,
+      parentCommentId: workItemComments.parentCommentId,
+    })
+    .from(workItemComments)
+    .where(
+      and(
+        eq(workItemComments.workItemId, workItemId),
+        eq(workItemComments.requestId, requestId),
+      ),
+    )
+    .for("update")
+    .limit(1);
+  if (!rows[0]) return null;
+  if (storedCommentMatches(rows[0], body, parentCommentId)) return rows[0].id;
+  throw conflict(
+    "request_conflict",
+    "That request identifier is already in use.",
+  );
+}
+
+async function parentCommentAuthor(
+  transaction: Transaction,
+  projectId: string,
+  workItemId: string,
+  parentCommentId: string | null,
+) {
+  if (!parentCommentId) return null;
+  const rows = await transaction
+    .select({
+      parentCommentId: workItemComments.parentCommentId,
+      authorUserId: workItemComments.authorUserId,
+    })
+    .from(workItemComments)
+    .where(
+      and(
+        eq(workItemComments.id, parentCommentId),
+        eq(workItemComments.workItemId, workItemId),
+        eq(workItemComments.projectId, projectId),
+      ),
+    )
+    .limit(1);
+  if (!rows[0]) throw notFound();
+  if (rows[0].parentCommentId) {
+    throw conflict("reply_depth", "Replies can only be one level deep.");
+  }
+  return rows[0].authorUserId;
+}
+
+async function insertCommentRecord(
+  transaction: Transaction,
+  input: {
+    projectId: string;
+    workItemId: string;
+    parentCommentId: string | null;
+    authorUserId: string;
+    requestId: string;
+    body: string;
+  },
+) {
+  const commentId = randomUUID();
+  const inserted = await transaction
+    .insert(workItemComments)
+    .values({ id: commentId, ...input })
+    .onConflictDoNothing()
+    .returning({ id: workItemComments.id });
+  if (inserted[0]) return { id: commentId, created: true };
+  const raced = await transaction
+    .select({
+      id: workItemComments.id,
+      body: workItemComments.body,
+      parentCommentId: workItemComments.parentCommentId,
+    })
+    .from(workItemComments)
+    .where(
+      and(
+        eq(workItemComments.workItemId, input.workItemId),
+        eq(workItemComments.requestId, input.requestId),
+      ),
+    )
+    .limit(1);
+  if (storedCommentMatches(raced[0], input.body, input.parentCommentId)) {
+    return { id: raced[0]!.id, created: false };
+  }
+  throw conflict(
+    "request_conflict",
+    "That request identifier is already in use.",
+  );
+}
+
 export async function createComment(
   actor: UserActor,
   workspaceId: string,
@@ -452,93 +559,31 @@ export async function createComment(
       projectId,
       input.body,
     );
-    const existing = await transaction
-      .select({
-        id: workItemComments.id,
-        body: workItemComments.body,
-        parentCommentId: workItemComments.parentCommentId,
-      })
-      .from(workItemComments)
-      .where(
-        and(
-          eq(workItemComments.workItemId, workItemId),
-          eq(workItemComments.requestId, input.requestId),
-        ),
-      )
-      .for("update")
-      .limit(1);
-    if (existing[0]) {
-      if (
-        existing[0].body === mentionResult.body &&
-        existing[0].parentCommentId === (input.parentCommentId ?? null)
-      )
-        return existing[0].id;
-      throw conflict(
-        "request_conflict",
-        "That request identifier is already in use.",
-      );
-    }
-    let parentAuthorUserId: string | null = null;
-    if (input.parentCommentId) {
-      const parents = await transaction
-        .select({
-          parentCommentId: workItemComments.parentCommentId,
-          authorUserId: workItemComments.authorUserId,
-        })
-        .from(workItemComments)
-        .where(
-          and(
-            eq(workItemComments.id, input.parentCommentId),
-            eq(workItemComments.workItemId, workItemId),
-            eq(workItemComments.projectId, projectId),
-          ),
-        )
-        .limit(1);
-      if (!parents[0]) throw notFound();
-      if (parents[0].parentCommentId) {
-        throw conflict("reply_depth", "Replies can only be one level deep.");
-      }
-      parentAuthorUserId = parents[0].authorUserId;
-    }
-    const commentId = randomUUID();
-    const inserted = await transaction
-      .insert(workItemComments)
-      .values({
-        id: commentId,
-        projectId,
-        workItemId,
-        parentCommentId: input.parentCommentId ?? null,
-        authorUserId: actor.userId,
-        requestId: input.requestId,
-        body: mentionResult.body,
-      })
-      .onConflictDoNothing()
-      .returning({ id: workItemComments.id });
-    if (!inserted[0]) {
-      const raced = await transaction
-        .select({
-          id: workItemComments.id,
-          body: workItemComments.body,
-          parentCommentId: workItemComments.parentCommentId,
-        })
-        .from(workItemComments)
-        .where(
-          and(
-            eq(workItemComments.workItemId, workItemId),
-            eq(workItemComments.requestId, input.requestId),
-          ),
-        )
-        .limit(1);
-      if (
-        raced[0]?.body === mentionResult.body &&
-        raced[0].parentCommentId === (input.parentCommentId ?? null)
-      )
-        return raced[0].id;
-      throw conflict(
-        "request_conflict",
-        "That request identifier is already in use.",
-      );
-    }
+    const parentCommentId = input.parentCommentId ?? null;
+    const existingId = await existingCommentId(
+      transaction,
+      workItemId,
+      input.requestId,
+      mentionResult.body,
+      parentCommentId,
+    );
+    if (existingId) return existingId;
+    const parentAuthorUserId = await parentCommentAuthor(
+      transaction,
+      projectId,
+      workItemId,
+      parentCommentId,
+    );
+    const inserted = await insertCommentRecord(transaction, {
+      projectId,
+      workItemId,
+      parentCommentId,
+      authorUserId: actor.userId,
+      requestId: input.requestId,
+      body: mentionResult.body,
+    });
+    if (!inserted.created) return inserted.id;
+    const commentId = inserted.id;
     await transaction.insert(workItemCommentRevisions).values({
       commentId,
       editorUserId: actor.userId,

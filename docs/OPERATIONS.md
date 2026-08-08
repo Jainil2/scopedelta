@@ -2,12 +2,12 @@
 
 ## Status and change boundary
 
-Accepted through SC-005B. This runbook covers the public lead flow, production
+Accepted through SC-005C. This runbook covers the public lead flow, production
 platform kernel, additive client-project backlog migration, and optional cycle
-planning migration. It does not
+planning and collaboration migrations. It does not
 authorize production credentials, database creation, DNS changes, a paid
 service, or destructive database work without founder approval. It does not
-cover later SC-005 product slices, AI, billing, SSO, or client portals.
+cover SC-006, AI, billing, SSO, or client portals.
 
 ## Supported deployment shapes
 
@@ -175,6 +175,34 @@ backup data. Operational and audit logs must contain only cycle IDs, lifecycle
 transitions, and changed-field names. My work and board list requests remain
 bounded to 100 rows per page; investigate execution plans before raising that
 limit rather than compensating in the UI.
+
+### SC-005C migration `0005_collaboration_context.sql`
+
+This migration is additive. It creates enums and tables for comment revisions,
+mentions, project notes, subscriptions, and in-app notifications, plus their
+project/workspace scope constraints and bounded-read indexes. Existing projects
+and work items need no backfill. Apply it before serving Brief, Activity,
+work-item discussion, or Inbox routes. Reapplying it is safe through the normal
+Drizzle journal; never edit the checked-in SQL after release.
+
+If the new application fails after migration, the SC-005B application can
+continue against the additive schema. Leave these structures in place and fix
+forward. Backups now contain comment and project-note bodies and retained
+comment revisions; treat them as customer-confidential content. Audit metadata
+and operational logs may include only IDs, enum transitions, and changed-field
+names—never comment/note text, work or project titles, labels, or email
+addresses.
+
+Comments, notes, activity, subscriptions, and the inbox require no outbound
+provider. Do not configure SMTP jobs for collaboration notifications. Inbox and
+activity requests default to 50 rows and cap at 100; comment history caps at
+100 revisions and project notes cap at 20 active records. Investigate indexes
+and query plans before changing those limits. Discussion reads select at most
+100 newest-first comments and may add at most one read-only parent context row
+per selected reply. Mention directories use bounded name searches. Watcher
+authorization and notification delivery use 100-user keyset batches rather
+than truncating the valid project audience; monitor batch counts if a workspace
+grows materially beyond the current 500-person target.
 
 ## SMTP and DNS readiness
 

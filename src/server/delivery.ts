@@ -58,11 +58,12 @@ import {
   type EntitlementPolicy,
 } from "@/lib/entitlements";
 import { forbidden, notFound, PlatformError } from "@/lib/platform-errors";
+import { recordWorkItemAssignment } from "@/server/collaboration-events";
 import type { UserActor } from "@/server/workspaces";
 
-type Database = ReturnType<typeof getDb>;
-type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
-type Executor = Database | Transaction;
+export type Database = ReturnType<typeof getDb>;
+export type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+export type Executor = Database | Transaction;
 
 export const WORKFLOW = [
   { id: "backlog", label: "Backlog", category: "unstarted" },
@@ -1279,12 +1280,22 @@ export async function createWorkItem(
       ...values,
     });
     await replaceLabels(transaction, projectId, id, labelIds);
-    await insertAudit(transaction, actor, workspaceId, {
+    const eventId = await insertAudit(transaction, actor, workspaceId, {
       eventType: "work_item.created.v1",
       targetType: "work_item",
       targetId: id,
       metadata: { projectId, status: input.status },
     });
+    if (input.assigneeUserId) {
+      await recordWorkItemAssignment(transaction, {
+        workspaceId,
+        projectId,
+        workItemId: id,
+        assigneeUserId: input.assigneeUserId,
+        actorUserId: actor.userId,
+        eventId,
+      });
+    }
   });
   return getWorkItem(actor, workspaceId, projectId, id);
 }
@@ -1508,9 +1519,11 @@ export async function updateWorkItem(
         metadata: { changedFields: Object.keys(input) },
       });
     }
-    for (const event of events) {
-      await insertAudit(transaction, actor, workspaceId, event);
-    }
+    await insertWorkItemAudits(transaction, actor, workspaceId, projectId, {
+      workItemId,
+      assigneeUserId: values.assigneeUserId,
+      events,
+    });
   });
   return getWorkItem(actor, workspaceId, projectId, workItemId);
 }
@@ -1793,7 +1806,7 @@ async function getWorkspaceAccess(
   return rows[0];
 }
 
-async function getProjectAccess(
+export async function getProjectAccess(
   database: Executor,
   actor: UserActor,
   workspaceId: string,
@@ -1833,7 +1846,7 @@ async function getProjectAccess(
   };
 }
 
-async function assertWritableProject(
+export async function assertWritableProject(
   database: Executor,
   actor: UserActor,
   workspaceId: string,
@@ -1907,6 +1920,24 @@ async function assertProjectMember(
   }
 }
 
+async function validateMilestoneReference(
+  database: Executor,
+  projectId: string,
+  milestoneId: string,
+) {
+  const rows = await database
+    .select({ status: milestones.status })
+    .from(milestones)
+    .where(
+      and(eq(milestones.id, milestoneId), eq(milestones.projectId, projectId)),
+    )
+    .limit(1);
+  if (!rows[0]) throw notFound();
+  if (rows[0].status === "archived") {
+    throw conflict("milestone_archived", "Choose an active milestone.");
+  }
+}
+
 async function validateWorkReferences(
   database: Executor,
   projectId: string,
@@ -1916,20 +1947,7 @@ async function validateWorkReferences(
     await assertProjectMember(database, projectId, input.assigneeUserId);
   }
   if (input.milestoneId) {
-    const rows = await database
-      .select({ status: milestones.status })
-      .from(milestones)
-      .where(
-        and(
-          eq(milestones.id, input.milestoneId),
-          eq(milestones.projectId, projectId),
-        ),
-      )
-      .limit(1);
-    if (!rows[0]) throw notFound();
-    if (rows[0].status === "archived") {
-      throw conflict("milestone_archived", "Choose an active milestone.");
-    }
+    await validateMilestoneReference(database, projectId, input.milestoneId);
   }
   if (input.cycleId) {
     const rows = await database
@@ -2019,7 +2037,7 @@ async function awaitProjectKey(projectId: string) {
   return rows[0].key;
 }
 
-async function insertAudit(
+export async function insertAudit(
   transaction: Transaction,
   actor: UserActor,
   workspaceId: string,
@@ -2030,13 +2048,44 @@ async function insertAudit(
     metadata: Record<string, string | string[]>;
   },
 ) {
+  const id = randomUUID();
   await transaction.insert(auditEvents).values({
-    id: randomUUID(),
+    id,
     workspaceId,
     actorType: "human",
     actorId: actor.userId,
     ...event,
   });
+  return id;
+}
+
+async function insertWorkItemAudits(
+  transaction: Transaction,
+  actor: UserActor,
+  workspaceId: string,
+  projectId: string,
+  input: {
+    workItemId: string;
+    assigneeUserId?: string | null;
+    events: Array<Parameters<typeof insertAudit>[3]>;
+  },
+) {
+  for (const event of input.events) {
+    const eventId = await insertAudit(transaction, actor, workspaceId, event);
+    if (
+      event.eventType === "work_item.assignee.updated.v1" &&
+      input.assigneeUserId
+    ) {
+      await recordWorkItemAssignment(transaction, {
+        workspaceId,
+        projectId,
+        workItemId: input.workItemId,
+        assigneeUserId: input.assigneeUserId,
+        actorUserId: actor.userId,
+        eventId,
+      });
+    }
+  }
 }
 
 function pageResult<T>(

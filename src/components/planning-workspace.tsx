@@ -347,6 +347,12 @@ export function BoardWorkspace({
       />
       {selected ? (
         <WorkEditor item={selected} close={closeEditor}>
+          <Link
+            className="button-secondary collaboration-link"
+            href={`/app/${workspaceSlug}/projects/${project.key}/work/${selected.id}`}
+          >
+            Open discussion and activity
+          </Link>
           <WorkItemForm
             action={save}
             pending={pending}
@@ -615,7 +621,7 @@ export function MyWorkWorkspace({
             </div>
             <Link
               className="my-work-title"
-              href={`/app/${workspaceSlug}/projects/${item.projectKey}/backlog?query=${encodeURIComponent(item.identifier)}`}
+              href={`/app/${workspaceSlug}/projects/${item.projectKey}/work/${item.id}`}
             >
               <span>{item.identifier}</span>
               <strong>{item.title}</strong>
@@ -832,7 +838,7 @@ export function ProjectTabs({
 }: Readonly<{
   workspaceSlug: string;
   projectKey: string;
-  current: "overview" | "backlog" | "board" | "cycles";
+  current: "overview" | "backlog" | "board" | "cycles" | "brief" | "activity";
 }>) {
   const tabs = [
     ["overview", "Overview", `/app/${workspaceSlug}/projects/${projectKey}`],
@@ -843,6 +849,12 @@ export function ProjectTabs({
     ],
     ["board", "Board", `/app/${workspaceSlug}/projects/${projectKey}/board`],
     ["cycles", "Cycles", `/app/${workspaceSlug}/projects/${projectKey}/cycles`],
+    ["brief", "Brief", `/app/${workspaceSlug}/projects/${projectKey}/brief`],
+    [
+      "activity",
+      "Activity",
+      `/app/${workspaceSlug}/projects/${projectKey}/activity`,
+    ],
   ] as const;
   return (
     <nav className="project-tabs" aria-label="Project">

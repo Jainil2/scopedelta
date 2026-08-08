@@ -2,10 +2,10 @@
 
 ## Status
 
-Accepted through SC-005B. The SC-004 production platform kernel now supports
+Accepted through SC-005C. The SC-004 production platform kernel now supports
 the client-project delivery foundation plus production board, optional cycle
-planning, and authorized cross-project daily execution. Later SC-005 slices
-remain out of scope.
+planning, authorized cross-project daily execution, and internal project
+collaboration. SC-006 commercial-delivery behavior remains out of scope.
 
 ## System decision
 
@@ -160,6 +160,44 @@ status, priority, milestone, cycle, label, and text filters. Losing workspace or
 project membership removes the item on the next request while historical
 attribution remains stored. A cross-project assignee/status/target-date index
 supports the bounded daily-work query without per-row loading.
+
+## Collaboration and project context
+
+Migration `0005_collaboration_context.sql` adds project-scoped work-item
+comments and immutable comment revisions, one-level replies, validated mention
+assignments, work-item subscriptions, small project context notes, and durable
+in-app notifications. Comment and note text remains customer content: it is
+stored only in content tables and never copied to audit metadata or operational
+logs. Comment deletion is a tombstone; authorized project members can inspect
+the retained revision record while the active thread no longer returns the
+deleted body.
+
+Mention identity comes from an encoded user ID selected from the authorized
+project audience, not from display text. The service rejects a crafted ID that
+does not currently have project access. Mention selection is a bounded,
+name-searchable directory rather than a fixed audience snapshot. Comment
+retries use a caller UUID and notification writes use recipient-specific dedupe
+keys. Comment participants and assignees are subscribed automatically unless
+they explicitly mute the work item; a new assignment still creates one direct
+notification. Watcher authorization and notification inserts advance in
+100-user keyset batches so every valid recipient is reached without an
+unbounded query or a first-100 cutoff. Inbox reads join current project access,
+so removing membership immediately hides stale links and direct navigation
+retains the indistinguishable 404 boundary.
+
+Discussion pages are ordered newest-first so a successful post remains visible
+after reload. When a reply and its root fall on different pages, the service
+hydrates that root as bounded read-only parent context; the selected page still
+contains at most 100 comments plus at most one context root per selected reply.
+Discussion, work activity, and project activity expose normal URL-backed page
+navigation so the complete retained history remains reachable.
+
+Activity is a bounded, allowlisted projection of immutable audit events. It
+returns factual descriptions and historical actor names but never exposes raw
+audit metadata. Project notes are limited to 20 active records under a project
+lock. All collaboration and inbox flows use PostgreSQL and the existing
+versioned API, so Local/LAN deployments need no email, queue, realtime
+infrastructure, or other external service.
 
 ## Invitations
 

@@ -472,6 +472,11 @@ test("project brief, work discussion, activity, and inbox are accessible and bou
   await expect(
     page.getByText("Showing 50 of 55 accessible notifications."),
   ).toBeVisible();
+  await page.getByRole("link", { name: "Next" }).click();
+  await expect(page.locator("article.notification-row")).toHaveCount(5);
+  await expect(page.getByText("Page 2 of 2")).toBeVisible();
+  await page.getByRole("link", { name: "Previous" }).click();
+  await expect(page.locator("article.notification-row")).toHaveCount(50);
   await expectBasicAccessibility(page);
 
   if (process.env.UPDATE_SCREENSHOTS === "1") {

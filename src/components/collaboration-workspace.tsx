@@ -919,6 +919,27 @@ export function InboxWorkspace({
       <p className="metadata">
         Showing {items.length} of {page.total} accessible notifications.
       </p>
+      {page.pages > 1 ? (
+        <nav className="pagination" aria-label="Notification pages">
+          {page.number > 1 ? (
+            <Link href={`/app/${workspaceSlug}/inbox?page=${page.number - 1}`}>
+              Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span>
+            Page {page.number} of {page.pages}
+          </span>
+          {page.number < page.pages ? (
+            <Link href={`/app/${workspaceSlug}/inbox?page=${page.number + 1}`}>
+              Next
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
+      ) : null}
     </section>
   );
 }

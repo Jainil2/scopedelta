@@ -2,8 +2,9 @@
 
 ## Status and change boundary
 
-Accepted through SC-005A. This runbook covers the public lead flow, production
-platform kernel, and additive client-project backlog migration. It does not
+Accepted through SC-005B. This runbook covers the public lead flow, production
+platform kernel, additive client-project backlog migration, and optional cycle
+planning migration. It does not
 authorize production credentials, database creation, DNS changes, a paid
 service, or destructive database work without founder approval. It does not
 cover later SC-005 product slices, AI, billing, SSO, or client portals.
@@ -154,6 +155,26 @@ Backups now include client/project names and summaries, work descriptions and
 acceptance criteria, user attribution, target dates, labels, and dependency
 structure. Treat the database backup as customer-confidential content. Audit
 and application logs must continue to exclude those values.
+
+### SC-005B migration `0004_planning_execution.sql`
+
+This migration is additive: it creates the cycle lifecycle enum and `cycles`
+table, adds the nullable `work_items.cycle_id` reference, and adds project/date
+and work-item lookup indexes, including the cross-project assignee/status/target
+index used by My work. It does not rewrite existing work items; every existing
+item remains in the no-cycle backlog. Apply it before serving the board, cycle,
+or My work routes.
+
+Verify the migration twice on a fresh disposable PostgreSQL 17 database and run
+the delivery integration suite. If the application deployment fails after the
+migration, the prior SC-005A application can continue against the additive
+schema. Leave the enum, table, column, and indexes in place and fix forward.
+
+Cycle names, goals, dates, and work-item planning are customer-confidential
+backup data. Operational and audit logs must contain only cycle IDs, lifecycle
+transitions, and changed-field names. My work and board list requests remain
+bounded to 100 rows per page; investigate execution plans before raising that
+limit rather than compensating in the UI.
 
 ## SMTP and DNS readiness
 

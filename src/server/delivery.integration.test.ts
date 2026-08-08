@@ -12,14 +12,20 @@ import {
 } from "@/db/schema";
 import {
   addDependency,
+  createCycle,
   createClient,
   createMilestone,
   createProject,
   createWorkItem,
   getProject,
   getWorkItem,
+  listCycles,
+  listMyWork,
+  listMyWorkFacets,
   listWorkItems,
   updateMilestone,
+  updateCycle,
+  updateProject,
   updateWorkItem,
 } from "@/server/delivery";
 import { createWorkspace } from "@/server/workspaces";
@@ -41,6 +47,7 @@ describe("delivery-core domain boundary", () => {
         work_item_dependencies,
         work_item_labels,
         work_items,
+        cycles,
         project_labels,
         milestones,
         project_memberships,
@@ -258,6 +265,16 @@ describe("delivery-core domain boundary", () => {
     expect(firstPage.pageInfo).toMatchObject({ total: 125, hasNextPage: true });
     expect(finalPage.items).toHaveLength(25);
     expect(finalPage.pageInfo.hasNextPage).toBe(false);
+    await expect(
+      listWorkItems(owner, workspace.id, project.id, {
+        page: 1,
+        pageSize: 50,
+        query: "DELIV-125",
+      }),
+    ).resolves.toMatchObject({
+      items: [expect.objectContaining({ identifier: "DELIV-125" })],
+      pageInfo: { total: 1 },
+    });
   });
 
   it("preserves archived milestone references and rejects new assignment to them", async () => {
@@ -403,6 +420,313 @@ describe("delivery-core domain boundary", () => {
     expect(serialized).not.toContain("Confidential parent title");
     expect(serialized).not.toContain("Private customer description");
     expect(serialized).not.toContain("Private acceptance text");
+  });
+
+  it("keeps cycles optional and replans unfinished work without changing milestone ownership", async () => {
+    const { owner, workspace, client, project } = await createFixture();
+    const outsider = await createUser(
+      "cycle-outsider@example.test",
+      "Outsider",
+    );
+    const kanbanProject = await createProject(owner, workspace.id, {
+      clientId: client.id,
+      key: "KANBAN",
+      name: "Kanban project",
+      summary: null,
+      leadUserId: owner.userId,
+      startDate: null,
+      targetDate: null,
+    });
+    const cycle = await createCycle(owner, workspace.id, project.id, {
+      name: "August delivery",
+      startDate: "2026-08-10",
+      endDate: "2026-08-21",
+      goal: "Private goal content",
+    });
+    const concurrentCycles = await Promise.all(
+      Array.from({ length: 5 }, (_, index) =>
+        createCycle(owner, workspace.id, project.id, {
+          name: `Future cycle ${index + 1}`,
+          startDate: `2026-09-${String(index * 2 + 1).padStart(2, "0")}`,
+          endDate: `2026-09-${String(index * 2 + 2).padStart(2, "0")}`,
+          goal: null,
+        }),
+      ),
+    );
+    expect(new Set(concurrentCycles.map((entry) => entry.sequence)).size).toBe(
+      5,
+    );
+    const milestone = await createMilestone(owner, workspace.id, project.id, {
+      name: "Client launch",
+      description: null,
+      targetDate: "2026-08-31",
+    });
+    const item = await createWorkItem(owner, workspace.id, project.id, {
+      title: "Unfinished cycle work",
+      description: null,
+      acceptanceCriteria: null,
+      status: "in_progress",
+      priority: "high",
+      assigneeUserId: owner.userId,
+      estimatePoints: 8,
+      targetDate: null,
+      milestoneId: milestone.id,
+      cycleId: cycle.id,
+      parentId: null,
+      labelIds: [],
+    });
+
+    await expect(
+      listCycles(owner, workspace.id, kanbanProject.id),
+    ).resolves.toMatchObject({ items: [], pageInfo: { total: 0 } });
+    await expect(
+      listCycles(outsider, workspace.id, project.id),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
+    await updateCycle(owner, workspace.id, project.id, cycle.id, {
+      lifecycle: "completed",
+    });
+    await expect(
+      listCycles(owner, workspace.id, project.id),
+    ).resolves.toMatchObject({
+      items: expect.not.arrayContaining([
+        expect.objectContaining({ id: cycle.id }),
+      ]),
+    });
+    await expect(
+      listCycles(owner, workspace.id, project.id, {
+        page: 1,
+        pageSize: 50,
+        lifecycle: "completed",
+      }),
+    ).resolves.toMatchObject({
+      items: [expect.objectContaining({ id: cycle.id })],
+    });
+    await expect(
+      getWorkItem(owner, workspace.id, project.id, item.id),
+    ).resolves.toMatchObject({
+      cycleName: "August delivery",
+      cycleLifecycle: "completed",
+      milestoneName: "Client launch",
+    });
+    await expect(
+      updateWorkItem(owner, workspace.id, project.id, item.id, {
+        cycleId: null,
+      }),
+    ).resolves.toMatchObject({
+      cycleId: null,
+      status: "in_progress",
+      milestoneName: "Client launch",
+    });
+    await expect(
+      updateWorkItem(owner, workspace.id, project.id, item.id, {
+        cycleId: cycle.id,
+      }),
+    ).rejects.toMatchObject({ code: "cycle_not_plannable" });
+    await expect(
+      updateWorkItem(owner, workspace.id, project.id, item.id, {
+        cycleId: concurrentCycles[0]!.id,
+      }),
+    ).resolves.toMatchObject({
+      cycleId: concurrentCycles[0]!.id,
+      milestoneName: "Client launch",
+      status: "in_progress",
+    });
+    const archivedCycle = await updateCycle(
+      owner,
+      workspace.id,
+      project.id,
+      cycle.id,
+      { lifecycle: "archived" },
+    );
+    expect(archivedCycle).toMatchObject({
+      lifecycle: "archived",
+      completedAt: expect.any(Date),
+    });
+    await expect(
+      createCycle(owner, workspace.id, project.id, {
+        name: "Invalid dates",
+        startDate: "2026-09-10",
+        endDate: "2026-09-01",
+        goal: null,
+      }),
+    ).rejects.toMatchObject({ code: "validation_error", status: 400 });
+
+    const serialized = JSON.stringify(
+      await db
+        .select()
+        .from(auditEvents)
+        .where(eq(auditEvents.workspaceId, workspace.id)),
+    );
+    expect(serialized).not.toContain("August delivery");
+    expect(serialized).not.toContain("Private goal content");
+  });
+
+  it("bounds My work across authorized active projects and drops revoked project access", async () => {
+    const owner = await createUser("owner@example.test", "Owner");
+    const member = await createUser("member@example.test", "Member");
+    const outsider = await createUser("outsider@example.test", "Outsider");
+    const workspace = await createWorkspace(owner, { name: "Daily work" });
+    await db.insert(memberships).values({
+      id: randomUUID(),
+      workspaceId: workspace.id,
+      userId: member.userId,
+      role: "member",
+    });
+    const client = await createClient(owner, workspace.id, {
+      name: "Daily client",
+      internalReference: null,
+      summary: null,
+    });
+    const first = await createProject(owner, workspace.id, {
+      clientId: client.id,
+      key: "FIRST",
+      name: "First project",
+      summary: null,
+      leadUserId: member.userId,
+      startDate: null,
+      targetDate: null,
+    });
+    const second = await createProject(owner, workspace.id, {
+      clientId: client.id,
+      key: "SECOND",
+      name: "Second project",
+      summary: null,
+      leadUserId: member.userId,
+      startDate: null,
+      targetDate: null,
+    });
+    const revoked = await createProject(owner, workspace.id, {
+      clientId: client.id,
+      key: "REVOKED",
+      name: "Revoked project",
+      summary: null,
+      leadUserId: member.userId,
+      startDate: null,
+      targetDate: null,
+    });
+    await createWorkItem(member, workspace.id, first.id, {
+      title: "Searchable active task",
+      description: null,
+      acceptanceCriteria: null,
+      status: "ready",
+      priority: "urgent",
+      assigneeUserId: member.userId,
+      estimatePoints: null,
+      targetDate: "2026-08-12",
+      milestoneId: null,
+      cycleId: null,
+      parentId: null,
+      labelIds: [],
+    });
+    await createWorkItem(member, workspace.id, second.id, {
+      title: "Second active task",
+      description: null,
+      acceptanceCriteria: null,
+      status: "in_progress",
+      priority: "high",
+      assigneeUserId: member.userId,
+      estimatePoints: null,
+      targetDate: null,
+      milestoneId: null,
+      cycleId: null,
+      parentId: null,
+      labelIds: [],
+    });
+    await createWorkItem(member, workspace.id, revoked.id, {
+      title: "Must disappear",
+      description: null,
+      acceptanceCriteria: null,
+      status: "ready",
+      priority: "high",
+      assigneeUserId: member.userId,
+      estimatePoints: null,
+      targetDate: null,
+      milestoneId: null,
+      cycleId: null,
+      parentId: null,
+      labelIds: [],
+    });
+    await db
+      .delete(projectMemberships)
+      .where(
+        and(
+          eq(projectMemberships.projectId, revoked.id),
+          eq(projectMemberships.userId, member.userId),
+        ),
+      );
+
+    const result = await listMyWork(member, workspace.id, {
+      page: 1,
+      pageSize: 50,
+    });
+    expect(result.items.map((item) => item.projectKey)).toEqual([
+      "FIRST",
+      "SECOND",
+    ]);
+    await expect(
+      listMyWork(member, workspace.id, {
+        page: 1,
+        pageSize: 50,
+        query: "Searchable",
+      }),
+    ).resolves.toMatchObject({
+      items: [{ identifier: "FIRST-1" }],
+      pageInfo: { total: 1 },
+    });
+    await expect(
+      listMyWork(member, workspace.id, {
+        page: 1,
+        pageSize: 50,
+        query: "FIRST-1",
+      }),
+    ).resolves.toMatchObject({
+      items: [{ identifier: "FIRST-1" }],
+      pageInfo: { total: 1 },
+    });
+    const facets = await listMyWorkFacets(member, workspace.id);
+    expect(facets.projects.map((project) => project.projectKey)).toEqual([
+      "FIRST",
+      "SECOND",
+    ]);
+    await expect(
+      listMyWork(outsider, workspace.id, { page: 1, pageSize: 50 }),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
+
+    await Promise.all(
+      Array.from({ length: 55 }, (_, index) =>
+        createWorkItem(member, workspace.id, first.id, {
+          title: `Volume task ${String(index + 1).padStart(2, "0")}`,
+          description: null,
+          acceptanceCriteria: null,
+          status: "backlog",
+          priority: "none",
+          assigneeUserId: member.userId,
+          estimatePoints: null,
+          targetDate: null,
+          milestoneId: null,
+          cycleId: null,
+          parentId: null,
+          labelIds: [],
+        }),
+      ),
+    );
+    const volume = await listMyWork(member, workspace.id, {
+      page: 1,
+      pageSize: 50,
+    });
+    expect(volume.items).toHaveLength(50);
+    expect(volume.pageInfo).toMatchObject({ total: 57, hasNextPage: true });
+    await updateProject(owner, workspace.id, second.id, {
+      lifecycle: "archived",
+    });
+    await expect(
+      listMyWork(member, workspace.id, { page: 1, pageSize: 100 }),
+    ).resolves.toMatchObject({
+      items: expect.not.arrayContaining([
+        expect.objectContaining({ projectKey: "SECOND" }),
+      ]),
+      pageInfo: { total: 56 },
+    });
   });
 });
 

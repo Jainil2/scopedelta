@@ -7,10 +7,13 @@ import {
   desc,
   eq,
   gt,
+  ilike,
   inArray,
   isNull,
   lt,
   max,
+  notInArray,
+  or,
   sql,
 } from "drizzle-orm";
 
@@ -18,6 +21,7 @@ import { getDb } from "@/db";
 import {
   auditEvents,
   clients,
+  cycles,
   memberships,
   milestones,
   projectLabels,
@@ -28,20 +32,25 @@ import {
   workItemLabels,
   workItems,
   type ClientLifecycle,
+  type CycleLifecycle,
   type MilestoneStatus,
   type ProjectLifecycle,
   type WorkItemStatus,
 } from "@/db/schema";
 import type {
   CreateClientInput,
+  CreateCycleInput,
   CreateLabelInput,
   CreateMilestoneInput,
   CreateProjectInput,
   CreateWorkItemInput,
   UpdateClientInput,
+  UpdateCycleInput,
   UpdateMilestoneInput,
   UpdateProjectInput,
   UpdateWorkItemInput,
+  CycleFilters,
+  MyWorkFilters,
   WorkItemFilters,
 } from "@/lib/delivery-validation";
 import {
@@ -191,11 +200,22 @@ export async function listProjects(
   workspaceId: string,
   page = 1,
   pageSize = 50,
+  search = "",
 ) {
   const access = await getWorkspaceAccess(getDb(), actor, workspaceId);
   const conditions = [eq(projects.workspaceId, workspaceId)];
   if (access.role === "member") {
     conditions.push(eq(projectMemberships.userId, actor.userId));
+  }
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        ilike(projects.key, pattern),
+        ilike(projects.name, pattern),
+        ilike(clients.name, pattern),
+      )!,
+    );
   }
   const query = getDb()
     .select({
@@ -230,6 +250,7 @@ export async function listProjects(
   const totalRows = await getDb()
     .select({ total: count() })
     .from(projects)
+    .innerJoin(clients, eq(clients.id, projects.clientId))
     .leftJoin(
       projectMemberships,
       and(
@@ -242,6 +263,15 @@ export async function listProjects(
         eq(projects.workspaceId, workspaceId),
         ...(access.role === "member"
           ? [eq(projectMemberships.userId, actor.userId)]
+          : []),
+        ...(search
+          ? [
+              or(
+                ilike(projects.key, `%${search}%`),
+                ilike(projects.name, `%${search}%`),
+                ilike(clients.name, `%${search}%`),
+              )!,
+            ]
           : []),
       ),
     );
@@ -660,6 +690,137 @@ export async function updateMilestone(
   return getMilestone(actor, workspaceId, projectId, milestoneId);
 }
 
+export async function listCycles(
+  actor: UserActor,
+  workspaceId: string,
+  projectId: string,
+  filters: CycleFilters = { page: 1, pageSize: 50 },
+) {
+  await getProjectAccess(getDb(), actor, workspaceId, projectId);
+  const conditions = [eq(cycles.projectId, projectId)];
+  if (filters.lifecycle)
+    conditions.push(eq(cycles.lifecycle, filters.lifecycle));
+  else conditions.push(inArray(cycles.lifecycle, ["planned", "active"]));
+  const [rows, totals] = await Promise.all([
+    getDb()
+      .select()
+      .from(cycles)
+      .where(and(...conditions))
+      .orderBy(desc(cycles.sequence), asc(cycles.id))
+      .limit(filters.pageSize)
+      .offset((filters.page - 1) * filters.pageSize),
+    getDb()
+      .select({ total: count() })
+      .from(cycles)
+      .where(and(...conditions)),
+  ]);
+  return pageResult(
+    rows,
+    filters.page,
+    filters.pageSize,
+    totals[0]?.total ?? 0,
+  );
+}
+
+export async function createCycle(
+  actor: UserActor,
+  workspaceId: string,
+  projectId: string,
+  input: CreateCycleInput,
+) {
+  assertCycleDates(input.startDate, input.endDate);
+  const id = randomUUID();
+  await getDb().transaction(async (transaction) => {
+    await assertWritableProject(transaction, actor, workspaceId, projectId);
+    await transaction
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .for("update");
+    const latest = await transaction
+      .select({ sequence: max(cycles.sequence) })
+      .from(cycles)
+      .where(eq(cycles.projectId, projectId));
+    await transaction.insert(cycles).values({
+      id,
+      projectId,
+      sequence: (latest[0]?.sequence ?? 0) + 1,
+      ...input,
+    });
+    await insertAudit(transaction, actor, workspaceId, {
+      eventType: "cycle.created.v1",
+      targetType: "cycle",
+      targetId: id,
+      metadata: { projectId },
+    });
+  });
+  return getCycle(actor, workspaceId, projectId, id);
+}
+
+export async function updateCycle(
+  actor: UserActor,
+  workspaceId: string,
+  projectId: string,
+  cycleId: string,
+  input: UpdateCycleInput,
+) {
+  await getDb().transaction(async (transaction) => {
+    await assertWritableProject(transaction, actor, workspaceId, projectId);
+    const current = await transaction
+      .select()
+      .from(cycles)
+      .where(and(eq(cycles.id, cycleId), eq(cycles.projectId, projectId)))
+      .limit(1);
+    if (!current[0]) throw notFound();
+    const startDate = input.startDate ?? current[0].startDate;
+    const endDate = input.endDate ?? current[0].endDate;
+    assertCycleDates(startDate, endDate);
+    const lifecycle = input.lifecycle ?? current[0].lifecycle;
+    if (
+      current[0].lifecycle === "archived" &&
+      lifecycle !== "archived" &&
+      lifecycle !== "planned"
+    ) {
+      throw conflict(
+        "cycle_restore_state",
+        "Restore an archived cycle to planned before changing its lifecycle.",
+      );
+    }
+    await transaction
+      .update(cycles)
+      .set({
+        ...input,
+        completedAt:
+          lifecycle === "completed"
+            ? (current[0].completedAt ?? new Date())
+            : lifecycle === "planned" || lifecycle === "active"
+              ? null
+              : undefined,
+        archivedAt:
+          lifecycle === "archived"
+            ? (current[0].archivedAt ?? new Date())
+            : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(cycles.id, cycleId));
+    await insertAudit(transaction, actor, workspaceId, {
+      eventType:
+        lifecycle === current[0].lifecycle
+          ? "cycle.updated.v1"
+          : "cycle.lifecycle.updated.v1",
+      targetType: "cycle",
+      targetId: cycleId,
+      metadata: {
+        changedFields: Object.keys(input),
+        ...(lifecycle !== current[0].lifecycle
+          ? { previousLifecycle: current[0].lifecycle, lifecycle }
+          : {}),
+      },
+    });
+  });
+  return getCycle(actor, workspaceId, projectId, cycleId);
+}
+
 export async function listProjectLabels(
   actor: UserActor,
   workspaceId: string,
@@ -709,7 +870,7 @@ export async function listWorkItems(
   projectId: string,
   filters: WorkItemFilters,
 ) {
-  await getProjectAccess(getDb(), actor, workspaceId, projectId);
+  const access = await getProjectAccess(getDb(), actor, workspaceId, projectId);
   const conditions = [
     eq(workItems.projectId, projectId),
     isNull(workItems.archivedAt),
@@ -721,6 +882,17 @@ export async function listWorkItems(
     conditions.push(eq(workItems.assigneeUserId, filters.assigneeUserId));
   if (filters.milestoneId)
     conditions.push(eq(workItems.milestoneId, filters.milestoneId));
+  if (filters.cycleId) conditions.push(eq(workItems.cycleId, filters.cycleId));
+  if (filters.query) {
+    const pattern = `%${filters.query}%`;
+    conditions.push(
+      or(
+        ilike(workItems.title, pattern),
+        sql`${workItems.number}::text ilike ${pattern}`,
+        sql`${access.key} || '-' || ${workItems.number}::text ilike ${pattern}`,
+      )!,
+    );
+  }
 
   const base = getDb()
     .select({
@@ -739,11 +911,15 @@ export async function listWorkItems(
       assigneeName: users.name,
       milestoneId: milestones.id,
       milestoneName: milestones.name,
+      cycleId: cycles.id,
+      cycleName: cycles.name,
+      cycleLifecycle: cycles.lifecycle,
       updatedAt: workItems.updatedAt,
     })
     .from(workItems)
     .leftJoin(users, eq(users.id, workItems.assigneeUserId))
-    .leftJoin(milestones, eq(milestones.id, workItems.milestoneId));
+    .leftJoin(milestones, eq(milestones.id, workItems.milestoneId))
+    .leftJoin(cycles, eq(cycles.id, workItems.cycleId));
   const scoped = filters.labelId
     ? base.innerJoin(
         workItemLabels,
@@ -808,6 +984,261 @@ export async function listWorkItems(
     filters.pageSize,
     totalRows[0]?.total ?? 0,
   );
+}
+
+export async function listMyWork(
+  actor: UserActor,
+  workspaceId: string,
+  filters: MyWorkFilters,
+) {
+  const access = await getWorkspaceAccess(getDb(), actor, workspaceId);
+  const conditions = [
+    eq(projects.workspaceId, workspaceId),
+    eq(projects.lifecycle, "active" as const),
+    eq(clients.lifecycle, "active" as const),
+    eq(workItems.assigneeUserId, actor.userId),
+    isNull(workItems.archivedAt),
+  ];
+  if (filters.status) conditions.push(eq(workItems.status, filters.status));
+  else conditions.push(notInArray(workItems.status, ["done", "canceled"]));
+  if (filters.priority)
+    conditions.push(eq(workItems.priority, filters.priority));
+  if (filters.milestoneId)
+    conditions.push(eq(workItems.milestoneId, filters.milestoneId));
+  if (filters.cycleId) conditions.push(eq(workItems.cycleId, filters.cycleId));
+  if (filters.projectKey) conditions.push(eq(projects.key, filters.projectKey));
+  if (access.role === "member")
+    conditions.push(eq(projectMemberships.userId, actor.userId));
+  if (filters.query) {
+    const pattern = `%${filters.query}%`;
+    conditions.push(
+      or(
+        ilike(workItems.title, pattern),
+        ilike(projects.key, pattern),
+        ilike(projects.name, pattern),
+        ilike(clients.name, pattern),
+        sql`${workItems.number}::text ilike ${pattern}`,
+        sql`${projects.key} || '-' || ${workItems.number}::text ilike ${pattern}`,
+      )!,
+    );
+  }
+
+  const base = getDb()
+    .select({
+      id: workItems.id,
+      number: workItems.number,
+      parentId: workItems.parentId,
+      title: workItems.title,
+      status: workItems.status,
+      priority: workItems.priority,
+      targetDate: workItems.targetDate,
+      estimatePoints: workItems.estimatePoints,
+      projectId: projects.id,
+      projectKey: projects.key,
+      projectName: projects.name,
+      clientName: clients.name,
+      assigneeUserId: users.id,
+      assigneeName: users.name,
+      milestoneId: milestones.id,
+      milestoneName: milestones.name,
+      cycleId: cycles.id,
+      cycleName: cycles.name,
+      cycleLifecycle: cycles.lifecycle,
+      updatedAt: workItems.updatedAt,
+    })
+    .from(workItems)
+    .innerJoin(projects, eq(projects.id, workItems.projectId))
+    .innerJoin(clients, eq(clients.id, projects.clientId))
+    .leftJoin(users, eq(users.id, workItems.assigneeUserId))
+    .leftJoin(milestones, eq(milestones.id, workItems.milestoneId))
+    .leftJoin(cycles, eq(cycles.id, workItems.cycleId));
+  const accessible =
+    access.role === "member"
+      ? base.innerJoin(
+          projectMemberships,
+          and(
+            eq(projectMemberships.projectId, projects.id),
+            eq(projectMemberships.userId, actor.userId),
+          ),
+        )
+      : base;
+  const scoped = filters.labelId
+    ? accessible.innerJoin(
+        workItemLabels,
+        and(
+          eq(workItemLabels.workItemId, workItems.id),
+          eq(workItemLabels.labelId, filters.labelId),
+        ),
+      )
+    : accessible;
+  const rows = await scoped
+    .where(and(...conditions))
+    .orderBy(
+      asc(workItems.targetDate),
+      desc(workItems.priority),
+      asc(projects.key),
+      asc(workItems.number),
+    )
+    .limit(filters.pageSize)
+    .offset((filters.page - 1) * filters.pageSize);
+  const ids = rows.map((row) => row.id);
+  const labels = ids.length
+    ? await getDb()
+        .select({
+          workItemId: workItemLabels.workItemId,
+          id: projectLabels.id,
+          name: projectLabels.name,
+          color: projectLabels.color,
+        })
+        .from(workItemLabels)
+        .innerJoin(projectLabels, eq(projectLabels.id, workItemLabels.labelId))
+        .where(inArray(workItemLabels.workItemId, ids))
+        .orderBy(asc(projectLabels.name))
+    : [];
+  const totalRows = await getDb()
+    .select({ total: count() })
+    .from(workItems)
+    .innerJoin(projects, eq(projects.id, workItems.projectId))
+    .innerJoin(clients, eq(clients.id, projects.clientId))
+    .leftJoin(
+      projectMemberships,
+      and(
+        eq(projectMemberships.projectId, projects.id),
+        eq(projectMemberships.userId, actor.userId),
+      ),
+    )
+    .leftJoin(
+      workItemLabels,
+      and(
+        eq(workItemLabels.workItemId, workItems.id),
+        ...(filters.labelId
+          ? [eq(workItemLabels.labelId, filters.labelId)]
+          : [sql`false`]),
+      ),
+    )
+    .where(
+      and(
+        ...conditions,
+        ...(filters.labelId
+          ? [eq(workItemLabels.labelId, filters.labelId)]
+          : []),
+      ),
+    );
+  return pageResult(
+    rows.map((row) => ({
+      ...row,
+      identifier: `${row.projectKey}-${row.number}`,
+      labels: labels.filter((label) => label.workItemId === row.id),
+    })),
+    filters.page,
+    filters.pageSize,
+    totalRows[0]?.total ?? 0,
+  );
+}
+
+export async function listMyWorkFacets(actor: UserActor, workspaceId: string) {
+  const access = await getWorkspaceAccess(getDb(), actor, workspaceId);
+  const conditions = [
+    eq(projects.workspaceId, workspaceId),
+    eq(projects.lifecycle, "active" as const),
+    eq(clients.lifecycle, "active" as const),
+    eq(workItems.assigneeUserId, actor.userId),
+    isNull(workItems.archivedAt),
+    ...(access.role === "member"
+      ? [eq(projectMemberships.userId, actor.userId)]
+      : []),
+  ];
+  const accessibleWork = () =>
+    getDb()
+      .selectDistinct({
+        projectId: projects.id,
+        projectKey: projects.key,
+        projectName: projects.name,
+        clientName: clients.name,
+      })
+      .from(workItems)
+      .innerJoin(projects, eq(projects.id, workItems.projectId))
+      .innerJoin(clients, eq(clients.id, projects.clientId))
+      .leftJoin(
+        projectMemberships,
+        and(
+          eq(projectMemberships.projectId, projects.id),
+          eq(projectMemberships.userId, actor.userId),
+        ),
+      );
+  const [projectRows, milestoneRows, cycleRows, labelRows] = await Promise.all([
+    accessibleWork()
+      .where(and(...conditions))
+      .orderBy(asc(projects.key))
+      .limit(100),
+    getDb()
+      .selectDistinct({
+        id: milestones.id,
+        name: milestones.name,
+        projectKey: projects.key,
+      })
+      .from(workItems)
+      .innerJoin(projects, eq(projects.id, workItems.projectId))
+      .innerJoin(clients, eq(clients.id, projects.clientId))
+      .innerJoin(milestones, eq(milestones.id, workItems.milestoneId))
+      .leftJoin(
+        projectMemberships,
+        and(
+          eq(projectMemberships.projectId, projects.id),
+          eq(projectMemberships.userId, actor.userId),
+        ),
+      )
+      .where(and(...conditions))
+      .orderBy(asc(projects.key), asc(milestones.name))
+      .limit(100),
+    getDb()
+      .selectDistinct({
+        id: cycles.id,
+        name: cycles.name,
+        projectKey: projects.key,
+      })
+      .from(workItems)
+      .innerJoin(projects, eq(projects.id, workItems.projectId))
+      .innerJoin(clients, eq(clients.id, projects.clientId))
+      .innerJoin(cycles, eq(cycles.id, workItems.cycleId))
+      .leftJoin(
+        projectMemberships,
+        and(
+          eq(projectMemberships.projectId, projects.id),
+          eq(projectMemberships.userId, actor.userId),
+        ),
+      )
+      .where(and(...conditions))
+      .orderBy(asc(projects.key), asc(cycles.name))
+      .limit(100),
+    getDb()
+      .selectDistinct({
+        id: projectLabels.id,
+        name: projectLabels.name,
+        projectKey: projects.key,
+      })
+      .from(workItems)
+      .innerJoin(projects, eq(projects.id, workItems.projectId))
+      .innerJoin(clients, eq(clients.id, projects.clientId))
+      .innerJoin(workItemLabels, eq(workItemLabels.workItemId, workItems.id))
+      .innerJoin(projectLabels, eq(projectLabels.id, workItemLabels.labelId))
+      .leftJoin(
+        projectMemberships,
+        and(
+          eq(projectMemberships.projectId, projects.id),
+          eq(projectMemberships.userId, actor.userId),
+        ),
+      )
+      .where(and(...conditions))
+      .orderBy(asc(projects.key), asc(projectLabels.name))
+      .limit(100),
+  ]);
+  return {
+    projects: projectRows,
+    milestones: milestoneRows,
+    cycles: cycleRows,
+    labels: labelRows,
+  };
 }
 
 export async function createWorkItem(
@@ -881,6 +1312,9 @@ export async function getWorkItem(
       targetDate: workItems.targetDate,
       milestoneId: milestones.id,
       milestoneName: milestones.name,
+      cycleId: cycles.id,
+      cycleName: cycles.name,
+      cycleLifecycle: cycles.lifecycle,
       sortOrder: workItems.sortOrder,
       archivedAt: workItems.archivedAt,
       createdAt: workItems.createdAt,
@@ -889,6 +1323,7 @@ export async function getWorkItem(
     .from(workItems)
     .leftJoin(users, eq(users.id, workItems.assigneeUserId))
     .leftJoin(milestones, eq(milestones.id, workItems.milestoneId))
+    .leftJoin(cycles, eq(cycles.id, workItems.cycleId))
     .where(
       and(eq(workItems.id, workItemId), eq(workItems.projectId, projectId)),
     )
@@ -959,6 +1394,9 @@ export async function updateWorkItem(
       ...(input.milestoneId !== undefined &&
       input.milestoneId !== current[0].milestoneId
         ? { milestoneId: input.milestoneId }
+        : {}),
+      ...(input.cycleId !== undefined && input.cycleId !== current[0].cycleId
+        ? { cycleId: input.cycleId }
         : {}),
       ...(input.parentId !== undefined && input.parentId !== current[0].parentId
         ? { parentId: input.parentId }
@@ -1040,6 +1478,17 @@ export async function updateWorkItem(
         metadata: {
           previousMilestoneId: current[0].milestoneId ?? "",
           milestoneId: values.milestoneId ?? "",
+        },
+      });
+    }
+    if (values.cycleId !== undefined && values.cycleId !== current[0].cycleId) {
+      events.push({
+        eventType: "work_item.cycle.updated.v1",
+        targetType: "work_item",
+        targetId: workItemId,
+        metadata: {
+          previousCycleId: current[0].cycleId ?? "",
+          cycleId: values.cycleId ?? "",
         },
       });
     }
@@ -1309,6 +1758,22 @@ async function getMilestone(
   return rows[0];
 }
 
+async function getCycle(
+  actor: UserActor,
+  workspaceId: string,
+  projectId: string,
+  cycleId: string,
+) {
+  await getProjectAccess(getDb(), actor, workspaceId, projectId);
+  const rows = await getDb()
+    .select()
+    .from(cycles)
+    .where(and(eq(cycles.id, cycleId), eq(cycles.projectId, projectId)))
+    .limit(1);
+  if (!rows[0]) throw notFound();
+  return rows[0];
+}
+
 async function getWorkspaceAccess(
   database: Executor,
   actor: UserActor,
@@ -1336,7 +1801,11 @@ async function getProjectAccess(
 ) {
   const workspace = await getWorkspaceAccess(database, actor, workspaceId);
   const rows = await database
-    .select({ leadUserId: projects.leadUserId, lifecycle: projects.lifecycle })
+    .select({
+      key: projects.key,
+      leadUserId: projects.leadUserId,
+      lifecycle: projects.lifecycle,
+    })
     .from(projects)
     .where(
       and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)),
@@ -1358,6 +1827,7 @@ async function getProjectAccess(
   }
   return {
     workspaceRole: workspace.role,
+    key: rows[0].key,
     leadUserId: rows[0].leadUserId,
     lifecycle: rows[0].lifecycle,
   };
@@ -1459,6 +1929,20 @@ async function validateWorkReferences(
     if (!rows[0]) throw notFound();
     if (rows[0].status === "archived") {
       throw conflict("milestone_archived", "Choose an active milestone.");
+    }
+  }
+  if (input.cycleId) {
+    const rows = await database
+      .select({ lifecycle: cycles.lifecycle })
+      .from(cycles)
+      .where(and(eq(cycles.id, input.cycleId), eq(cycles.projectId, projectId)))
+      .limit(1);
+    if (!rows[0]) throw notFound();
+    if (rows[0].lifecycle !== "planned" && rows[0].lifecycle !== "active") {
+      throw conflict(
+        "cycle_not_plannable",
+        "Choose a planned or active cycle.",
+      );
     }
   }
   if (input.parentId) {
@@ -1580,6 +2064,17 @@ function conflict(
   return new PlatformError(code, 409, message, fieldErrors);
 }
 
+function assertCycleDates(startDate: string, endDate: string) {
+  if (startDate > endDate) {
+    throw new PlatformError(
+      "validation_error",
+      400,
+      "Check the submitted fields and try again.",
+      { endDate: ["End date must be on or after the start date."] },
+    );
+  }
+}
+
 function isUniqueViolation(error: unknown) {
   if (!(error instanceof Error)) return false;
   const candidate = error as Error & { cause?: { code?: string } };
@@ -1589,3 +2084,4 @@ function isUniqueViolation(error: unknown) {
 export type DeliveryClientLifecycle = ClientLifecycle;
 export type DeliveryProjectLifecycle = ProjectLifecycle;
 export type DeliveryMilestoneStatus = MilestoneStatus;
+export type DeliveryCycleLifecycle = CycleLifecycle;

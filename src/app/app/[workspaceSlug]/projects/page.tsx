@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
 
 import { ProjectDirectory } from "@/components/delivery-workspace";
-import { paginationSchema } from "@/lib/delivery-validation";
+import {
+  paginationSchema,
+  projectListFilterSchema,
+} from "@/lib/delivery-validation";
 import { parseInput } from "@/lib/platform-validation";
 import { requireSession } from "@/lib/session";
 import { listClients, listProjects } from "@/server/delivery";
@@ -27,6 +30,7 @@ export default async function ProjectsPage({
       members={data.directory.members}
       projects={data.projectResult.items}
       projectPageInfo={data.projectResult.pageInfo}
+      query={data.projectFilters.query}
     />
   );
 }
@@ -37,10 +41,12 @@ async function loadProjects(
   searchParams: Record<string, string | string[] | undefined>,
 ) {
   try {
-    const projectPagination = parseInput(paginationSchema, {
+    const projectFilters = parseInput(projectListFilterSchema, {
       page:
         typeof searchParams.page === "string" ? searchParams.page : undefined,
       pageSize: 50,
+      query:
+        typeof searchParams.query === "string" ? searchParams.query : undefined,
     });
     const clientPagination = parseInput(paginationSchema, {
       page:
@@ -60,12 +66,19 @@ async function loadProjects(
       listProjects(
         actor,
         workspace.id,
-        projectPagination.page,
-        projectPagination.pageSize,
+        projectFilters.page,
+        projectFilters.pageSize,
+        projectFilters.query,
       ),
       listWorkspaceMembers(actor, workspace.id),
     ]);
-    return { workspace, clientResult, projectResult, directory };
+    return {
+      workspace,
+      clientResult,
+      projectResult,
+      directory,
+      projectFilters,
+    };
   } catch {
     notFound();
   }

@@ -27,6 +27,12 @@ export const milestoneStatusSchema = z.enum([
   "completed",
   "archived",
 ]);
+export const cycleLifecycleSchema = z.enum([
+  "planned",
+  "active",
+  "completed",
+  "archived",
+]);
 export const workItemStatusSchema = z.enum([
   "backlog",
   "ready",
@@ -84,6 +90,21 @@ export const updateMilestoneSchema = createMilestoneSchema.partial().extend({
   status: milestoneStatusSchema.optional(),
 });
 
+export const createCycleSchema = z.object({
+  name: z.string().trim().min(2).max(160),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date in YYYY-MM-DD format."),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date in YYYY-MM-DD format."),
+  goal: optionalText(5_000),
+});
+
+export const updateCycleSchema = createCycleSchema.partial().extend({
+  lifecycle: cycleLifecycleSchema.optional(),
+});
+
 export const createLabelSchema = z.object({
   name: z.string().trim().min(1).max(40),
   color: z
@@ -101,13 +122,17 @@ export const createWorkItemSchema = z.object({
   estimatePoints: z.number().int().min(1).max(100).optional().nullable(),
   targetDate: optionalDate,
   milestoneId: z.string().uuid().optional().nullable(),
+  cycleId: z.string().uuid().optional().nullable(),
   parentId: z.string().uuid().optional().nullable(),
   labelIds: z.array(z.string().uuid()).max(20).default([]),
 });
 
-export const updateWorkItemSchema = createWorkItemSchema
-  .partial()
-  .extend({ archived: z.boolean().optional() });
+export const updateWorkItemSchema = createWorkItemSchema.partial().extend({
+  status: workItemStatusSchema.optional(),
+  priority: workItemPrioritySchema.optional(),
+  labelIds: z.array(z.string().uuid()).max(20).optional(),
+  archived: z.boolean().optional(),
+});
 
 export const createDependencySchema = z.object({
   blockedWorkItemId: z.string().uuid(),
@@ -123,11 +148,30 @@ export const paginationSchema = z.object({
 });
 
 export const workItemFilterSchema = paginationSchema.extend({
+  query: z.string().trim().max(120).optional(),
   status: workItemStatusSchema.optional(),
   priority: workItemPrioritySchema.optional(),
   assigneeUserId: z.string().uuid().optional(),
   milestoneId: z.string().uuid().optional(),
+  cycleId: z.string().uuid().optional(),
   labelId: z.string().uuid().optional(),
+});
+
+export const cycleFilterSchema = paginationSchema.extend({
+  lifecycle: cycleLifecycleSchema.optional(),
+});
+
+export const myWorkFilterSchema = workItemFilterSchema.extend({
+  projectKey: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z][A-Z0-9]{1,9}$/)
+    .optional(),
+});
+
+export const projectListFilterSchema = paginationSchema.extend({
+  query: z.string().trim().max(120).optional(),
 });
 
 export type CreateClientInput = z.output<typeof createClientSchema>;
@@ -136,7 +180,11 @@ export type CreateProjectInput = z.output<typeof createProjectSchema>;
 export type UpdateProjectInput = z.output<typeof updateProjectSchema>;
 export type CreateMilestoneInput = z.output<typeof createMilestoneSchema>;
 export type UpdateMilestoneInput = z.output<typeof updateMilestoneSchema>;
+export type CreateCycleInput = z.output<typeof createCycleSchema>;
+export type UpdateCycleInput = z.output<typeof updateCycleSchema>;
 export type CreateLabelInput = z.output<typeof createLabelSchema>;
 export type CreateWorkItemInput = z.output<typeof createWorkItemSchema>;
 export type UpdateWorkItemInput = z.output<typeof updateWorkItemSchema>;
 export type WorkItemFilters = z.output<typeof workItemFilterSchema>;
+export type CycleFilters = z.output<typeof cycleFilterSchema>;
+export type MyWorkFilters = z.output<typeof myWorkFilterSchema>;

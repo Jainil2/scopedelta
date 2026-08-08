@@ -12,14 +12,14 @@ type Client = {
   lifecycle: "active" | "archived";
 };
 
-type Member = {
+export type Member = {
   userId: string;
   name: string;
   email: string;
   workspaceRole?: string;
 };
 
-type Project = {
+export type Project = {
   id: string;
   key: string;
   name: string;
@@ -32,7 +32,7 @@ type Project = {
   startDate?: string | null;
 };
 
-type Milestone = {
+export type Milestone = {
   id: string;
   name: string;
   description: string | null;
@@ -40,7 +40,17 @@ type Milestone = {
   status: "planned" | "in_progress" | "completed" | "archived";
 };
 
-type Label = { id: string; name: string; color: string };
+export type Label = { id: string; name: string; color: string };
+
+export type Cycle = {
+  id: string;
+  sequence: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  lifecycle: "planned" | "active" | "completed" | "archived";
+  goal: string | null;
+};
 
 type Dependency = {
   id: string;
@@ -52,7 +62,7 @@ type Dependency = {
   blockedTitle: string;
 };
 
-type WorkItem = {
+export type WorkItem = {
   id: string;
   identifier: string;
   parentId: string | null;
@@ -68,27 +78,32 @@ type WorkItem = {
   targetDate: string | null;
   milestoneId: string | null;
   milestoneName: string | null;
+  cycleId: string | null;
+  cycleName: string | null;
+  cycleLifecycle: Cycle["lifecycle"] | null;
   labels: Label[];
 };
 
-type PageInfo = {
+export type PageInfo = {
   page: number;
   pageSize: number;
   total: number;
   hasNextPage: boolean;
 };
 
-type BacklogFilters = {
+export type BacklogFilters = {
   page: number;
   pageSize: number;
+  query?: string;
   status?: WorkItem["status"];
   priority?: WorkItem["priority"];
   assigneeUserId?: string;
   milestoneId?: string;
+  cycleId?: string;
   labelId?: string;
 };
 
-const workflow = [
+export const workflow = [
   ["backlog", "Backlog"],
   ["ready", "Ready"],
   ["in_progress", "In progress"],
@@ -286,6 +301,7 @@ export function ProjectDirectory({
   members,
   projects,
   projectPageInfo,
+  query,
 }: Readonly<{
   workspaceId: string;
   workspaceSlug: string;
@@ -294,6 +310,7 @@ export function ProjectDirectory({
   members: Member[];
   projects: Project[];
   projectPageInfo: PageInfo;
+  query?: string;
 }>) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -395,6 +412,7 @@ export function ProjectDirectory({
                   workspaceSlug,
                   projectPageInfo.page,
                   clientPageInfo.page - 1,
+                  query,
                 )}
               >
                 Previous clients
@@ -409,6 +427,7 @@ export function ProjectDirectory({
                   workspaceSlug,
                   projectPageInfo.page,
                   clientPageInfo.page + 1,
+                  query,
                 )}
               >
                 Next clients
@@ -420,6 +439,21 @@ export function ProjectDirectory({
         </details>
       </header>
       {message ? <p role="status">{message}</p> : null}
+      <form className="directory-search">
+        <input type="hidden" name="clientPage" value={clientPageInfo.page} />
+        <input
+          type="search"
+          name="query"
+          aria-label="Search projects"
+          placeholder="Search project key, name, or client"
+          defaultValue={query || ""}
+          maxLength={120}
+        />
+        <button className="button-secondary">Search</button>
+        {query ? (
+          <Link href={`/app/${workspaceSlug}/projects`}>Clear</Link>
+        ) : null}
+      </form>
       <div className="delivery-list" aria-label="Projects">
         {projects.length ? (
           projects.map((project) => (
@@ -459,6 +493,7 @@ export function ProjectDirectory({
               workspaceSlug,
               projectPageInfo.page - 1,
               clientPageInfo.page,
+              query,
             )}
           >
             Previous
@@ -475,6 +510,7 @@ export function ProjectDirectory({
               workspaceSlug,
               projectPageInfo.page + 1,
               clientPageInfo.page,
+              query,
             )}
           >
             Next
@@ -628,6 +664,12 @@ export function ProjectOverview({
           </Link>
           <Link href={`/app/${workspaceSlug}/projects/${project.key}/backlog`}>
             Backlog
+          </Link>
+          <Link href={`/app/${workspaceSlug}/projects/${project.key}/board`}>
+            Board
+          </Link>
+          <Link href={`/app/${workspaceSlug}/projects/${project.key}/cycles`}>
+            Cycles
           </Link>
         </nav>
       </header>
@@ -859,6 +901,7 @@ export function BacklogWorkspace({
   pageInfo,
   members,
   milestones,
+  cycles,
   labels,
   dependencies,
   filters,
@@ -870,6 +913,7 @@ export function BacklogWorkspace({
   pageInfo: PageInfo;
   members: Member[];
   milestones: Milestone[];
+  cycles: Cycle[];
   labels: Label[];
   dependencies: Dependency[];
   filters: BacklogFilters;
@@ -884,7 +928,9 @@ export function BacklogWorkspace({
     filters.priority ||
     filters.assigneeUserId ||
     filters.milestoneId ||
-    filters.labelId,
+    filters.labelId ||
+    filters.cycleId ||
+    filters.query,
   );
   const grouped = useMemo(
     () =>
@@ -1003,6 +1049,12 @@ export function BacklogWorkspace({
           >
             Backlog
           </Link>
+          <Link href={`/app/${workspaceSlug}/projects/${project.key}/board`}>
+            Board
+          </Link>
+          <Link href={`/app/${workspaceSlug}/projects/${project.key}/cycles`}>
+            Cycles
+          </Link>
         </nav>
       </header>
       {message ? <p role="status">{message}</p> : null}
@@ -1011,6 +1063,14 @@ export function BacklogWorkspace({
           {filters.pageSize !== 50 ? (
             <input type="hidden" name="pageSize" value={filters.pageSize} />
           ) : null}
+          <input
+            name="query"
+            type="search"
+            aria-label="Search work items"
+            placeholder="Search work"
+            defaultValue={filters.query || ""}
+            maxLength={120}
+          />
           <select
             name="status"
             aria-label="Filter by status"
@@ -1029,6 +1089,14 @@ export function BacklogWorkspace({
             defaultValue={filters.assigneeUserId || ""}
           >
             <option value="">All assignees</option>
+            {filters.assigneeUserId &&
+            !members.some(
+              (member) => member.userId === filters.assigneeUserId,
+            ) ? (
+              <option value={filters.assigneeUserId}>
+                Unavailable assignee
+              </option>
+            ) : null}
             {members.map((member) => (
               <option value={member.userId} key={member.userId}>
                 {member.name}
@@ -1051,9 +1119,31 @@ export function BacklogWorkspace({
             defaultValue={filters.milestoneId || ""}
           >
             <option value="">All milestones</option>
+            {filters.milestoneId &&
+            !milestones.some(
+              (milestone) => milestone.id === filters.milestoneId,
+            ) ? (
+              <option value={filters.milestoneId}>Unavailable milestone</option>
+            ) : null}
             {milestones.map((milestone) => (
               <option value={milestone.id} key={milestone.id}>
                 {milestone.name}
+              </option>
+            ))}
+          </select>
+          <select
+            name="cycleId"
+            aria-label="Filter by cycle"
+            defaultValue={filters.cycleId || ""}
+          >
+            <option value="">All cycles</option>
+            {filters.cycleId &&
+            !cycles.some((cycle) => cycle.id === filters.cycleId) ? (
+              <option value={filters.cycleId}>Historical cycle</option>
+            ) : null}
+            {cycles.map((cycle) => (
+              <option value={cycle.id} key={cycle.id}>
+                {cycle.name}
               </option>
             ))}
           </select>
@@ -1063,6 +1153,10 @@ export function BacklogWorkspace({
             defaultValue={filters.labelId || ""}
           >
             <option value="">All labels</option>
+            {filters.labelId &&
+            !labels.some((label) => label.id === filters.labelId) ? (
+              <option value={filters.labelId}>Unavailable label</option>
+            ) : null}
             {labels.map((label) => (
               <option value={label.id} key={label.id}>
                 {label.name}
@@ -1085,6 +1179,7 @@ export function BacklogWorkspace({
             pending={pending}
             members={members}
             milestones={milestones}
+            cycles={cycles}
             labels={labels}
             parents={items.filter((item) => !item.parentId)}
           />
@@ -1114,6 +1209,7 @@ export function BacklogWorkspace({
                     </span>
                     <span>{item.assigneeName || "Unassigned"}</span>
                     <span>{item.milestoneName || "No milestone"}</span>
+                    <span>{item.cycleName || "Backlog / no cycle"}</span>
                     {item.labels.map((label) => (
                       <span
                         className={`label-token label-${label.color}`}
@@ -1212,6 +1308,7 @@ export function BacklogWorkspace({
               item={selected}
               members={members}
               milestones={milestones}
+              cycles={cycles}
               labels={labels}
               parents={items.filter(
                 (item) => !item.parentId && item.id !== selected.id,
@@ -1267,12 +1364,13 @@ export function BacklogWorkspace({
   );
 }
 
-function WorkItemForm({
+export function WorkItemForm({
   action,
   pending,
   item,
   members,
   milestones,
+  cycles,
   labels,
   parents,
 }: Readonly<{
@@ -1281,6 +1379,7 @@ function WorkItemForm({
   item?: WorkItem;
   members: Member[];
   milestones: Milestone[];
+  cycles: Cycle[];
   labels: Label[];
   parents: WorkItem[];
 }>) {
@@ -1347,6 +1446,34 @@ function WorkItemForm({
               <option value={milestone.id} key={milestone.id}>
                 {milestone.name}
                 {milestone.status === "archived" ? " (archived)" : ""}
+              </option>
+            ))}
+        </select>
+      </label>
+      <label>
+        Cycle
+        <select name="cycleId" defaultValue={item?.cycleId || ""}>
+          <option value="">Backlog / no cycle</option>
+          {item?.cycleId &&
+          !cycles.some((cycle) => cycle.id === item.cycleId) ? (
+            <option value={item.cycleId}>
+              {item.cycleName || "Historical cycle"} (historical)
+            </option>
+          ) : null}
+          {cycles
+            .filter(
+              (cycle) =>
+                cycle.lifecycle === "planned" ||
+                cycle.lifecycle === "active" ||
+                cycle.id === item?.cycleId,
+            )
+            .map((cycle) => (
+              <option value={cycle.id} key={cycle.id}>
+                {cycle.name}
+                {cycle.lifecycle === "completed" ||
+                cycle.lifecycle === "archived"
+                  ? ` (${cycle.lifecycle})`
+                  : ""}
               </option>
             ))}
         </select>
@@ -1428,14 +1555,16 @@ function WorkItemForm({
   );
 }
 
-function backlogPageHref(filters: BacklogFilters, page: number) {
+export function backlogPageHref(filters: BacklogFilters, page: number) {
   const query = new URLSearchParams();
   if (filters.status) query.set("status", filters.status);
   if (filters.assigneeUserId)
     query.set("assigneeUserId", filters.assigneeUserId);
   if (filters.priority) query.set("priority", filters.priority);
   if (filters.milestoneId) query.set("milestoneId", filters.milestoneId);
+  if (filters.cycleId) query.set("cycleId", filters.cycleId);
   if (filters.labelId) query.set("labelId", filters.labelId);
+  if (filters.query) query.set("query", filters.query);
   if (filters.pageSize !== 50) query.set("pageSize", String(filters.pageSize));
   query.set("page", String(page));
   return `?${query.toString()}`;
@@ -1445,15 +1574,17 @@ function projectDirectoryHref(
   workspaceSlug: string,
   projectPage: number,
   clientPage: number,
+  search?: string,
 ) {
   const query = new URLSearchParams({
     page: String(projectPage),
     clientPage: String(clientPage),
   });
+  if (search) query.set("query", search);
   return `/app/${workspaceSlug}/projects?${query.toString()}`;
 }
 
-function workItemPayload(formData: FormData) {
+export function workItemPayload(formData: FormData) {
   const estimate = String(formData.get("estimatePoints") ?? "");
   return {
     title: formData.get("title"),
@@ -1465,6 +1596,7 @@ function workItemPayload(formData: FormData) {
     estimatePoints: estimate ? Number(estimate) : null,
     targetDate: nullable(formData.get("targetDate")),
     milestoneId: nullable(formData.get("milestoneId")),
+    cycleId: nullable(formData.get("cycleId")),
     parentId: nullable(formData.get("parentId")),
     labelIds: formData.getAll("labelIds"),
   };
@@ -1474,7 +1606,7 @@ function nullable(value: FormDataEntryValue | null) {
   return value ? String(value) : null;
 }
 
-async function apiRequest(url: string, method: string, body: unknown) {
+export async function apiRequest(url: string, method: string, body: unknown) {
   const response = await fetch(url, {
     method,
     headers: { "content-type": "application/json" },

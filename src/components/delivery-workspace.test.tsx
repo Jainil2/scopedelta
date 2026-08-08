@@ -84,6 +84,9 @@ describe("delivery workspace", () => {
             targetDate: null,
             milestoneId: null,
             milestoneName: null,
+            cycleId: null,
+            cycleName: null,
+            cycleLifecycle: null,
             labels: [{ id: "label-id", name: "Frontend", color: "blue" }],
           },
         ]}
@@ -96,6 +99,17 @@ describe("delivery workspace", () => {
           },
         ]}
         milestones={[]}
+        cycles={[
+          {
+            id: "cycle-id",
+            sequence: 2,
+            name: "August",
+            startDate: "2026-08-10",
+            endDate: "2026-08-21",
+            lifecycle: "active",
+            goal: null,
+          },
+        ]}
         labels={[{ id: "label-id", name: "Frontend", color: "blue" }]}
         dependencies={[]}
         filters={{ page: 1, pageSize: 50 }}
@@ -152,15 +166,28 @@ describe("delivery workspace", () => {
             status: "planned",
           },
         ]}
+        cycles={[
+          {
+            id: "cycle-id",
+            sequence: 2,
+            name: "August",
+            startDate: "2026-08-10",
+            endDate: "2026-08-21",
+            lifecycle: "active",
+            goal: null,
+          },
+        ]}
         labels={[{ id: "label-id", name: "Frontend", color: "blue" }]}
         dependencies={[]}
         filters={{
           page: 2,
           pageSize: 25,
+          query: "shell",
           status: "ready",
           assigneeUserId: "member-id",
           priority: "high",
           milestoneId: "milestone-id",
+          cycleId: "cycle-id",
           labelId: "label-id",
         }}
       />,
@@ -174,14 +201,16 @@ describe("delivery workspace", () => {
     expect(screen.getByLabelText("Filter by milestone")).toHaveValue(
       "milestone-id",
     );
+    expect(screen.getByLabelText("Filter by cycle")).toHaveValue("cycle-id");
+    expect(screen.getByLabelText("Search work items")).toHaveValue("shell");
     expect(screen.getByLabelText("Filter by label")).toHaveValue("label-id");
     expect(screen.getByRole("link", { name: "Previous" })).toHaveAttribute(
       "href",
-      "?status=ready&assigneeUserId=member-id&priority=high&milestoneId=milestone-id&labelId=label-id&pageSize=25&page=1",
+      "?status=ready&assigneeUserId=member-id&priority=high&milestoneId=milestone-id&cycleId=cycle-id&labelId=label-id&query=shell&pageSize=25&page=1",
     );
     expect(screen.getByRole("link", { name: "Next" })).toHaveAttribute(
       "href",
-      "?status=ready&assigneeUserId=member-id&priority=high&milestoneId=milestone-id&labelId=label-id&pageSize=25&page=3",
+      "?status=ready&assigneeUserId=member-id&priority=high&milestoneId=milestone-id&cycleId=cycle-id&labelId=label-id&query=shell&pageSize=25&page=3",
     );
   });
 

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { BacklogWorkspace } from "@/components/delivery-workspace";
+import { BoardWorkspace } from "@/components/planning-workspace";
 import { workItemFilterSchema } from "@/lib/delivery-validation";
 import { parseInput } from "@/lib/platform-validation";
 import { requireSession } from "@/lib/session";
@@ -8,7 +8,6 @@ import {
   getProjectByKey,
   listCycles,
   listMilestones,
-  listDependencies,
   listProjectLabels,
   listProjectMembers,
   listWorkItems,
@@ -17,7 +16,7 @@ import { getWorkspaceBySlug } from "@/server/workspaces";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
-export default async function BacklogPage({
+export default async function BoardPage({
   params,
   searchParams,
 }: Readonly<{
@@ -27,16 +26,10 @@ export default async function BacklogPage({
   const session = await requireSession();
   const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug, projectKey } = await params;
-  const raw = await searchParams;
-  const scalar = Object.fromEntries(
-    Object.entries(raw)
-      .filter(([, value]) => typeof value === "string" && value !== "")
-      .map(([key, value]) => [key, value]),
-  );
-  const data = await loadBacklog(actor, workspaceSlug, projectKey, scalar);
-  const { filters } = data;
+  const scalar = scalarSearch(await searchParams);
+  const data = await loadBoard(actor, workspaceSlug, projectKey, scalar);
   return (
-    <BacklogWorkspace
+    <BoardWorkspace
       workspaceId={data.workspace.id}
       workspaceSlug={workspaceSlug}
       project={data.project}
@@ -46,38 +39,35 @@ export default async function BacklogPage({
       milestones={data.milestones}
       cycles={data.cycles.items}
       labels={data.labels}
-      dependencies={data.dependencies}
-      filters={filters}
+      filters={data.filters}
     />
   );
 }
 
-async function loadBacklog(
+async function loadBoard(
   actor: { userId: string; email: string },
   workspaceSlug: string,
   projectKey: string,
-  scalar: Record<string, string | string[] | undefined>,
+  scalar: Record<string, string>,
 ) {
   try {
-    const filters = parseInput(workItemFilterSchema, scalar);
+    const filters = parseInput(workItemFilterSchema, {
+      ...scalar,
+      pageSize: scalar.pageSize || 100,
+    });
     const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
     const project = await getProjectByKey(
       actor,
       workspace.id,
       projectKey.toUpperCase(),
     );
-    const [result, members, milestones, cycles, labels, dependencies] =
-      await Promise.all([
-        listWorkItems(actor, workspace.id, project.id, filters),
-        listProjectMembers(actor, workspace.id, project.id),
-        listMilestones(actor, workspace.id, project.id),
-        listCycles(actor, workspace.id, project.id, {
-          page: 1,
-          pageSize: 100,
-        }),
-        listProjectLabels(actor, workspace.id, project.id),
-        listDependencies(actor, workspace.id, project.id),
-      ]);
+    const [result, members, milestones, cycles, labels] = await Promise.all([
+      listWorkItems(actor, workspace.id, project.id, filters),
+      listProjectMembers(actor, workspace.id, project.id),
+      listMilestones(actor, workspace.id, project.id),
+      listCycles(actor, workspace.id, project.id, { page: 1, pageSize: 100 }),
+      listProjectLabels(actor, workspace.id, project.id),
+    ]);
     return {
       filters,
       workspace,
@@ -87,9 +77,17 @@ async function loadBacklog(
       milestones,
       cycles,
       labels,
-      dependencies,
     };
   } catch {
     notFound();
   }
+}
+
+function scalarSearch(raw: SearchParams) {
+  return Object.fromEntries(
+    Object.entries(raw).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === "string" && entry[1] !== "",
+    ),
+  );
 }

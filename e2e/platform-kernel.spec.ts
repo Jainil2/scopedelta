@@ -152,6 +152,7 @@ test("client project, milestone, and backlog work through the production UI", as
   page,
   request,
 }) => {
+  test.setTimeout(90_000);
   const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   const email = `delivery-${suffix}@example.test`;
   const password = "test-password-123";
@@ -194,6 +195,7 @@ test("client project, milestone, and backlog work through the production UI", as
   await createForm.getByLabel("Title").fill("Implement secure account shell");
   await createForm.getByLabel("Status").selectOption("ready");
   await createForm.getByLabel("Priority").selectOption("high");
+  await createForm.getByLabel("Assignee").selectOption({ index: 1 });
   await createForm
     .getByLabel("Milestone")
     .selectOption({ label: "Private beta" });
@@ -215,25 +217,102 @@ test("client project, milestone, and backlog work through the production UI", as
     page.getByRole("heading", { name: "In progress" }),
   ).toBeVisible();
 
+  await page.getByRole("link", { name: "Cycles" }).click();
+  await expect(
+    page.getByRole("heading", { name: "No open cycles" }),
+  ).toBeVisible();
+  await page.getByText("New cycle").click();
+  await page.getByLabel("Cycle name").fill("August delivery");
+  await page.getByLabel("Start date").fill("2026-08-10");
+  await page.getByLabel("End date").fill("2026-08-21");
+  await page
+    .getByLabel("Goal / summary")
+    .fill("Complete the secure account shell");
+  await page.getByRole("button", { name: "Create cycle" }).click();
+  await expect(page.getByRole("status")).toHaveText("Cycle created.");
+  await expect(page.getByText("Cycle 1", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Board" }).click();
+  const card = page.locator("article.kanban-card").filter({
+    hasText: "Implement secure account shell",
+  });
+  await expect(card).toBeVisible();
+  await card.getByLabel("Cycle").selectOption({ label: "August delivery" });
+  await card.getByRole("button", { name: "Plan" }).click();
+  await expect(page.getByRole("status")).toHaveText("Cycle plan updated.");
+  await page.reload();
+  const plannedCard = page.locator("article.kanban-card").filter({
+    hasText: "Implement secure account shell",
+  });
+  await expect(
+    plannedCard.locator(".kanban-card-context").getByText("August delivery"),
+  ).toBeVisible();
+  await plannedCard.getByRole("button", { name: "In review →" }).click();
+  await expect(page.getByRole("status")).toHaveText("Moved to In review.");
+
+  await page.getByRole("link", { name: "My work", exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: /Implement secure account shell/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("August delivery", { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Search my work").fill("secure account");
+  await page.getByRole("button", { name: "Apply filters" }).click();
+  await expect(page).toHaveURL(/query=secure\+account/);
+  await expect(
+    page.getByRole("link", { name: /Implement secure account shell/ }),
+  ).toBeVisible();
+
   if (process.env.UPDATE_SCREENSHOTS === "1") {
-    await page
-      .locator("nextjs-portal")
-      .evaluateAll((elements) =>
-        elements.forEach((element) => element.remove()),
-      );
+    const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
+    await page.goto(`/app/${workspaceSlug}/projects/ACME/board`);
+    await removeDevIndicator(page);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.screenshot({
-      path: "docs/screenshots/sc-005a-backlog-desktop.png",
+      path: "docs/screenshots/sc-005b-board-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(
+      `/app/${workspaceSlug}/projects/ACME/board?status=in_review`,
+    );
+    await removeDevIndicator(page);
+    await page.screenshot({
+      path: "docs/screenshots/sc-005b-board-mobile.png",
+      fullPage: true,
+    });
+    await page.goto(`/app/${workspaceSlug}/my-work`);
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-005b-my-work-desktop.png",
       fullPage: true,
     });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({
-      path: "docs/screenshots/sc-005a-backlog-mobile.png",
+      path: "docs/screenshots/sc-005b-my-work-mobile.png",
+      fullPage: true,
+    });
+    await page.goto(`/app/${workspaceSlug}/projects/ACME/cycles`);
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-005b-cycles-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-005b-cycles-mobile.png",
       fullPage: true,
     });
   }
 
   const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
+  await seedPlanningVolume(email);
+  await page.goto(`/app/${workspaceSlug}/my-work?page=2`);
+  await expect(page.locator("article.my-work-row")).toHaveCount(50);
+  await expect(page.getByText("Page 2", { exact: true })).toBeVisible();
   await seedDirectoryVolume(email);
   await page.goto(`/app/${workspaceSlug}/clients?page=3`);
   await expect(
@@ -245,6 +324,12 @@ test("client project, milestone, and backlog work through the production UI", as
   await expect(
     page.getByRole("link", { name: /Bulk project 105/ }),
   ).toBeVisible();
+  await page.goto(`/app/${workspaceSlug}/projects?query=Bulk+project+105`);
+  await expect(page).toHaveURL(/query=Bulk\+project\+105/);
+  await expect(
+    page.getByRole("link", { name: /Bulk project 105/ }),
+  ).toBeVisible();
+  await page.goto(`/app/${workspaceSlug}/projects?page=3&clientPage=3`);
   await page.getByText("New project").click();
   await expect(
     page.getByRole("option", { name: "Bulk client 105" }),
@@ -409,6 +494,85 @@ async function seedDirectoryVolume(email: string) {
   });
 }
 
+async function seedPlanningVolume(email: string) {
+  await withTestDatabase(async (pool) => {
+    await pool.query(
+      `with target as (
+         select workspaces.id as workspace_id,
+                users.id as owner_id,
+                (select clients.id
+                 from clients
+                 where clients.workspace_id = workspaces.id
+                 order by clients.created_at
+                 limit 1) as client_id
+         from users
+         inner join memberships on memberships.user_id = users.id
+         inner join workspaces on workspaces.id = memberships.workspace_id
+         where users.email = $1
+         limit 1
+       ), seeded_users as (
+         insert into users (name, email, email_verified)
+         select 'Volume user ' || lpad(series::text, 2, '0'),
+                'volume-user-' || substr(target.owner_id::text, 1, 8) || '-' ||
+                  lpad(series::text, 2, '0') || '@example.test',
+                true
+         from target cross join generate_series(1, 50) as series
+         returning id
+       ), member_rows as (
+         insert into memberships (workspace_id, user_id, role)
+         select target.workspace_id, seeded_users.id, 'member'
+         from target cross join seeded_users
+         returning user_id
+       ), seeded_projects as (
+         insert into projects (
+           workspace_id, client_id, key, name, lead_user_id, next_work_item_number
+         )
+         select target.workspace_id,
+                target.client_id,
+                'PLAN' || series,
+                'Planning project ' || series,
+                target.owner_id,
+                121
+         from target cross join generate_series(1, 3) as series
+         returning id, workspace_id
+       ), access_rows as (
+         insert into project_memberships (
+           project_id, workspace_id, user_id, added_by_user_id
+         )
+         select seeded_projects.id,
+                seeded_projects.workspace_id,
+                member_rows.user_id,
+                target.owner_id
+         from seeded_projects
+         cross join member_rows
+         cross join target
+         returning project_id
+       )
+       insert into work_items (
+         project_id, number, title, status, priority,
+         assignee_user_id, sort_order
+       )
+       select seeded_projects.id,
+              series,
+              'Planning volume ' || lpad(series::text, 3, '0'),
+              case when series % 4 = 0 then 'in_progress'::work_item_status
+                   else 'ready'::work_item_status end,
+              case when series % 5 = 0 then 'high'::work_item_priority
+                   else 'medium'::work_item_priority end,
+              case when series <= 60 then target.owner_id
+                   else (select seeded_users.id
+                         from seeded_users
+                         offset ((series - 61) % 50)
+                         limit 1) end,
+              series
+       from seeded_projects
+       cross join generate_series(1, 120) as series
+       cross join target`,
+      [email],
+    );
+  });
+}
+
 async function withTestDatabase(work: (pool: Pool) => Promise<void>) {
   const connectionString = process.env.TEST_DATABASE_URL;
   if (!connectionString) {
@@ -422,4 +586,10 @@ async function withTestDatabase(work: (pool: Pool) => Promise<void>) {
   } finally {
     await pool.end();
   }
+}
+
+async function removeDevIndicator(page: Page) {
+  await page
+    .locator("nextjs-portal")
+    .evaluateAll((elements) => elements.forEach((element) => element.remove()));
 }

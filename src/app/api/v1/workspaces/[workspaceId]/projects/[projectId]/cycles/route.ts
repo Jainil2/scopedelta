@@ -1,31 +1,25 @@
 import { apiData, apiError, readJson } from "@/lib/api";
 import {
-  createProjectSchema,
-  projectListFilterSchema,
+  createCycleSchema,
+  cycleFilterSchema,
 } from "@/lib/delivery-validation";
 import { parseInput } from "@/lib/platform-validation";
 import { requireApiActor } from "@/server/api-auth";
-import { createProject, listProjects } from "@/server/delivery";
+import { createCycle, listCycles } from "@/server/delivery";
 
-type Context = { params: Promise<{ workspaceId: string }> };
+type Context = {
+  params: Promise<{ workspaceId: string; projectId: string }>;
+};
 
 export async function GET(request: Request, { params }: Context) {
   try {
     const actor = await requireApiActor(request);
-    const { workspaceId } = await params;
+    const { workspaceId, projectId } = await params;
     const filters = parseInput(
-      projectListFilterSchema,
+      cycleFilterSchema,
       Object.fromEntries(new URL(request.url).searchParams),
     );
-    return apiData(
-      await listProjects(
-        actor,
-        workspaceId,
-        filters.page,
-        filters.pageSize,
-        filters.query,
-      ),
-    );
+    return apiData(await listCycles(actor, workspaceId, projectId, filters));
   } catch (error) {
     return apiError(error);
   }
@@ -34,9 +28,12 @@ export async function GET(request: Request, { params }: Context) {
 export async function POST(request: Request, { params }: Context) {
   try {
     const actor = await requireApiActor(request);
-    const { workspaceId } = await params;
-    const input = parseInput(createProjectSchema, await readJson(request));
-    return apiData(await createProject(actor, workspaceId, input), 201);
+    const { workspaceId, projectId } = await params;
+    const input = parseInput(createCycleSchema, await readJson(request));
+    return apiData(
+      await createCycle(actor, workspaceId, projectId, input),
+      201,
+    );
   } catch (error) {
     return apiError(error);
   }

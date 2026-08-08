@@ -1013,6 +1013,274 @@ h2 {
   }
 }
 
+/* SC-005B planning and daily execution */
+.planning-note {
+  max-width: 70ch;
+  margin: -1.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.directory-search,
+.my-work-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.directory-search input {
+  width: min(32rem, 100%);
+}
+
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(16rem, 1fr));
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding: 0.2rem 0 1rem;
+  scroll-snap-type: x proximity;
+}
+
+.kanban-column {
+  min-height: 28rem;
+  padding: 0 0.75rem 0.75rem;
+  border-left: 1px solid var(--line);
+  scroll-snap-align: start;
+}
+
+.kanban-column > header {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  background: var(--background);
+}
+
+.kanban-column h2 {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.kanban-stack {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.kanban-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--background) 94%, var(--ink));
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.kanban-card:hover,
+.kanban-card:focus-within {
+  border-color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.kanban-card-title {
+  display: grid;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.kanban-card-title span,
+.my-work-title span,
+.cycle-sequence {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.kanban-card-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.kanban-plan-form,
+.kanban-move-actions,
+.my-work-status {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+.kanban-plan-form label,
+.my-work-status label {
+  flex: 1;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.kanban-plan-form select,
+.my-work-status select {
+  margin-top: 0.2rem;
+}
+
+.kanban-plan-form button,
+.kanban-move-actions button,
+.my-work-status button {
+  min-height: 2.2rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.72rem;
+}
+
+.kanban-move-actions {
+  justify-content: space-between;
+}
+
+.cycle-list,
+.my-work-list {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.cycle-row {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: 1.5rem;
+  padding: 1.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.cycle-form {
+  display: grid;
+  grid-template-columns: minmax(12rem, 2fr) repeat(3, minmax(9rem, 1fr)) auto;
+  align-items: end;
+  gap: 0.85rem;
+}
+
+.cycle-form > label:last-of-type,
+.cycle-form > label:first-child {
+  grid-column: auto;
+}
+
+.cycle-form textarea {
+  min-height: 4.5rem;
+}
+
+.my-work-filters {
+  flex-wrap: wrap;
+}
+
+.my-work-filters > input,
+.my-work-filters > select {
+  min-width: 10rem;
+  flex: 1;
+}
+
+.my-work-row {
+  display: grid;
+  grid-template-columns: 10rem minmax(16rem, 1.5fr) minmax(18rem, 1fr) 12rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.my-work-project,
+.my-work-title {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.my-work-project > span:last-child {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-work-title {
+  color: inherit;
+  text-decoration: none;
+}
+
+.my-work-title:hover strong,
+.my-work-title:focus-visible strong {
+  text-decoration: underline;
+  text-underline-offset: 0.2rem;
+}
+
+@media (max-width: 70rem) {
+  .my-work-row {
+    grid-template-columns: 8rem minmax(14rem, 1fr) 12rem;
+  }
+
+  .my-work-row > .work-metadata {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+
+  .cycle-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 52rem) {
+  .directory-search,
+  .my-work-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .directory-search input,
+  .my-work-filters > input,
+  .my-work-filters > select {
+    width: 100%;
+  }
+
+  .kanban-board {
+    grid-template-columns: repeat(6, minmax(82vw, 1fr));
+  }
+
+  .cycle-row,
+  .cycle-form,
+  .my-work-row {
+    grid-template-columns: 1fr;
+  }
+
+  .my-work-row > .work-metadata {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .my-work-status,
+  .kanban-plan-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kanban-card {
+    transition: none;
+  }
+}
+
 /* Platform kernel */
 
 .app-wordmark {
@@ -2171,22 +2439,24 @@ h2 {
   min-height: 0;
 }
 
-.work-editor-backdrop {
-  position: fixed;
-  z-index: 80;
-  inset: 0;
-  display: flex;
-  justify-content: flex-end;
+.work-editor::backdrop {
   background: rgb(23 26 23 / 44%);
   animation: fade-in 150ms ease both;
 }
 
 .work-editor {
+  position: fixed;
+  inset: 0 0 0 auto;
   width: min(42rem, 100%);
-  height: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
   overflow-y: auto;
   padding: 2rem;
+  border: 0;
   background: var(--paper);
+  color: var(--ink);
   box-shadow: -1rem 0 3rem rgb(23 26 23 / 20%);
   animation: editor-enter 190ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -2385,7 +2655,7 @@ h2 {
 
 @media (prefers-reduced-motion: reduce) {
   .delivery-composer > .delivery-form,
-  .work-editor-backdrop,
+  .work-editor::backdrop,
   .work-editor,
   .backlog-row,
   .delivery-project-link {

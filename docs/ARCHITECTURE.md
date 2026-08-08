@@ -2,10 +2,10 @@
 
 ## Status
 
-Accepted through SC-005A. The SC-004 production platform kernel now supports
-the first client-project delivery slice: clients, projects, project access,
-milestones, labels, and a production backlog. Later SC-005 slices remain out of
-scope.
+Accepted through SC-005B. The SC-004 production platform kernel now supports
+the client-project delivery foundation plus production board, optional cycle
+planning, and authorized cross-project daily execution. Later SC-005 slices
+remain out of scope.
 
 ## System decision
 
@@ -142,6 +142,25 @@ ordering uses stored integer positions. An up/down action locks the project and
 swaps one adjacent item only within the unfiltered status group; creation and
 status changes append to the destination group.
 
+Migration `0004_planning_execution.sql` adds optional project-scoped cycles and
+a nullable cycle reference on work items. Cycle sequence allocation locks the
+project, so concurrently created cycles receive distinct, increasing numbers.
+Cycles have date-only bounds and planned, active, completed, and archived
+lifecycle states. Completed and archived references remain visible for history,
+while default cycle lists and new planning use only planned or active cycles;
+explicit lifecycle filters expose history. Cycle planning never changes a work
+item's milestone.
+
+The board, backlog, and My work surfaces mutate the same work-item service and
+API; the UI has no parallel workflow state. Board moves use explicit native
+controls and appear only after the server accepts the transition. My work
+selects current assignments across active projects the actor may access,
+excludes done and canceled work by default, and supports URL-backed project,
+status, priority, milestone, cycle, label, and text filters. Losing workspace or
+project membership removes the item on the next request while historical
+attribution remains stored. A cross-project assignee/status/target-date index
+supports the bounded daily-work query without per-row loading.
+
 ## Invitations
 
 An invitation stores a normalized email, role, expiry, and SHA-256 hash of a
@@ -176,10 +195,10 @@ envelope; no event delivery or queue exists yet.
 
 Better Auth is mounted at `/api/auth/*`. ScopeDelta owns `/api/v1` routes for
 workspaces, settings, memberships, invitations, fragment-token staging,
-acceptance, clients, projects, project memberships, milestones, labels, work
-items, dependencies, lifecycle actions, and reorder actions. Successful
-payloads are `{ data: ... }`; paginated lists include page metadata inside
-`data`. Page size defaults to 50 and is capped at 100. Errors are
+acceptance, clients, projects, project memberships, milestones, cycles, labels,
+work items, My work, dependencies, lifecycle actions, and reorder actions.
+Successful payloads are `{ data: ... }`; paginated lists include page metadata
+inside `data`. Page size defaults to 50 and is capped at 100. Errors are
 `{ error: { code, message, fieldErrors? } }`. Route handlers parse bounded JSON,
 return stable public error codes, and do not expose database/provider details.
 
@@ -247,7 +266,8 @@ and does not rely on source secrecy for security.
 - Server-authoritative collaboration avoids premature offline conflict
   resolution. A later desktop client can add bounded caching or retry behavior
   without relocating authorization or durable tenant state onto user devices.
-- SC-005A deliberately excludes workflow configuration, board and drag/drop
-  views, cross-project My Work, comments, notifications, commercial graphs,
-  Git/CI integration, AI, billing, SSO/SCIM, client portals, document storage,
-  analytics, and outbound audit webhooks.
+- SC-005B deliberately keeps the fixed workflow and explicit accessible move
+  controls; it does not add drag/drop, workflow configuration, saved views,
+  comments, notifications, commercial graphs, Git/CI integration, AI, billing,
+  SSO/SCIM, client portals, document storage, analytics, or outbound audit
+  webhooks.

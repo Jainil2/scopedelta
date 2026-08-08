@@ -137,6 +137,12 @@ export const milestoneStatus = pgEnum("milestone_status", [
   "completed",
   "archived",
 ]);
+export const cycleLifecycle = pgEnum("cycle_lifecycle", [
+  "planned",
+  "active",
+  "completed",
+  "archived",
+]);
 export const workItemStatus = pgEnum("work_item_status", [
   "backlog",
   "ready",
@@ -388,6 +394,40 @@ export const milestones = pgTable(
   ],
 );
 
+export const cycles = pgTable(
+  "cycles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    sequence: integer("sequence").notNull(),
+    name: text("name").notNull(),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+    lifecycle: cycleLifecycle("lifecycle").default("planned").notNull(),
+    goal: text("goal"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("cycles_id_project_unique").on(table.id, table.projectId),
+    uniqueIndex("cycles_project_sequence_uidx").on(
+      table.projectId,
+      table.sequence,
+    ),
+    index("cycles_project_lifecycle_dates_idx").on(
+      table.projectId,
+      table.lifecycle,
+      table.startDate,
+      table.sequence,
+    ),
+    check("cycles_sequence_positive", sql`${table.sequence} > 0`),
+    check("cycles_date_order", sql`${table.startDate} <= ${table.endDate}`),
+  ],
+);
+
 export const projectLabels = pgTable(
   "project_labels",
   {
@@ -428,6 +468,7 @@ export const workItems = pgTable(
     estimatePoints: integer("estimate_points"),
     targetDate: date("target_date"),
     milestoneId: uuid("milestone_id"),
+    cycleId: uuid("cycle_id"),
     sortOrder: integer("sort_order").default(0).notNull(),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestampColumns,
@@ -448,6 +489,11 @@ export const workItems = pgTable(
       foreignColumns: [milestones.id, milestones.projectId],
       name: "work_items_milestone_project_fk",
     }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.cycleId, table.projectId],
+      foreignColumns: [cycles.id, cycles.projectId],
+      name: "work_items_cycle_project_fk",
+    }).onDelete("restrict"),
     index("work_items_project_status_order_idx").on(
       table.projectId,
       table.status,
@@ -458,10 +504,17 @@ export const workItems = pgTable(
       table.projectId,
       table.assigneeUserId,
     ),
+    index("work_items_assignee_status_target_idx").on(
+      table.assigneeUserId,
+      table.status,
+      table.targetDate,
+      table.id,
+    ),
     index("work_items_project_milestone_idx").on(
       table.projectId,
       table.milestoneId,
     ),
+    index("work_items_project_cycle_idx").on(table.projectId, table.cycleId),
     check("work_items_number_positive", sql`${table.number} > 0`),
     check(
       "work_items_estimate_range",
@@ -545,5 +598,6 @@ export type WorkspaceRole = (typeof workspaceRole.enumValues)[number];
 export type ClientLifecycle = (typeof clientLifecycle.enumValues)[number];
 export type ProjectLifecycle = (typeof projectLifecycle.enumValues)[number];
 export type MilestoneStatus = (typeof milestoneStatus.enumValues)[number];
+export type CycleLifecycle = (typeof cycleLifecycle.enumValues)[number];
 export type WorkItemStatus = (typeof workItemStatus.enumValues)[number];
 export type WorkItemPriority = (typeof workItemPriority.enumValues)[number];

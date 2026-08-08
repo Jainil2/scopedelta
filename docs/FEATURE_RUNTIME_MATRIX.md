@@ -2,7 +2,7 @@
 
 ## Status
 
-Planning baseline, updated 2026-08-08 after the Layer-1 delivery-core research checkpoint. Counts are product capabilities, not individual screens or API endpoints. The inventory will be refined before each layer enters engineering.
+Planning baseline, updated 2026-08-09 after the Layer-2 Commercial Delivery Graph research checkpoint. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
 
 ## Current capability count
 
@@ -13,7 +13,7 @@ Planning baseline, updated 2026-08-08 after the Layer-1 delivery-core research c
 - **Managed-cloud only: 4**
 - **Desktop client: 4**
 
-The Layer-1 review split the previous combined `Notifications/inbox` capability into a Local/LAN in-app inbox plus an optional Hybrid outbound-email capability. This increases the inventory by one capability and correctly separates software capability from provider delivery.
+The Layer-2 review does not add a mandatory cloud/AI dependency. Required commercial baseline, deterministic document parsing, request/decision, graph-link and drift behavior remains Local/LAN. Optional OCR remains Hybrid and is explicitly excluded from the first production slice.
 
 ### Runtime meaning
 
@@ -60,9 +60,9 @@ This avoids fragile peer-to-peer conflict resolution for core project/commercial
 
 ## Layer 1 — Delivery Core
 
-Layer-1 implementation is intentionally split into SC-005A → SC-005B → SC-005C. The product model is client-project-first: `Workspace → Client → Project → Milestone → Work item`, with cycles as an optional project planning overlay.
+Layer 1 is complete through SC-005A → SC-005B → SC-005C. The product model is client-project-first: `Workspace → Client → Project → Milestone → Work item`, with cycles as an optional project planning overlay.
 
-| Capability | Runtime class | Planned slice |
+| Capability | Runtime class | Delivered slice |
 |---|---|---|
 | Clients/engagements | Local/LAN | SC-005A |
 | Projects | Local/LAN | SC-005A |
@@ -79,26 +79,37 @@ Layer-1 implementation is intentionally split into SC-005A → SC-005B → SC-00
 | Comments/activity | Local/LAN | SC-005C |
 | Project/spec notes | Local/LAN | SC-005C |
 | In-app notifications/inbox | Local/LAN | SC-005C |
-| Optional outbound email notifications | Hybrid/optional external | Deferred; not implemented by #25 |
+| Optional outbound email notifications | Hybrid/optional external | Deferred |
 
-Layer-1 has **no mandatory external API or paid service dependency**. The required collaboration loop must work entirely on customer-controlled infrastructure. Optional outbound email remains deferred; SC-005C deliberately adds no collaboration mail job, provider, queue, or template.
+Layer 1 has **no mandatory external API or paid service dependency**.
 
 ## Layer 2 — Commercial Delivery Graph
 
-| Capability | Runtime class |
-|---|---|
-| SOW/proposal upload | Local/LAN |
-| Text extraction/evidence anchors | Local/LAN |
-| Versioned commercial baseline | Local/LAN |
-| Requirements/deliverables/exclusions | Local/LAN |
-| Client request/change records | Local/LAN |
-| Commercial decision taxonomy | Local/LAN |
-| Work-to-commercial graph links | Local/LAN |
-| Commercial drift detection | Local/LAN |
-| Impact fields: effort/schedule/money | Local/LAN |
-| Decision/version audit history | Local/LAN |
-| Document object storage | Local/LAN |
-| Optional OCR for scanned docs | Hybrid/optional external |
+Layer-2 research is complete. The executable sequence is SC-006A → SC-006B → SC-006C. See `docs/research/LAYER2_COMMERCIAL_DELIVERY_GRAPH_RESEARCH_2026-08.md`.
+
+| Capability | Runtime class | Planned slice |
+|---|---|---|
+| Commercial evidence ingestion: paste + text-PDF + DOCX | Local/LAN | SC-006A |
+| Deterministic text extraction + evidence anchors | Local/LAN | SC-006A |
+| Versioned commercial baseline foundation | Local/LAN | SC-006A + SC-006C |
+| Evidence-backed scope items: deliverable/requirement/exclusion/constraint | Local/LAN | SC-006A |
+| Work-purpose classification | Local/LAN | SC-006A |
+| Work-to-commercial basis links | Local/LAN | SC-006A + SC-006B |
+| Advisory commercial drift detection | Local/LAN | SC-006A + SC-006C |
+| Client request records/lifecycle | Local/LAN | SC-006B |
+| Commercial decision ledger/taxonomy | Local/LAN | SC-006B |
+| Impact fields: effort/schedule/money | Local/LAN | SC-006B |
+| Amendment/version lineage + reconstruction history | Local/LAN | SC-006C |
+| Optional OCR for scanned/image documents | Hybrid/optional external | Deferred; not required by SC-006A/B/C |
+
+Layer-2 runtime rules:
+
+- Required Layer-2 product behavior must run on the same customer-controlled server-authoritative core; there is no mandatory ScopeDelta Cloud call.
+- No mandatory AI/model API, hosted document parser, OCR provider, e-signature service, CRM or billing provider.
+- Private source storage must have both a customer-controlled persistent path and a managed-cloud-compatible persistent path; exact storage implementation remains engineering-owned.
+- PDF/DOCX parsing in SC-006A is deterministic infrastructure, not semantic AI extraction. Human users curate scope items and evidence anchors.
+- Scanned/image OCR is intentionally deferred until customer evidence justifies the runtime/operational dependency.
+- Customer commercial documents and request bodies must not be copied into ordinary logs/audit metadata.
 
 ## Layer 3 — Client Collaboration & Negotiation
 
@@ -205,9 +216,9 @@ The initial plan should minimize mandatory paid external dependencies. The unavo
 - GitHub.com/GitLab.com integration when the customer uses those hosted systems;
 - hosted AI when the customer chooses managed inference instead of BYO/local AI;
 - optional SSO/directory providers for organizations using external identity systems;
-- managed observability/backups for ScopeDelta Cloud.
+- managed observability/backups/storage for ScopeDelta Cloud.
 
-Everything else should be designed to run on customer-controlled infrastructure when the selected dependencies support it.
+Commercial document parsing and Commercial Delivery Graph logic are deliberately **not** added to this unavoidable-external list. They must work on customer-controlled infrastructure.
 
 ## Cost principle
 

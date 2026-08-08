@@ -2,7 +2,10 @@ export type PlatformCapability =
   | "workspace.create"
   | "workspace.settings.update"
   | "workspace.members.manage"
-  | "workspace.invitation.accept";
+  | "workspace.invitation.accept"
+  | "delivery.client.manage"
+  | "delivery.project.manage"
+  | "delivery.work.manage";
 
 export type EntitlementContext = {
   userId: string;

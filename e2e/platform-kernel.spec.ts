@@ -148,6 +148,109 @@ test("password recovery uses a generic request response and revokes the old pass
   await expect(page).toHaveURL(/\/onboarding$/);
 });
 
+test("client project, milestone, and backlog work through the production UI", async ({
+  page,
+  request,
+}) => {
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const email = `delivery-${suffix}@example.test`;
+  const password = "test-password-123";
+  await signUpAndVerify(page, request, email, password, "/onboarding");
+  await page.getByLabel(/Workspace name/).fill("Atlas Delivery");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await page.getByText("New client").click();
+  await page.getByLabel("Client name").fill("Acme Labs");
+  await page.getByLabel("Internal reference").fill("ACME");
+  await page.getByLabel("Summary").fill("Primary delivery account");
+  await page.getByRole("button", { name: "Create client" }).click();
+  await expect(page.getByRole("status")).toHaveText("Client created.");
+  await expect(page.getByText("Acme Labs", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
+  await page.getByText("New project").click();
+  await page.getByLabel("Project key").fill("ACME");
+  await page.getByLabel("Project name").fill("Customer portal rebuild");
+  await page.getByLabel("Target date").fill("2026-12-18");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page.getByRole("status")).toHaveText("Project created.");
+  await page.getByRole("link", { name: /Customer portal rebuild/ }).click();
+
+  await page.getByText("New milestone").click();
+  const milestoneForm = page.locator("form").filter({
+    has: page.getByRole("button", { name: "Create milestone" }),
+  });
+  await milestoneForm.getByLabel("Name").fill("Private beta");
+  await milestoneForm.getByLabel("Target date").fill("2026-11-20");
+  await milestoneForm.getByRole("button", { name: "Create milestone" }).click();
+  await expect(page.getByRole("status")).toHaveText("Milestone created.");
+  await page.getByRole("link", { name: "Backlog" }).click();
+
+  await page.getByText("New work item").click();
+  const createForm = page.locator("form.work-form").filter({
+    has: page.getByRole("button", { name: "Create work item" }),
+  });
+  await createForm.getByLabel("Title").fill("Implement secure account shell");
+  await createForm.getByLabel("Status").selectOption("ready");
+  await createForm.getByLabel("Priority").selectOption("high");
+  await createForm
+    .getByLabel("Milestone")
+    .selectOption({ label: "Private beta" });
+  await createForm
+    .getByLabel("Acceptance criteria")
+    .fill("Only authorized project members can open the shell.");
+  await createForm.getByRole("button", { name: "Create work item" }).click();
+  await expect(page.getByRole("status")).toHaveText("Work item created.");
+  await expect(page.getByText("ACME-1", { exact: true })).toBeVisible();
+
+  await page
+    .getByRole("button", { name: /Implement secure account shell/ })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Edit work item" });
+  await editor.getByLabel("Status").selectOption("in_progress");
+  await editor.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("status")).toHaveText("Work item updated.");
+  await expect(
+    page.getByRole("heading", { name: "In progress" }),
+  ).toBeVisible();
+
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await page
+      .locator("nextjs-portal")
+      .evaluateAll((elements) =>
+        elements.forEach((element) => element.remove()),
+      );
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-005a-backlog-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-005a-backlog-mobile.png",
+      fullPage: true,
+    });
+  }
+
+  const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
+  await seedDirectoryVolume(email);
+  await page.goto(`/app/${workspaceSlug}/clients?page=3`);
+  await expect(
+    page.getByText("Bulk client 105", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Page 3 · 106 clients")).toBeVisible();
+
+  await page.goto(`/app/${workspaceSlug}/projects?page=3&clientPage=3`);
+  await expect(
+    page.getByRole("link", { name: /Bulk project 105/ }),
+  ).toBeVisible();
+  await page.getByText("New project").click();
+  await expect(
+    page.getByRole("option", { name: "Bulk client 105" }),
+  ).toBeAttached();
+});
+
 test("duplicate signup stays generic and an expired database session is rejected", async ({
   page,
   request,
@@ -263,6 +366,44 @@ async function expireSessions(email: string) {
       `update sessions
        set expires_at = now() - interval '1 minute'
        where user_id = (select id from users where email = $1)`,
+      [email],
+    );
+  });
+}
+
+async function seedDirectoryVolume(email: string) {
+  await withTestDatabase(async (pool) => {
+    await pool.query(
+      `with target as (
+         select workspaces.id as workspace_id, users.id as user_id
+         from users
+         inner join memberships on memberships.user_id = users.id
+         inner join workspaces on workspaces.id = memberships.workspace_id
+         where users.email = $1
+         limit 1
+       ), seeded_clients as (
+         insert into clients (workspace_id, name)
+         select target.workspace_id,
+                'Bulk client ' || lpad(series::text, 3, '0')
+         from target
+         cross join generate_series(1, 105) as series
+         returning id, workspace_id, name
+       )
+       insert into projects (
+         workspace_id,
+         client_id,
+         key,
+         name,
+         lead_user_id
+       )
+       select seeded_clients.workspace_id,
+              seeded_clients.id,
+              'BULK' || right(seeded_clients.name, 3),
+              'Bulk project ' || right(seeded_clients.name, 3),
+              target.user_id
+       from seeded_clients
+       inner join target
+         on target.workspace_id = seeded_clients.workspace_id`,
       [email],
     );
   });

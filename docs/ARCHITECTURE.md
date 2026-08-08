@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted for SC-004. This extends the single-application foundation from
-SC-001–SC-003 with the production platform kernel required by ADR-004 through
-ADR-006.
+Accepted through SC-005A. The SC-004 production platform kernel now supports
+the first client-project delivery slice: clients, projects, project access,
+milestones, labels, and a production backlog. Later SC-005 slices remain out of
+scope.
 
 ## System decision
 
@@ -102,9 +103,44 @@ and a resource outside the actor's tenant both return the same 404 envelope.
 Client UI visibility is convenience only, never authorization.
 
 `EntitlementPolicy` is invoked by domain mutations. The community policy allows
-all SC-004 Layer-0 operations. It intentionally contains no plan, price,
-billing-provider, or checkout logic; later entitlements can replace the policy
-without moving authorization into route handlers.
+all current operations. Authorization is resolved before that policy, so a
+guessed tenant or project cannot be distinguished through entitlement behavior.
+It intentionally contains no plan, price, billing-provider, or checkout logic;
+later entitlements can replace the policy without moving authorization into
+route handlers.
+
+Project access adds a second, narrower boundary. Workspace owners and admins
+can access every workspace project. Regular members require an explicit
+`project_memberships` row. Project creators and leads are enrolled
+automatically. The lead or a workspace owner/admin manages project lifecycle
+and access; project members manage milestones and backlog work. Removing a
+workspace membership cascades current project access while nullable user
+references retain historical lead and assignee attribution.
+
+## Client-project delivery model
+
+Migration `0003_delivery_core.sql` adds workspace-scoped clients and projects,
+project memberships, milestones, labels, work items, label assignments, and
+directed blocking dependencies. Project keys are normalized uppercase and are
+immutable and unique within a workspace. Each project owns a locked
+`next_work_item_number` counter; creation increments and returns the previous
+value in the work-item transaction, preserving unique identifiers under
+concurrency.
+
+Clients, projects, milestones, and work items use soft lifecycle fields; there
+is no hard-delete domain API. Calendar values use PostgreSQL `date`. The fixed
+workflow is `backlog`, `ready`, `in_progress`, `in_review`, `done`, and
+`canceled`. Canceled is terminal; done may reopen. Work items have an
+independent archive state and may reference one milestone, one primary
+assignee, project labels, and at most one parent. A parent cannot itself be a
+subtask, and a parent with active subtasks cannot be archived.
+
+Blocking edges stay within one project. A transaction rejects self-links,
+duplicates, archived endpoints, and directed cycles. Existing edges and
+archived milestone/parent references remain intact for history. Status-group
+ordering uses stored integer positions. An up/down action locks the project and
+swaps one adjacent item only within the unfiltered status group; creation and
+status changes append to the destination group.
 
 ## Invitations
 
@@ -127,17 +163,23 @@ metadata. Workspace initialization emits both a human
 `workspace.created.v1` event and a system
 `workspace.settings.created.v1` event. Other examples include
 `workspace.settings.updated.v1`, `membership.role.updated.v1`, and
-`workspace.invitation.accepted.v1`.
+`workspace.invitation.accepted.v1`. Delivery mutations use the same immutable
+event stream; there is no duplicate workflow-history table.
 
 Names, emails, tokens, secrets, and arbitrary customer content are forbidden in
-audit metadata. Tests assert the allowlist. Future outbound webhooks will reuse
-this versioned envelope, but SC-004 implements no event delivery or queue.
+audit metadata. Delivery events record only IDs, enum transitions, and changed
+field names—not client, project, work-item, milestone, or label content. Tests
+assert the allowlist. Future outbound webhooks will reuse this versioned
+envelope; no event delivery or queue exists yet.
 
 ## API contract
 
 Better Auth is mounted at `/api/auth/*`. ScopeDelta owns `/api/v1` routes for
-workspaces, settings, memberships, invitations, fragment-token staging, and
-acceptance. Successful payloads are `{ data: ... }`; errors are
+workspaces, settings, memberships, invitations, fragment-token staging,
+acceptance, clients, projects, project memberships, milestones, labels, work
+items, dependencies, lifecycle actions, and reorder actions. Successful
+payloads are `{ data: ... }`; paginated lists include page metadata inside
+`data`. Page size defaults to 50 and is capped at 100. Errors are
 `{ error: { code, message, fieldErrors? } }`. Route handlers parse bounded JSON,
 return stable public error codes, and do not expose database/provider details.
 
@@ -156,10 +198,11 @@ authorization from drifting.
 - `docs/`: durable decisions and operations.
 
 Unit/component tests run in jsdom. PostgreSQL integration tests validate
-migrations, persistence, tenancy, roles, last-owner protection, and safe audit
-metadata. Playwright verifies verification, onboarding, re-login persistence,
-recovery, invitation acceptance, role changes, and responsive shell behavior.
-CI runs the full suite plus production and container builds.
+migrations, persistence, tenancy, roles, last-owner protection, concurrent work
+numbering, subtask/dependency rules, pagination, and safe audit metadata.
+Playwright verifies identity and workspace journeys plus client-project backlog
+creation/editing on desktop and mobile. CI runs the full suite plus production
+and container builds.
 
 ## Deployment and privacy boundaries
 
@@ -204,6 +247,7 @@ and does not rely on source secrecy for security.
 - Server-authoritative collaboration avoids premature offline conflict
   resolution. A later desktop client can add bounded caching or retry behavior
   without relocating authorization or durable tenant state onto user devices.
-- SC-004 deliberately excludes SC-005 commercial-delivery entities, AI,
-  billing, SSO/SCIM, client portals, document storage, analytics, and outbound
-  audit webhooks.
+- SC-005A deliberately excludes workflow configuration, board and drag/drop
+  views, cross-project My Work, comments, notifications, commercial graphs,
+  Git/CI integration, AI, billing, SSO/SCIM, client portals, document storage,
+  analytics, and outbound audit webhooks.

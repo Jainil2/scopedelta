@@ -2,11 +2,11 @@
 
 ## Status and change boundary
 
-Accepted for SC-004. This runbook covers the existing public lead flow and the
-production platform kernel. It does not authorize production credentials,
-database creation, DNS changes, a paid service, or destructive database work
-without founder approval. It does not cover SC-005 product data, AI, billing,
-SSO, or client portals.
+Accepted through SC-005A. This runbook covers the public lead flow, production
+platform kernel, and additive client-project backlog migration. It does not
+authorize production credentials, database creation, DNS changes, a paid
+service, or destructive database work without founder approval. It does not
+cover later SC-005 product slices, AI, billing, SSO, or client portals.
 
 ## Supported deployment shapes
 
@@ -135,6 +135,25 @@ docker compose --env-file .env.compose up -d app
 
 Never edit a migration that has reached any shared environment. Fix forward
 with a new migration.
+
+### SC-005A migration `0003_delivery_core.sql`
+
+This migration is additive: it creates delivery enums, eight tables, indexes,
+scope constraints, and foreign keys. It does not rewrite or remove existing
+identity, workspace, lead, or audit data. Apply it before deploying code that
+serves client/project routes.
+
+Before release, verify the migration twice on a fresh disposable PostgreSQL 17
+database and run the delivery integration suite. The project-local work-number
+counter starts at 1 for new projects; no backfill is required. If deployment of
+the new application fails after migration, the previous application can run
+against the additive schema. Leave the new structures in place and fix
+forward—do not drop delivery tables or enum values in production.
+
+Backups now include client/project names and summaries, work descriptions and
+acceptance criteria, user attribution, target dates, labels, and dependency
+structure. Treat the database backup as customer-confidential content. Audit
+and application logs must continue to exclude those values.
 
 ## SMTP and DNS readiness
 

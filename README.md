@@ -3,8 +3,8 @@
 ScopeDelta is a multi-tenant, self-service client-delivery application for
 software agencies and freelancers. This repository contains one portable
 Next.js application: the public landing and paid-pilot flow, database-backed
-identity, workspace membership administration, audit events, and the initial
-authenticated shell.
+identity, workspace membership administration, audit events, client/project
+directories, milestones, and a status-grouped production backlog.
 
 ## Prerequisites
 

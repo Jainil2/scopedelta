@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 import { requireSession } from "@/lib/session";
+import { listClients, listProjects } from "@/server/delivery";
 import { getWorkspaceBySlug } from "@/server/workspaces";
 
 export default async function WorkspaceOverview({
@@ -12,11 +15,16 @@ export default async function WorkspaceOverview({
     { userId: session.user.id, email: session.user.email },
     workspaceSlug,
   );
+  const actor = { userId: session.user.id, email: session.user.email };
+  const [clientResult, projectResult] = await Promise.all([
+    listClients(actor, workspace.id, 1, 1),
+    listProjects(actor, workspace.id, 1, 1),
+  ]);
   return (
     <div className="app-content">
       <header className="app-page-header">
         <div>
-          <p className="app-eyebrow">Platform kernel</p>
+          <p className="app-eyebrow">Delivery workspace</p>
           <h1>{workspace.name}</h1>
           <p>
             Authenticated workspace · {workspace.timezone} · {workspace.role}
@@ -28,26 +36,26 @@ export default async function WorkspaceOverview({
       </header>
       <section className="kernel-proof" aria-labelledby="kernel-title">
         <div>
-          <p className="section-index">Layer 0</p>
-          <h2 id="kernel-title">The workspace is ready for delivery data.</h2>
+          <p className="section-index">Layer 1A</p>
+          <h2 id="kernel-title">Client-project delivery starts here.</h2>
         </div>
         <dl>
           <div>
-            <dt>Identity</dt>
-            <dd>Verified, database-backed session</dd>
+            <dt>Clients</dt>
+            <dd>{clientResult.pageInfo.total} delivery accounts</dd>
           </div>
           <div>
-            <dt>Authorization</dt>
-            <dd>Server-side membership and role checks</dd>
+            <dt>Projects</dt>
+            <dd>{projectResult.pageInfo.total} accessible projects</dd>
           </div>
           <div>
-            <dt>Audit</dt>
-            <dd>Human and system events are attributable</dd>
+            <dt>Access</dt>
+            <dd>Server-authorized project membership</dd>
           </div>
         </dl>
-        <p>
-          No clients, projects, work items, AI actions, or billing records exist
-          yet. Those belong to later approved layers.
+        <p className="workspace-actions">
+          <Link href={`/app/${workspace.slug}/clients`}>Manage clients</Link>
+          <Link href={`/app/${workspace.slug}/projects`}>Open projects</Link>
         </p>
       </section>
     </div>

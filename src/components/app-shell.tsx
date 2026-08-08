@@ -56,6 +56,8 @@ export function AppShell({
         </div>
         <nav className="app-navigation" aria-label="Workspace">
           <Link href={`/app/${current.slug}`}>Overview</Link>
+          <Link href={`/app/${current.slug}/clients`}>Clients</Link>
+          <Link href={`/app/${current.slug}/projects`}>Projects</Link>
           <Link href={`/app/${current.slug}/settings`}>Settings</Link>
           <Link href={`/app/${current.slug}/settings/members`}>Members</Link>
         </nav>

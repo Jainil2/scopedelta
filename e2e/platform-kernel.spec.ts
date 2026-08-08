@@ -148,6 +148,92 @@ test("password recovery uses a generic request response and revokes the old pass
   await expect(page).toHaveURL(/\/onboarding$/);
 });
 
+test("client project, milestone, and backlog work through the production UI", async ({
+  page,
+  request,
+}) => {
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const email = `delivery-${suffix}@example.test`;
+  const password = "test-password-123";
+  await signUpAndVerify(page, request, email, password, "/onboarding");
+  await page.getByLabel(/Workspace name/).fill("Atlas Delivery");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await page.getByText("New client").click();
+  await page.getByLabel("Client name").fill("Acme Labs");
+  await page.getByLabel("Internal reference").fill("ACME");
+  await page.getByLabel("Summary").fill("Primary delivery account");
+  await page.getByRole("button", { name: "Create client" }).click();
+  await expect(page.getByRole("status")).toHaveText("Client created.");
+  await expect(page.getByText("Acme Labs", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
+  await page.getByText("New project").click();
+  await page.getByLabel("Project key").fill("ACME");
+  await page.getByLabel("Project name").fill("Customer portal rebuild");
+  await page.getByLabel("Target date").fill("2026-12-18");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page.getByRole("status")).toHaveText("Project created.");
+  await page.getByRole("link", { name: /Customer portal rebuild/ }).click();
+
+  await page.getByText("New milestone").click();
+  const milestoneForm = page.locator("form").filter({
+    has: page.getByRole("button", { name: "Create milestone" }),
+  });
+  await milestoneForm.getByLabel("Name").fill("Private beta");
+  await milestoneForm.getByLabel("Target date").fill("2026-11-20");
+  await milestoneForm.getByRole("button", { name: "Create milestone" }).click();
+  await expect(page.getByRole("status")).toHaveText("Milestone created.");
+  await page.getByRole("link", { name: "Backlog" }).click();
+
+  await page.getByText("New work item").click();
+  const createForm = page.locator("form.work-form").filter({
+    has: page.getByRole("button", { name: "Create work item" }),
+  });
+  await createForm.getByLabel("Title").fill("Implement secure account shell");
+  await createForm.getByLabel("Status").selectOption("ready");
+  await createForm.getByLabel("Priority").selectOption("high");
+  await createForm
+    .getByLabel("Milestone")
+    .selectOption({ label: "Private beta" });
+  await createForm
+    .getByLabel("Acceptance criteria")
+    .fill("Only authorized project members can open the shell.");
+  await createForm.getByRole("button", { name: "Create work item" }).click();
+  await expect(page.getByRole("status")).toHaveText("Work item created.");
+  await expect(page.getByText("ACME-1", { exact: true })).toBeVisible();
+
+  await page
+    .getByRole("button", { name: /Implement secure account shell/ })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Edit work item" });
+  await editor.getByLabel("Status").selectOption("in_progress");
+  await editor.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("status")).toHaveText("Work item updated.");
+  await expect(
+    page.getByRole("heading", { name: "In progress" }),
+  ).toBeVisible();
+
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await page
+      .locator("nextjs-portal")
+      .evaluateAll((elements) =>
+        elements.forEach((element) => element.remove()),
+      );
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-005a-backlog-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-005a-backlog-mobile.png",
+      fullPage: true,
+    });
+  }
+});
+
 test("duplicate signup stays generic and an expired database session is rejected", async ({
   page,
   request,

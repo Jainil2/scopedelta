@@ -58,6 +58,14 @@ describe("authenticated application shell", () => {
     expect(
       screen.getByRole("link", { name: "Skip to content" }),
     ).toHaveAttribute("href", "#main-content");
+    expect(screen.getByRole("link", { name: "Clients" })).toHaveAttribute(
+      "href",
+      "/app/northstar-delivery-a1b2c3d4/clients",
+    );
+    expect(screen.getByRole("link", { name: "Projects" })).toHaveAttribute(
+      "href",
+      "/app/northstar-delivery-a1b2c3d4/projects",
+    );
     expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
   });
 });

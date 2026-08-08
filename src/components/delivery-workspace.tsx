@@ -71,6 +71,23 @@ type WorkItem = {
   labels: Label[];
 };
 
+type PageInfo = {
+  page: number;
+  pageSize: number;
+  total: number;
+  hasNextPage: boolean;
+};
+
+type BacklogFilters = {
+  page: number;
+  pageSize: number;
+  status?: WorkItem["status"];
+  priority?: WorkItem["priority"];
+  assigneeUserId?: string;
+  milestoneId?: string;
+  labelId?: string;
+};
+
 const workflow = [
   ["backlog", "Backlog"],
   ["ready", "Ready"],
@@ -82,12 +99,16 @@ const workflow = [
 
 export function ClientDirectory({
   workspaceId,
+  workspaceSlug,
   role,
   clients,
+  pageInfo,
 }: Readonly<{
   workspaceId: string;
+  workspaceSlug: string;
   role: "owner" | "admin" | "member";
   clients: Client[];
+  pageInfo: PageInfo;
 }>) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -230,6 +251,29 @@ export function ClientDirectory({
           </div>
         )}
       </div>
+      <nav className="pagination" aria-label="Client pages">
+        {pageInfo.page > 1 ? (
+          <Link
+            href={`/app/${workspaceSlug}/clients?page=${pageInfo.page - 1}`}
+          >
+            Previous
+          </Link>
+        ) : (
+          <span />
+        )}
+        <span>
+          Page {pageInfo.page} · {pageInfo.total} clients
+        </span>
+        {pageInfo.hasNextPage ? (
+          <Link
+            href={`/app/${workspaceSlug}/clients?page=${pageInfo.page + 1}`}
+          >
+            Next
+          </Link>
+        ) : (
+          <span />
+        )}
+      </nav>
     </div>
   );
 }
@@ -238,14 +282,18 @@ export function ProjectDirectory({
   workspaceId,
   workspaceSlug,
   clients,
+  clientPageInfo,
   members,
   projects,
+  projectPageInfo,
 }: Readonly<{
   workspaceId: string;
   workspaceSlug: string;
   clients: Client[];
+  clientPageInfo: PageInfo;
   members: Member[];
   projects: Project[];
+  projectPageInfo: PageInfo;
 }>) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -335,8 +383,40 @@ export function ProjectDirectory({
               <button disabled={pending}>Create project</button>
             </form>
           ) : (
-            <p>Create an active client before starting a project.</p>
+            <p>No active clients on this client page.</p>
           )}
+          <nav
+            className="pagination compact-pagination"
+            aria-label="Client option pages"
+          >
+            {clientPageInfo.page > 1 ? (
+              <Link
+                href={projectDirectoryHref(
+                  workspaceSlug,
+                  projectPageInfo.page,
+                  clientPageInfo.page - 1,
+                )}
+              >
+                Previous clients
+              </Link>
+            ) : (
+              <span />
+            )}
+            <span>Client choices · page {clientPageInfo.page}</span>
+            {clientPageInfo.hasNextPage ? (
+              <Link
+                href={projectDirectoryHref(
+                  workspaceSlug,
+                  projectPageInfo.page,
+                  clientPageInfo.page + 1,
+                )}
+              >
+                Next clients
+              </Link>
+            ) : (
+              <span />
+            )}
+          </nav>
         </details>
       </header>
       {message ? <p role="status">{message}</p> : null}
@@ -372,6 +452,37 @@ export function ProjectDirectory({
           </div>
         )}
       </div>
+      <nav className="pagination" aria-label="Project pages">
+        {projectPageInfo.page > 1 ? (
+          <Link
+            href={projectDirectoryHref(
+              workspaceSlug,
+              projectPageInfo.page - 1,
+              clientPageInfo.page,
+            )}
+          >
+            Previous
+          </Link>
+        ) : (
+          <span />
+        )}
+        <span>
+          Page {projectPageInfo.page} · {projectPageInfo.total} projects
+        </span>
+        {projectPageInfo.hasNextPage ? (
+          <Link
+            href={projectDirectoryHref(
+              workspaceSlug,
+              projectPageInfo.page + 1,
+              clientPageInfo.page,
+            )}
+          >
+            Next
+          </Link>
+        ) : (
+          <span />
+        )}
+      </nav>
     </div>
   );
 }
@@ -750,29 +861,31 @@ export function BacklogWorkspace({
   milestones,
   labels,
   dependencies,
-  filtered,
+  filters,
 }: Readonly<{
   workspaceId: string;
   workspaceSlug: string;
   project: Project;
   items: WorkItem[];
-  pageInfo: {
-    page: number;
-    pageSize: number;
-    total: number;
-    hasNextPage: boolean;
-  };
+  pageInfo: PageInfo;
   members: Member[];
   milestones: Milestone[];
   labels: Label[];
   dependencies: Dependency[];
-  filtered: boolean;
+  filters: BacklogFilters;
 }>) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
   const [selected, setSelected] = useState<WorkItem | null>(null);
   const workComposerRef = useRef<HTMLDetailsElement>(null);
+  const filtered = Boolean(
+    filters.status ||
+    filters.priority ||
+    filters.assigneeUserId ||
+    filters.milestoneId ||
+    filters.labelId,
+  );
   const grouped = useMemo(
     () =>
       workflow.map(([id, label]) => ({
@@ -895,7 +1008,14 @@ export function BacklogWorkspace({
       {message ? <p role="status">{message}</p> : null}
       <div className="backlog-toolbar">
         <form className="backlog-filters">
-          <select name="status" aria-label="Filter by status" defaultValue="">
+          {filters.pageSize !== 50 ? (
+            <input type="hidden" name="pageSize" value={filters.pageSize} />
+          ) : null}
+          <select
+            name="status"
+            aria-label="Filter by status"
+            defaultValue={filters.status || ""}
+          >
             <option value="">All statuses</option>
             {workflow.map(([id, label]) => (
               <option value={id} key={id}>
@@ -906,7 +1026,7 @@ export function BacklogWorkspace({
           <select
             name="assigneeUserId"
             aria-label="Filter by assignee"
-            defaultValue=""
+            defaultValue={filters.assigneeUserId || ""}
           >
             <option value="">All assignees</option>
             {members.map((member) => (
@@ -918,7 +1038,7 @@ export function BacklogWorkspace({
           <select
             name="priority"
             aria-label="Filter by priority"
-            defaultValue=""
+            defaultValue={filters.priority || ""}
           >
             <option value="">All priorities</option>
             {["urgent", "high", "medium", "low", "none"].map((priority) => (
@@ -928,7 +1048,7 @@ export function BacklogWorkspace({
           <select
             name="milestoneId"
             aria-label="Filter by milestone"
-            defaultValue=""
+            defaultValue={filters.milestoneId || ""}
           >
             <option value="">All milestones</option>
             {milestones.map((milestone) => (
@@ -937,7 +1057,11 @@ export function BacklogWorkspace({
               </option>
             ))}
           </select>
-          <select name="labelId" aria-label="Filter by label" defaultValue="">
+          <select
+            name="labelId"
+            aria-label="Filter by label"
+            defaultValue={filters.labelId || ""}
+          >
             <option value="">All labels</option>
             {labels.map((label) => (
               <option value={label.id} key={label.id}>
@@ -1029,13 +1153,15 @@ export function BacklogWorkspace({
       </div>
       <nav className="pagination" aria-label="Backlog pages">
         {pageInfo.page > 1 ? (
-          <Link href={`?page=${pageInfo.page - 1}`}>Previous</Link>
+          <Link href={backlogPageHref(filters, pageInfo.page - 1)}>
+            Previous
+          </Link>
         ) : (
           <span />
         )}
         <span>Page {pageInfo.page}</span>
         {pageInfo.hasNextPage ? (
-          <Link href={`?page=${pageInfo.page + 1}`}>Next</Link>
+          <Link href={backlogPageHref(filters, pageInfo.page + 1)}>Next</Link>
         ) : (
           <span />
         )}
@@ -1300,6 +1426,31 @@ function WorkItemForm({
       </button>
     </form>
   );
+}
+
+function backlogPageHref(filters: BacklogFilters, page: number) {
+  const query = new URLSearchParams();
+  if (filters.status) query.set("status", filters.status);
+  if (filters.assigneeUserId)
+    query.set("assigneeUserId", filters.assigneeUserId);
+  if (filters.priority) query.set("priority", filters.priority);
+  if (filters.milestoneId) query.set("milestoneId", filters.milestoneId);
+  if (filters.labelId) query.set("labelId", filters.labelId);
+  if (filters.pageSize !== 50) query.set("pageSize", String(filters.pageSize));
+  query.set("page", String(page));
+  return `?${query.toString()}`;
+}
+
+function projectDirectoryHref(
+  workspaceSlug: string,
+  projectPage: number,
+  clientPage: number,
+) {
+  const query = new URLSearchParams({
+    page: String(projectPage),
+    clientPage: String(clientPage),
+  });
+  return `/app/${workspaceSlug}/projects?${query.toString()}`;
 }
 
 function workItemPayload(formData: FormData) {

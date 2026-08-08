@@ -232,6 +232,23 @@ test("client project, milestone, and backlog work through the production UI", as
       fullPage: true,
     });
   }
+
+  const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
+  await seedDirectoryVolume(email);
+  await page.goto(`/app/${workspaceSlug}/clients?page=3`);
+  await expect(
+    page.getByText("Bulk client 105", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Page 3 · 106 clients")).toBeVisible();
+
+  await page.goto(`/app/${workspaceSlug}/projects?page=3&clientPage=3`);
+  await expect(
+    page.getByRole("link", { name: /Bulk project 105/ }),
+  ).toBeVisible();
+  await page.getByText("New project").click();
+  await expect(
+    page.getByRole("option", { name: "Bulk client 105" }),
+  ).toBeAttached();
 });
 
 test("duplicate signup stays generic and an expired database session is rejected", async ({
@@ -349,6 +366,44 @@ async function expireSessions(email: string) {
       `update sessions
        set expires_at = now() - interval '1 minute'
        where user_id = (select id from users where email = $1)`,
+      [email],
+    );
+  });
+}
+
+async function seedDirectoryVolume(email: string) {
+  await withTestDatabase(async (pool) => {
+    await pool.query(
+      `with target as (
+         select workspaces.id as workspace_id, users.id as user_id
+         from users
+         inner join memberships on memberships.user_id = users.id
+         inner join workspaces on workspaces.id = memberships.workspace_id
+         where users.email = $1
+         limit 1
+       ), seeded_clients as (
+         insert into clients (workspace_id, name)
+         select target.workspace_id,
+                'Bulk client ' || lpad(series::text, 3, '0')
+         from target
+         cross join generate_series(1, 105) as series
+         returning id, workspace_id, name
+       )
+       insert into projects (
+         workspace_id,
+         client_id,
+         key,
+         name,
+         lead_user_id
+       )
+       select seeded_clients.workspace_id,
+              seeded_clients.id,
+              'BULK' || right(seeded_clients.name, 3),
+              'Bulk project ' || right(seeded_clients.name, 3),
+              target.user_id
+       from seeded_clients
+       inner join target
+         on target.workspace_id = seeded_clients.workspace_id`,
       [email],
     );
   });

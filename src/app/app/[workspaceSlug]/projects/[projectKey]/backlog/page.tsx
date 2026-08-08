@@ -45,13 +45,7 @@ export default async function BacklogPage({
       milestones={data.milestones}
       labels={data.labels}
       dependencies={data.dependencies}
-      filtered={Boolean(
-        filters.status ||
-        filters.priority ||
-        filters.assigneeUserId ||
-        filters.milestoneId ||
-        filters.labelId,
-      )}
+      filters={filters}
     />
   );
 }

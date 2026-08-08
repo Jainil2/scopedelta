@@ -159,6 +159,23 @@ export const workItemPriority = pgEnum("work_item_priority", [
   "urgent",
 ]);
 
+export const workItemSubscriptionState = pgEnum(
+  "work_item_subscription_state",
+  ["watching", "muted"],
+);
+
+export const workItemSubscriptionSource = pgEnum(
+  "work_item_subscription_source",
+  ["automatic", "explicit"],
+);
+
+export const notificationKind = pgEnum("notification_kind", [
+  "mention",
+  "work_item_assigned",
+  "comment_added",
+  "comment_reply",
+]);
+
 export const workspaces = pgTable("workspaces", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
@@ -594,6 +611,280 @@ export const workItemDependencies = pgTable(
   ],
 );
 
+export const workItemComments = pgTable(
+  "work_item_comments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    workItemId: uuid("work_item_id").notNull(),
+    parentCommentId: uuid("parent_comment_id"),
+    authorUserId: uuid("author_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    requestId: uuid("request_id").notNull(),
+    body: text("body"),
+    version: integer("version").default(1).notNull(),
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.workItemId, table.projectId],
+      foreignColumns: [workItems.id, workItems.projectId],
+      name: "work_item_comments_item_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.parentCommentId, table.workItemId, table.projectId],
+      foreignColumns: [table.id, table.workItemId, table.projectId],
+      name: "work_item_comments_parent_item_project_fk",
+    }).onDelete("restrict"),
+    unique("work_item_comments_id_item_project_unique").on(
+      table.id,
+      table.workItemId,
+      table.projectId,
+    ),
+    uniqueIndex("work_item_comments_item_request_uidx").on(
+      table.workItemId,
+      table.requestId,
+    ),
+    index("work_item_comments_item_created_idx").on(
+      table.workItemId,
+      table.createdAt,
+      table.id,
+    ),
+    index("work_item_comments_author_idx").on(
+      table.authorUserId,
+      table.createdAt,
+    ),
+    check("work_item_comments_version_positive", sql`${table.version} > 0`),
+    check(
+      "work_item_comments_body_state",
+      sql`(${table.deletedAt} is null and ${table.body} is not null and char_length(btrim(${table.body})) between 1 and 10000) or (${table.deletedAt} is not null and ${table.body} is null)`,
+    ),
+  ],
+);
+
+export const workItemCommentRevisions = pgTable(
+  "work_item_comment_revisions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    commentId: uuid("comment_id")
+      .notNull()
+      .references(() => workItemComments.id, { onDelete: "cascade" }),
+    editorUserId: uuid("editor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("work_item_comment_revisions_version_uidx").on(
+      table.commentId,
+      table.version,
+    ),
+    index("work_item_comment_revisions_comment_created_idx").on(
+      table.commentId,
+      table.createdAt,
+    ),
+    check(
+      "work_item_comment_revisions_version_positive",
+      sql`${table.version} > 0`,
+    ),
+  ],
+);
+
+export const workItemCommentMentions = pgTable(
+  "work_item_comment_mentions",
+  {
+    commentId: uuid("comment_id")
+      .notNull()
+      .references(() => workItemComments.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.commentId, table.userId] }),
+    index("work_item_comment_mentions_user_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const projectNotes = pgTable(
+  "project_notes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    authorUserId: uuid("author_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    requestId: uuid("request_id").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    uniqueIndex("project_notes_project_request_uidx").on(
+      table.projectId,
+      table.requestId,
+    ),
+    index("project_notes_project_archived_updated_idx").on(
+      table.projectId,
+      table.archivedAt,
+      table.updatedAt,
+      table.id,
+    ),
+    check(
+      "project_notes_title_length",
+      sql`char_length(btrim(${table.title})) between 1 and 120`,
+    ),
+    check(
+      "project_notes_body_length",
+      sql`char_length(btrim(${table.body})) between 1 and 20000`,
+    ),
+  ],
+);
+
+export const projectNoteMentions = pgTable(
+  "project_note_mentions",
+  {
+    noteId: uuid("note_id")
+      .notNull()
+      .references(() => projectNotes.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.noteId, table.userId] }),
+    index("project_note_mentions_user_idx").on(table.userId, table.createdAt),
+  ],
+);
+
+export const workItemSubscriptions = pgTable(
+  "work_item_subscriptions",
+  {
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    workItemId: uuid("work_item_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    state: workItemSubscriptionState("state").default("watching").notNull(),
+    source: workItemSubscriptionSource("source").default("automatic").notNull(),
+    ...timestampColumns,
+  },
+  (table) => [
+    primaryKey({ columns: [table.workItemId, table.userId] }),
+    foreignKey({
+      columns: [table.workItemId, table.projectId],
+      foreignColumns: [workItems.id, workItems.projectId],
+      name: "work_item_subscriptions_item_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.projectId, table.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: "work_item_subscriptions_project_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.workspaceId, table.userId],
+      foreignColumns: [memberships.workspaceId, memberships.userId],
+      name: "work_item_subscriptions_workspace_member_fk",
+    }).onDelete("cascade"),
+    index("work_item_subscriptions_project_state_idx").on(
+      table.projectId,
+      table.state,
+      table.userId,
+    ),
+  ],
+);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    kind: notificationKind("kind").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    projectId: uuid("project_id").notNull(),
+    workItemId: uuid("work_item_id"),
+    commentId: uuid("comment_id").references(() => workItemComments.id, {
+      onDelete: "cascade",
+    }),
+    projectNoteId: uuid("project_note_id").references(() => projectNotes.id, {
+      onDelete: "cascade",
+    }),
+    dedupeKey: text("dedupe_key").notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.projectId, table.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: "notifications_project_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.workItemId, table.projectId],
+      foreignColumns: [workItems.id, workItems.projectId],
+      name: "notifications_item_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.workspaceId, table.userId],
+      foreignColumns: [memberships.workspaceId, memberships.userId],
+      name: "notifications_workspace_member_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("notifications_recipient_dedupe_uidx").on(
+      table.workspaceId,
+      table.userId,
+      table.dedupeKey,
+    ),
+    index("notifications_recipient_read_created_idx").on(
+      table.workspaceId,
+      table.userId,
+      table.readAt,
+      table.createdAt,
+      table.id,
+    ),
+    index("notifications_project_recipient_idx").on(
+      table.projectId,
+      table.userId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export type WorkspaceRole = (typeof workspaceRole.enumValues)[number];
 export type ClientLifecycle = (typeof clientLifecycle.enumValues)[number];
 export type ProjectLifecycle = (typeof projectLifecycle.enumValues)[number];
@@ -601,3 +892,8 @@ export type MilestoneStatus = (typeof milestoneStatus.enumValues)[number];
 export type CycleLifecycle = (typeof cycleLifecycle.enumValues)[number];
 export type WorkItemStatus = (typeof workItemStatus.enumValues)[number];
 export type WorkItemPriority = (typeof workItemPriority.enumValues)[number];
+export type WorkItemSubscriptionState =
+  (typeof workItemSubscriptionState.enumValues)[number];
+export type WorkItemSubscriptionSource =
+  (typeof workItemSubscriptionSource.enumValues)[number];
+export type NotificationKind = (typeof notificationKind.enumValues)[number];

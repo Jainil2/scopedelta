@@ -671,6 +671,12 @@ export function ProjectOverview({
           <Link href={`/app/${workspaceSlug}/projects/${project.key}/cycles`}>
             Cycles
           </Link>
+          <Link href={`/app/${workspaceSlug}/projects/${project.key}/brief`}>
+            Brief
+          </Link>
+          <Link href={`/app/${workspaceSlug}/projects/${project.key}/activity`}>
+            Activity
+          </Link>
         </nav>
       </header>
       {canManage ? (
@@ -1314,6 +1320,12 @@ export function BacklogWorkspace({
                 (item) => !item.parentId && item.id !== selected.id,
               )}
             />
+            <Link
+              className="button-secondary collaboration-link"
+              href={`/app/${workspaceSlug}/projects/${project.key}/work/${selected.id}`}
+            >
+              Open discussion and activity
+            </Link>
             <section className="dependency-editor">
               <h3>Blocking dependencies</h3>
               <ul>

@@ -79,9 +79,9 @@ Layer-1 implementation is intentionally split into SC-005A → SC-005B → SC-00
 | Comments/activity | Local/LAN | SC-005C |
 | Project/spec notes | Local/LAN | SC-005C |
 | In-app notifications/inbox | Local/LAN | SC-005C |
-| Optional outbound email notifications | Hybrid/optional external | SC-005C |
+| Optional outbound email notifications | Hybrid/optional external | Deferred; not implemented by #25 |
 
-Layer-1 has **no mandatory external API or paid service dependency**. The required collaboration loop must work entirely on customer-controlled infrastructure. Optional outbound email can use customer SMTP or a later ScopeDelta-managed email path.
+Layer-1 has **no mandatory external API or paid service dependency**. The required collaboration loop must work entirely on customer-controlled infrastructure. Optional outbound email remains deferred; SC-005C deliberately adds no collaboration mail job, provider, queue, or template.
 
 ## Layer 2 — Commercial Delivery Graph
 

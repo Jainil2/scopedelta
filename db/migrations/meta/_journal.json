@@ -36,6 +36,13 @@
       "when": 1786182555742,
       "tag": "0004_planning_execution",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786204647006,
+      "tag": "0005_collaboration_context",
+      "breakpoints": true
     }
   ]
 }

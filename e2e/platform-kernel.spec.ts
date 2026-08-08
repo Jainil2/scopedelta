@@ -353,6 +353,150 @@ test("client project, milestone, and backlog work through the production UI", as
   ).toBeAttached();
 });
 
+test("project brief, work discussion, activity, and inbox are accessible and bounded", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000);
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const email = `collaboration-${suffix}@example.test`;
+  const password = "test-password-123";
+  await signUpAndVerify(page, request, email, password, "/onboarding");
+  await page.getByLabel(/Workspace name/).fill("Team Context");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await page.getByText("New client").click();
+  await page.getByLabel("Client name").fill("Collaboration client");
+  await page.getByRole("button", { name: "Create client" }).click();
+  await expect(page.getByRole("status")).toHaveText("Client created.");
+
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
+  await page.getByText("New project").click();
+  await page.getByLabel("Project key").fill("TEAM");
+  await page.getByLabel("Project name").fill("Contextual delivery");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await page.getByRole("link", { name: /Contextual delivery/ }).click();
+  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByText("New work item").click();
+  const createForm = page.locator("form.work-form").filter({
+    has: page.getByRole("button", { name: "Create work item" }),
+  });
+  await createForm.getByLabel("Title").fill("Confirm handoff context");
+  await createForm.getByLabel("Status").selectOption("in_progress");
+  await createForm.getByRole("button", { name: "Create work item" }).click();
+  await expect(page.getByRole("status")).toHaveText("Work item created.");
+  await page.getByRole("button", { name: /Confirm handoff context/ }).click();
+  const editor = page.getByRole("dialog", { name: "Edit work item" });
+  await editor
+    .getByRole("link", { name: "Open discussion and activity" })
+    .click();
+
+  await expect(
+    page.getByRole("heading", { name: "Confirm handoff context" }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Add a comment")
+    .fill("The handoff decision is ready for review.");
+  await page.getByLabel("Mention").selectOption({ index: 1 });
+  await page.getByRole("button", { name: "Insert mention" }).click();
+  await page.getByRole("button", { name: "Comment" }).click();
+  await expect(page.getByText(/handoff decision is ready/)).toBeVisible();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page
+    .getByLabel("Edit comment")
+    .fill("The handoff decision is ready for final review.");
+  await page.getByRole("button", { name: "Save edit" }).click();
+  await expect(page.getByText(/ready for final review/)).toBeVisible();
+  await page.getByRole("button", { name: "History", exact: true }).click();
+  await expect(page.getByText("Version 1")).toBeVisible();
+  await page.getByRole("button", { name: "Hide history" }).click();
+  await page.getByRole("button", { name: "Reply" }).click();
+  await page.getByLabel("Reply").fill("Acknowledged and captured.");
+  await page.getByRole("button", { name: "Comment" }).click();
+  await expect(page.getByText("Acknowledged and captured.")).toBeVisible();
+  await page.getByRole("button", { name: "Watching" }).click();
+  await expect(
+    page.getByRole("button", { name: "Watch", exact: true }),
+  ).toBeVisible();
+  await expectBasicAccessibility(page);
+
+  const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-005c-discussion-desktop.png",
+      fullPage: true,
+    });
+  }
+  await page.goto(`/app/${workspaceSlug}/projects/TEAM/brief`);
+  await page.getByLabel("Title").fill("Launch constraint");
+  await page
+    .getByLabel("Context")
+    .fill("Keep the rollout limited to the internal delivery team.");
+  await page.getByRole("button", { name: "Save note" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Launch constraint" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page
+    .getByLabel("Context")
+    .fill(
+      "Keep the rollout limited to the internal delivery team until review.",
+    );
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("button", { name: "Save changes" })).toBeHidden();
+  await expect(page.getByText(/until review/)).toBeVisible();
+  await expectBasicAccessibility(page);
+
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-005c-project-brief-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-005c-project-brief-mobile.png",
+      fullPage: true,
+    });
+  }
+
+  await page.goto(`/app/${workspaceSlug}/projects/TEAM/activity`);
+  await expect(page.getByText("created a project note")).toBeVisible();
+  await seedCollaborationNotifications(email, "TEAM", 55);
+  await page.goto(`/app/${workspaceSlug}/inbox`);
+  await expect(page.locator("article.notification-row")).toHaveCount(50);
+  await expect(
+    page.getByText("Showing 50 of 55 accessible notifications."),
+  ).toBeVisible();
+  await expectBasicAccessibility(page);
+
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-005c-inbox-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-005c-inbox-mobile.png",
+      fullPage: true,
+    });
+    await page.goto(
+      `/app/${workspaceSlug}/projects/TEAM/work/${await workItemIdFor(email, "TEAM")}`,
+    );
+    await removeDevIndicator(page);
+    await page.screenshot({
+      path: "docs/screenshots/sc-005c-discussion-mobile.png",
+      fullPage: true,
+    });
+  }
+});
+
 test("duplicate signup stays generic and an expired database session is rejected", async ({
   page,
   request,
@@ -590,7 +734,96 @@ async function seedPlanningVolume(email: string) {
   });
 }
 
-async function withTestDatabase(work: (pool: Pool) => Promise<void>) {
+async function seedCollaborationNotifications(
+  email: string,
+  projectKey: string,
+  total: number,
+) {
+  await withTestDatabase(async (pool) => {
+    await pool.query(
+      `with target as (
+         select workspaces.id as workspace_id,
+                users.id as recipient_id,
+                projects.id as project_id,
+                work_items.id as work_item_id
+         from users
+         inner join memberships on memberships.user_id = users.id
+         inner join workspaces on workspaces.id = memberships.workspace_id
+         inner join projects on projects.workspace_id = workspaces.id and projects.key = $2
+         inner join work_items on work_items.project_id = projects.id
+         where users.email = $1
+         limit 1
+       ), actor as (
+         insert into users (name, email, email_verified)
+         select 'Volume collaborator',
+                'collaboration-volume-' || substr(target.recipient_id::text, 1, 8) || '@example.test',
+                true
+         from target
+         returning id
+       )
+       insert into notifications (
+         workspace_id, user_id, kind, actor_user_id,
+         project_id, work_item_id, dedupe_key, created_at
+       )
+       select target.workspace_id,
+              target.recipient_id,
+              case when series % 3 = 0 then 'mention'::notification_kind
+                   when series % 3 = 1 then 'comment_added'::notification_kind
+                   else 'comment_reply'::notification_kind end,
+              actor.id,
+              target.project_id,
+              target.work_item_id,
+              'volume-notification-' || series,
+              now() - (series || ' minutes')::interval
+       from target cross join actor cross join generate_series(1, $3::int) as series`,
+      [email, projectKey, total],
+    );
+  });
+}
+
+async function workItemIdFor(email: string, projectKey: string) {
+  return withTestDatabase(async (pool) => {
+    const result = await pool.query<{ id: string }>(
+      `select work_items.id
+       from users
+       inner join memberships on memberships.user_id = users.id
+       inner join projects on projects.workspace_id = memberships.workspace_id
+       inner join work_items on work_items.project_id = projects.id
+       where users.email = $1 and projects.key = $2
+       order by work_items.number
+       limit 1`,
+      [email, projectKey],
+    );
+    return result.rows[0]!.id;
+  });
+}
+
+async function expectBasicAccessibility(page: Page) {
+  const violations = await page.evaluate(() => {
+    const issues: string[] = [];
+    const ids = [...document.querySelectorAll<HTMLElement>("[id]")].map(
+      (element) => element.id,
+    );
+    if (new Set(ids).size !== ids.length) issues.push("duplicate ids");
+    for (const control of document.querySelectorAll<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >("input:not([type=hidden]), select, textarea")) {
+      const labelled = Boolean(
+        control.getAttribute("aria-label") ||
+        control.getAttribute("aria-labelledby") ||
+        control.labels?.length,
+      );
+      if (!labelled) issues.push(`unlabelled ${control.tagName.toLowerCase()}`);
+    }
+    for (const image of document.querySelectorAll("img")) {
+      if (!image.hasAttribute("alt")) issues.push("image missing alt");
+    }
+    return issues;
+  });
+  expect(violations).toEqual([]);
+}
+
+async function withTestDatabase<T>(work: (pool: Pool) => Promise<T>) {
   const connectionString = process.env.TEST_DATABASE_URL;
   if (!connectionString) {
     throw new Error("TEST_DATABASE_URL is required for browser tests.");
@@ -599,7 +832,7 @@ async function withTestDatabase(work: (pool: Pool) => Promise<void>) {
     connectionString,
   });
   try {
-    await work(pool);
+    return await work(pool);
   } finally {
     await pool.end();
   }

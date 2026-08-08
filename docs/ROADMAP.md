@@ -2,7 +2,7 @@
 
 This roadmap builds ScopeDelta as an AI-native client software delivery operating system for 50–500-person software service organizations.
 
-The product is built layer by layer. Each layer must be useful, secure and production-quality before downstream layers rely on it. We are not attempting to clone every Jira/Linear feature before shipping differentiation.
+The product is built layer by layer. Each layer must be useful, secure and production-quality before downstream layers rely on it. We are not attempting to clone every Jira/Linear/Plane feature before shipping differentiation.
 
 The runtime model is **one server-authoritative product core with multiple clients/deployments**: ScopeDelta Cloud, customer self-hosted/VPC, company LAN/private server, web client and a later first-party desktop client. Core Local/LAN capabilities must not require ScopeDelta Cloud.
 
@@ -12,58 +12,122 @@ Already complete:
 
 - deployable Next.js application foundation;
 - CI, lint/typecheck/test/build gates;
-- public landing page;
-- production Netlify deployment and basic operations runbook.
+- public landing page and production Netlify deployment;
+- Layer 0 production platform kernel: authentication/recovery, workspaces/memberships, PostgreSQL persistence/migrations, authorization, audit/events, shared service/API boundary, self-host/LAN-compatible operation and deployment/backup documentation.
 
-These are technical/marketing foundations only. They are not the delivery product.
-
-## Layer 0 — Platform Kernel
-
-### Outcome
-A production-capable cloud/self-host-compatible multi-tenant kernel that future delivery features and clients can safely build on.
-
-### Scope
-- self-service authentication and recovery;
-- organizations/workspaces and membership;
-- initial role/permission model;
-- durable production database and migrations;
-- strict tenant isolation;
-- audit/event foundation;
-- stable identifier/time conventions;
-- server API/service boundaries and webhook/event conventions;
-- entitlement/feature hooks for later cloud plans;
-- environment/configuration conventions that work for managed cloud and self-hosted deployments;
-- compatibility with a future desktop client over the same server/domain/API boundary;
-- production operations documentation.
-
-### Exit criteria
-A fresh production-like environment can create accounts/workspaces, persist tenant-owned records and prove cross-tenant isolation through automated negative tests. Architecture does not depend on a closed hosted-only service and does not assume the browser is the only first-party client.
+SC-004 / issue #8 is complete via PR #22.
 
 ## Layer 1 — Delivery Core
 
 ### Outcome
 A software-delivery team can manage normal client project work in ScopeDelta without needing Jira/Linear for basic issue/project tracking.
 
-### Scope
-- clients and engagements;
-- projects;
-- milestones/releases;
-- cycles/sprints where enabled;
-- work items/subtasks;
-- assignments, priority, estimates and dependencies;
-- acceptance criteria;
-- configurable but opinionated statuses/workflows;
-- list and board views first; additional views only when justified;
-- comments, activity and explicit decisions;
-- lightweight project/specification pages;
-- filtering, search and personal/project action views;
-- useful defaults for software delivery rather than a blank workflow builder.
+### Layer-1 research decision — 2026-08-08
 
-### Differentiating requirement
-Even before the full Commercial Delivery Graph exists, domain relationships must be ready to connect work to client requests, requirements, scope and approvals later. Do not build a generic issue tracker with no client-delivery semantics.
+The required competitor/workflow checkpoint audited Jira, Linear, Plane, and practitioner agency workflows. The conclusion is to **avoid implementing Layer 1 as one giant parity issue**.
 
-### Exit criteria
-A real software project can be planned and executed through milestones/cycles/work items with clean role-aware daily workflows and no cross-tenant leakage.
+- Jira demonstrates mature workflow/configuration depth; ScopeDelta should not reproduce its schemes/screens/workflow administration in the default path.
+- Linear is the interaction-speed benchmark, but its core issue ownership is team-centric.
+- Plane already demonstrates broad self-hosted PM capability, so self-hosting and raw feature breadth are not a defensible USP.
+- Software-service delivery is naturally organized around the client project while contributors often span multiple client projects.
+
+Durable research: `docs/research/LAYER1_DELIVERY_CORE_RESEARCH_2026-08.md`.
+
+### Layer-1 opinionated model
+
+The canonical delivery spine is:
+
+`Workspace → Client → Project → Milestone → Work item`
+
+Cycles are an optional internal planning overlay:
+
+`Project → Cycle → Work item`
+
+Rules:
+
+- each project belongs to one client;
+- each work item belongs to one project;
+- work may belong to zero/one milestone and zero/one cycle;
+- milestones are delivery checkpoints; cycles are optional timeboxes;
+- one work item has zero/one accountable primary assignee in Layer 1;
+- acceptance criteria are first-class;
+- project membership can narrow access but never widen workspace authority.
+
+Default workflow:
+
+`Backlog → Ready → In Progress → In Review → Done`
+
+`Canceled` is a terminal non-completed outcome.
+
+Do not build a generic workflow editor, scheme/screen system, configurable work-item hierarchy, custom-field platform, approval engine, or large view/reporting matrix in Layer 1.
+
+### SC-005A — Client-project backlog foundation
+
+Outcome: a PM can create a real client project and operate a useful backlog without administration/configuration first.
+
+Scope:
+
+- clients;
+- projects, project membership and lifecycle;
+- milestones;
+- default workflow;
+- work items with stable human-readable project identifiers;
+- primary assignee, priority, estimate, target date, labels and first-class acceptance criteria;
+- subtasks and `blocks / blocked-by` dependencies;
+- project overview and list/backlog;
+- authorization, audit/events, shared service/API rules and bounded query behavior.
+
+Runtime: required scope is **Local/LAN** with no mandatory external API or paid service.
+
+### SC-005B — Planning and daily execution
+
+Outcome: delivery teams can plan and execute daily work across multiple client projects.
+
+Scope:
+
+- board;
+- optional cycles;
+- milestone/cycle planning;
+- cross-project `My work`;
+- practical project/work search and filtering;
+- reproducible/shareable view state where useful;
+- efficient daily interactions;
+- realistic seeded performance/accessibility validation.
+
+Runtime: required scope is **Local/LAN**.
+
+### SC-005C — Collaboration and project context
+
+Outcome: internal clarifications, discussion, activity and lightweight project context stay attached to delivery work rather than immediately fragmenting into unrelated systems.
+
+Scope:
+
+- work-item comments;
+- mentions/subscriptions;
+- activity/history presentation;
+- lightweight internal project brief/context notes;
+- in-app notifications/inbox;
+- optional outbound email through the existing SMTP boundary where justified;
+- complete Layer-1 usability/reliability hardening.
+
+Runtime: comments/activity/notes/in-app inbox are **Local/LAN**; optional outbound email is **Hybrid/optional external**.
+
+### Explicit Layer-1 non-goals
+
+- Jira-style workflow/screen/scheme/custom-field administration;
+- arbitrary work-item type/hierarchy systems, initiatives, goals or modules;
+- Gantt/calendar/spreadsheet/report-builder/dashboard proliferation;
+- time tracking, billing, margin or resource/capacity planning;
+- client portal/external collaboration;
+- generic CRM/customer-feedback/intake system;
+- Slack/Teams-style chat;
+- full workspace wiki/knowledge system;
+- Git hosting/CI/CD and Git-derived release readiness;
+- AI/agents and generic automation marketplace.
+
+### Layer-1 exit criteria
+
+SC-005A, SC-005B and SC-005C are all complete and production-quality. A real client software project can be created, planned, executed and discussed with role-aware daily workflows; non-Scrum projects remain first-class; contributors can see work across projects; tenant/project authorization is tested; and the domain boundaries are stable enough for the Commercial Delivery Graph to attach without redesigning Layer 1.
 
 ## Cross-cutting track — Desktop Client
 
@@ -71,7 +135,7 @@ A real software project can be planned and executed through milestones/cycles/wo
 Give daily users a first-party Windows/macOS/Linux client without creating a second product backend or requiring ScopeDelta Cloud.
 
 ### Timing
-DX-001 remains blocked until Layer 1 has a stable, useful daily workflow and shared API/domain boundary. It is not automatically prioritized ahead of the Commercial Delivery Graph; CEO/product decides when the incremental desktop value justifies the engineering slot.
+DX-001 remains blocked until Layer 1 has a stable, useful daily workflow and shared API/domain boundary. It is not automatically prioritized ahead of the Commercial Delivery Graph; CEO/product decides after SC-005C whether the incremental desktop value justifies delaying Layer 2.
 
 ### Scope
 - reuse the same product/frontend semantics where practical;
@@ -141,7 +205,7 @@ Planning, implementation, QA and acceptance form one traceable delivery chain.
 - trace requested → planned → implemented → tested → accepted.
 
 ### Boundary
-Do not build Git hosting or general CI/CD infrastructure in these layers. Integrate mature systems. For private/self-host deployments, support local provider equivalents where practical rather than forcing public SaaS APIs.
+Do not build Git hosting or general CI/CD infrastructure. Integrate mature systems. For private/self-host deployments, support local provider equivalents where practical rather than forcing public SaaS APIs.
 
 ### Exit criteria
 A PM/developer/QA/client can trace a meaningful requirement or approved change through implementation, verification and acceptance.
@@ -250,7 +314,7 @@ Every capability must be classified before implementation as one of:
 4. **Managed-cloud only** — ScopeDelta-operated convenience/operations rather than unique product logic.
 5. **Desktop client** — client-side feature using the shared server/domain rules.
 
-The current planning baseline contains 97 capability units. `docs/FEATURE_RUNTIME_MATRIX.md` is the durable inventory and RS-002 maintains it.
+The current planning baseline contains 98 capability units. `docs/FEATURE_RUNTIME_MATRIX.md` is the durable inventory and RS-002 maintains it.
 
 ## Competitive product rule
 
@@ -269,21 +333,23 @@ GitHub issues are the executable source of truth. Exactly one highest-priority u
 
 Current intended sequence:
 
-1. SC-004 — Layer 0 Platform Kernel
-2. SC-005 — Layer 1 Delivery Core
-3. CEO decision: either DX-001 desktop track or SC-006 Commercial Delivery Graph is next based on product value/engineering readiness; desktop is not allowed to delay the core differentiator without evidence.
-4. SC-006 — Layer 2 Commercial Delivery Graph
-5. SC-007 — Layer 3 Client Collaboration & Negotiation
-6. SC-008 — Layer 4 Engineering & QA Delivery Loop
-7. SC-009 — Layer 5 AI-Native Delivery Intelligence
-8. SC-010 — Layer 6 Subscription, Cloud Economics & Source Distribution
-9. SC-011 — Layer 7 Portfolio, Operations & Self-Service Scale
-10. SC-012 — Layer 8 Enterprise & GA Hardening
+1. SC-004 — Layer 0 Platform Kernel — **DONE**
+2. SC-005A / #23 — Layer 1A client-project backlog foundation
+3. SC-005B / #24 — Layer 1B planning and daily execution
+4. SC-005C / #25 — Layer 1C collaboration and project context
+5. CEO decision after complete Layer 1: either DX-001 desktop track or SC-006 Commercial Delivery Graph next; desktop must not delay the core differentiator without evidence.
+6. SC-006 — Layer 2 Commercial Delivery Graph
+7. SC-007 — Layer 3 Client Collaboration & Negotiation
+8. SC-008 — Layer 4 Engineering & QA Delivery Loop
+9. SC-009 — Layer 5 AI-Native Delivery Intelligence
+10. SC-010 — Layer 6 Subscription, Cloud Economics & Source Distribution
+11. SC-011 — Layer 7 Portfolio, Operations & Self-Service Scale
+12. SC-012 — Layer 8 Enterprise & GA Hardening
 
 Cross-cutting control work:
 
-- ARCH-001 — verify runtime topology during SC-004 review;
-- RS-002 — maintain feature/runtime/cost classification;
+- ARCH-001 — runtime topology/control artifact;
+- RS-002 — maintain feature/runtime/cost classification before each downstream layer is ready;
 - LIC-001 — founder/legal source-license gate before public core-source release.
 
-This sequence may be split into smaller executable issues as implementation evidence requires; the layers are product boundaries, not permission for giant PRs.
+The layers are product boundaries, not permission for giant PRs. The SC-005 split is the precedent: research should deliberately produce smaller executable vertical slices when that reduces risk and accelerates useful delivery.

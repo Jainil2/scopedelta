@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 
 import { ProjectTabs } from "@/components/planning-workspace";
 
@@ -603,6 +603,7 @@ export function WorkCollaborationWorkspace({
   activityPage,
   members,
   initialWatching,
+  commercialPanel,
 }: Readonly<{
   actorUserId: string;
   workspaceId: string;
@@ -615,6 +616,7 @@ export function WorkCollaborationWorkspace({
   activityPage: PageInfo;
   members: Member[];
   initialWatching: boolean;
+  commercialPanel?: ReactNode;
 }>) {
   const router = useRouter();
   const [comments, setComments] = useState(initialComments);
@@ -743,6 +745,7 @@ export function WorkCollaborationWorkspace({
           {watching ? "Watching" : "Watch"}
         </button>
       </header>
+      {commercialPanel}
       <div className="work-collaboration-grid">
         <div className="discussion-thread">
           <div className="section-heading">

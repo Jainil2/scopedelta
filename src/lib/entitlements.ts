@@ -5,7 +5,8 @@ export type PlatformCapability =
   | "workspace.invitation.accept"
   | "delivery.client.manage"
   | "delivery.project.manage"
-  | "delivery.work.manage";
+  | "delivery.work.manage"
+  | "commercial.baseline.manage";
 
 export type EntitlementContext = {
   userId: string;

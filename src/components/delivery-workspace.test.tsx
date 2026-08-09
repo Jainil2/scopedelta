@@ -78,6 +78,8 @@ describe("delivery workspace", () => {
             acceptanceCriteria: "Tenant access is enforced.",
             status: "ready",
             priority: "high",
+            purpose: "unclassified",
+            commercialBasisCount: 0,
             assigneeUserId: "owner-id",
             assigneeName: "Owner",
             estimatePoints: 5,

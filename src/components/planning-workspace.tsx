@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   apiRequest,
   backlogPageHref,
+  CommercialProvenanceBadge,
   type BacklogFilters,
   type Cycle,
   type Label,
@@ -38,6 +39,8 @@ type MyWorkItem = Pick<
   | "cycleName"
   | "cycleLifecycle"
   | "labels"
+  | "purpose"
+  | "commercialBasisCount"
 > & {
   projectId: string;
   projectKey: string;
@@ -234,6 +237,7 @@ export function BoardWorkspace({
                       <span>{item.assigneeName || "Unassigned"}</span>
                       <span>{item.milestoneName || "No milestone"}</span>
                       <span>{item.cycleName || "No cycle"}</span>
+                      <CommercialProvenanceBadge item={item} />
                     </div>
                     <form
                       className="kanban-plan-form"
@@ -633,6 +637,7 @@ export function MyWorkWorkspace({
               <span>{item.milestoneName || "No milestone"}</span>
               <span>{item.cycleName || "No cycle"}</span>
               <span>{item.targetDate || "No target date"}</span>
+              <CommercialProvenanceBadge item={item} />
             </div>
             <form
               action={(formData) => changeStatus(item, formData)}
@@ -838,7 +843,14 @@ export function ProjectTabs({
 }: Readonly<{
   workspaceSlug: string;
   projectKey: string;
-  current: "overview" | "backlog" | "board" | "cycles" | "brief" | "activity";
+  current:
+    | "overview"
+    | "backlog"
+    | "board"
+    | "cycles"
+    | "brief"
+    | "commercial"
+    | "activity";
 }>) {
   const tabs = [
     ["overview", "Overview", `/app/${workspaceSlug}/projects/${projectKey}`],
@@ -850,6 +862,11 @@ export function ProjectTabs({
     ["board", "Board", `/app/${workspaceSlug}/projects/${projectKey}/board`],
     ["cycles", "Cycles", `/app/${workspaceSlug}/projects/${projectKey}/cycles`],
     ["brief", "Brief", `/app/${workspaceSlug}/projects/${projectKey}/brief`],
+    [
+      "commercial",
+      "Commercial",
+      `/app/${workspaceSlug}/projects/${projectKey}/commercial`,
+    ],
     [
       "activity",
       "Activity",

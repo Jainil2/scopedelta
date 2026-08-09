@@ -353,6 +353,116 @@ test("client project, milestone, and backlog work through the production UI", as
   ).toBeAttached();
 });
 
+test("commercial baseline evidence and advisory work provenance stay linked", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const email = `commercial-${suffix}@example.test`;
+  const password = "test-password-123";
+  const commercialText =
+    "Deliver an authenticated client portal with tenant-safe project access.";
+
+  await signUpAndVerify(page, request, email, password, "/onboarding");
+  await page.getByLabel(/Workspace name/).fill("Commercial Delivery");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await page.getByText("New client").click();
+  await page.getByLabel("Client name").fill("Acme Commercial");
+  await page.getByRole("button", { name: "Create client" }).click();
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
+  await page.getByText("New project").click();
+  await page.getByLabel("Project key").fill("SCOPE");
+  await page.getByLabel("Project name").fill("Evidence-backed delivery");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await page.getByRole("link", { name: /Evidence-backed delivery/ }).click();
+  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByText("New work item").click();
+  const workForm = page.locator("form.work-form").filter({
+    has: page.getByRole("button", { name: "Create work item" }),
+  });
+  await workForm.getByLabel("Title").fill("Build authenticated portal");
+  await workForm.getByLabel("Status").selectOption("in_progress");
+  await workForm.getByRole("button", { name: "Create work item" }).click();
+  await expect(page.getByRole("status")).toHaveText("Work item created.");
+
+  await page.getByRole("link", { name: "Commercial" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Commercial", exact: true }),
+  ).toBeVisible();
+  await page.getByText("Add commercial source").click();
+  const sourceForm = page.locator("form.commercial-source-form");
+  await sourceForm.getByLabel("Source name").fill("Signed SOW extract");
+  await sourceForm.getByLabel("Commercial text").fill(commercialText);
+  await sourceForm.getByRole("button", { name: "Preserve source" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Commercial source preserved and parsed.",
+  );
+  await expect(page.getByText("Ready", { exact: true })).toBeVisible();
+
+  await page.getByLabel("Ready source").selectOption({
+    label: "Signed SOW extract",
+  });
+  await page.getByRole("button", { name: "Create baseline v1" }).click();
+  await expect(page.getByText("Version 1", { exact: true })).toBeVisible();
+  const evidence = page.locator("textarea.source-text-inspector");
+  await expect(evidence).toHaveValue(commercialText);
+  await evidence.press("ControlOrMeta+A");
+  await expect(page.locator(".selected-evidence blockquote")).toHaveText(
+    commercialText,
+  );
+  await page.getByLabel("Scope item").fill("Authenticated client portal");
+  await page.getByLabel("Evidence label").fill("Deliverable paragraph");
+  await page.getByRole("button", { name: "Add scope item" }).click();
+  await expect(
+    page.getByText("Authenticated client portal", { exact: true }),
+  ).toBeVisible();
+
+  const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
+  await page.goto(`/app/${workspaceSlug}/projects/SCOPE/backlog`);
+  await expect(
+    page.getByText("Needs classification", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /Build authenticated portal/ })
+    .click();
+  await page
+    .getByRole("link", { name: "Open discussion and activity" })
+    .click();
+  await expect(page.getByRole("heading", { name: "Classify" })).toBeVisible();
+  await page.getByLabel("Work purpose").selectOption("client_delivery");
+  await page.getByRole("button", { name: "Update classification" }).click();
+  await expect(page.getByRole("heading", { name: "Unlinked" })).toBeVisible();
+  await page.getByLabel("Baseline scope").selectOption({
+    label: "deliverable · Authenticated client portal",
+  });
+  await page.getByRole("button", { name: "Link commercial basis" }).click();
+  await expect(page.getByRole("heading", { name: "Linked" })).toBeVisible();
+  await expect(
+    page.getByText("Authenticated client portal", { exact: true }),
+  ).toBeVisible();
+
+  await page.goto(`/app/${workspaceSlug}/projects/SCOPE/commercial`);
+  const statusStrip = page.locator(".commercial-status-strip");
+  await expect(statusStrip.getByText("1", { exact: true })).toHaveCount(1);
+  await expect(statusStrip.getByText("Baseline linked")).toBeVisible();
+
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-006a-commercial-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-006a-commercial-mobile.png",
+      fullPage: true,
+    });
+  }
+});
+
 test("project brief, work discussion, activity, and inbox are accessible and bounded", async ({
   page,
   request,

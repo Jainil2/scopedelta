@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   date,
   foreignKey,
   index,
@@ -17,6 +18,18 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+const bytea = customType<{ data: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+  toDriver(value) {
+    return value;
+  },
+  fromDriver(value) {
+    return Buffer.from(value as Uint8Array);
+  },
+});
 
 const timestampColumns = {
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -157,6 +170,36 @@ export const workItemPriority = pgEnum("work_item_priority", [
   "medium",
   "high",
   "urgent",
+]);
+
+export const workPurpose = pgEnum("work_purpose", [
+  "unclassified",
+  "client_delivery",
+  "delivery_support",
+  "internal",
+]);
+
+export const commercialSourceKind = pgEnum("commercial_source_kind", [
+  "pasted_text",
+  "pdf",
+  "docx",
+]);
+
+export const commercialParseState = pgEnum("commercial_parse_state", [
+  "ready",
+  "needs_ocr",
+  "failed",
+]);
+
+export const commercialScopeKind = pgEnum("commercial_scope_kind", [
+  "deliverable",
+  "requirement",
+  "exclusion",
+  "constraint",
+]);
+
+export const commercialBasisType = pgEnum("commercial_basis_type", [
+  "baseline_scope_item",
 ]);
 
 export const workItemSubscriptionState = pgEnum(
@@ -479,6 +522,7 @@ export const workItems = pgTable(
     acceptanceCriteria: text("acceptance_criteria"),
     status: workItemStatus("status").default("backlog").notNull(),
     priority: workItemPriority("priority").default("none").notNull(),
+    purpose: workPurpose("purpose").default("unclassified").notNull(),
     assigneeUserId: uuid("assignee_user_id").references(() => users.id, {
       onDelete: "restrict",
     }),
@@ -536,6 +580,348 @@ export const workItems = pgTable(
     check(
       "work_items_estimate_range",
       sql`${table.estimatePoints} is null or ${table.estimatePoints} between 1 and 100`,
+    ),
+  ],
+);
+
+export const commercialEvidenceSources = pgTable(
+  "commercial_evidence_sources",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
+    kind: commercialSourceKind("kind").notNull(),
+    name: text("name").notNull(),
+    mediaType: text("media_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    contentSha256: text("content_sha256").notNull(),
+    originalContent: bytea("original_content").notNull(),
+    extractedText: text("extracted_text"),
+    parseState: commercialParseState("parse_state").notNull(),
+    parseErrorCode: text("parse_error_code"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("commercial_sources_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    uniqueIndex("commercial_sources_project_request_uidx").on(
+      table.projectId,
+      table.requestId,
+    ),
+    index("commercial_sources_project_created_idx").on(
+      table.projectId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      "commercial_sources_name_length",
+      sql`char_length(btrim(${table.name})) between 1 and 160`,
+    ),
+    check(
+      "commercial_sources_byte_size",
+      sql`${table.byteSize} between 1 and 5242880`,
+    ),
+    check(
+      "commercial_sources_hash_format",
+      sql`${table.contentSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "commercial_sources_parse_state",
+      sql`(${table.parseState} = 'ready' and ${table.extractedText} is not null and char_length(${table.extractedText}) between 1 and 500000 and ${table.parseErrorCode} is null) or (${table.parseState} <> 'ready' and ${table.extractedText} is null and ${table.parseErrorCode} is not null)`,
+    ),
+  ],
+);
+
+export const commercialBaselines = pgTable(
+  "commercial_baselines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("commercial_baselines_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    uniqueIndex("commercial_baselines_project_uidx").on(table.projectId),
+  ],
+);
+
+export const commercialBaselineVersions = pgTable(
+  "commercial_baseline_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    baselineId: uuid("baseline_id").notNull(),
+    sourceId: uuid("source_id").notNull(),
+    versionNumber: integer("version_number").notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("commercial_baseline_versions_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.baselineId, table.projectId],
+      foreignColumns: [commercialBaselines.id, commercialBaselines.projectId],
+      name: "commercial_baseline_versions_baseline_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.sourceId, table.projectId],
+      foreignColumns: [
+        commercialEvidenceSources.id,
+        commercialEvidenceSources.projectId,
+      ],
+      name: "commercial_baseline_versions_source_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("commercial_baseline_versions_number_uidx").on(
+      table.baselineId,
+      table.versionNumber,
+    ),
+    check(
+      "commercial_baseline_versions_number_positive",
+      sql`${table.versionNumber} > 0`,
+    ),
+  ],
+);
+
+export const commercialScopeItems = pgTable(
+  "commercial_scope_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    baselineVersionId: uuid("baseline_version_id").notNull(),
+    requestId: uuid("request_id").notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("commercial_scope_items_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.baselineVersionId, table.projectId],
+      foreignColumns: [
+        commercialBaselineVersions.id,
+        commercialBaselineVersions.projectId,
+      ],
+      name: "commercial_scope_items_version_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("commercial_scope_items_project_request_uidx").on(
+      table.projectId,
+      table.requestId,
+    ),
+    index("commercial_scope_items_version_archived_idx").on(
+      table.baselineVersionId,
+      table.archivedAt,
+      table.id,
+    ),
+  ],
+);
+
+export const commercialScopeItemRevisions = pgTable(
+  "commercial_scope_item_revisions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    scopeItemId: uuid("scope_item_id").notNull(),
+    requestId: uuid("request_id").notNull(),
+    revisionNumber: integer("revision_number").notNull(),
+    kind: commercialScopeKind("kind").notNull(),
+    title: text("title").notNull(),
+    details: text("details"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("commercial_scope_revisions_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.scopeItemId, table.projectId],
+      foreignColumns: [commercialScopeItems.id, commercialScopeItems.projectId],
+      name: "commercial_scope_revisions_item_project_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("commercial_scope_revisions_number_uidx").on(
+      table.scopeItemId,
+      table.revisionNumber,
+    ),
+    uniqueIndex("commercial_scope_revisions_request_uidx").on(
+      table.scopeItemId,
+      table.requestId,
+    ),
+    check(
+      "commercial_scope_revisions_number_positive",
+      sql`${table.revisionNumber} > 0`,
+    ),
+    check(
+      "commercial_scope_revisions_title_length",
+      sql`char_length(btrim(${table.title})) between 1 and 240`,
+    ),
+    check(
+      "commercial_scope_revisions_details_length",
+      sql`${table.details} is null or char_length(${table.details}) <= 10000`,
+    ),
+  ],
+);
+
+export const commercialEvidenceAnchors = pgTable(
+  "commercial_evidence_anchors",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    sourceId: uuid("source_id").notNull(),
+    startOffset: integer("start_offset").notNull(),
+    endOffset: integer("end_offset").notNull(),
+    label: text("label"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("commercial_evidence_anchors_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.sourceId, table.projectId],
+      foreignColumns: [
+        commercialEvidenceSources.id,
+        commercialEvidenceSources.projectId,
+      ],
+      name: "commercial_evidence_anchors_source_project_fk",
+    }).onDelete("restrict"),
+    index("commercial_evidence_anchors_source_offset_idx").on(
+      table.sourceId,
+      table.startOffset,
+      table.id,
+    ),
+    check(
+      "commercial_evidence_anchors_offsets",
+      sql`${table.startOffset} >= 0 and ${table.endOffset} > ${table.startOffset} and ${table.endOffset} <= 500000`,
+    ),
+    check(
+      "commercial_evidence_anchors_label_length",
+      sql`${table.label} is null or char_length(${table.label}) <= 120`,
+    ),
+  ],
+);
+
+export const commercialScopeRevisionAnchors = pgTable(
+  "commercial_scope_revision_anchors",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    scopeItemRevisionId: uuid("scope_item_revision_id").notNull(),
+    evidenceAnchorId: uuid("evidence_anchor_id").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.scopeItemRevisionId, table.evidenceAnchorId],
+    }),
+    foreignKey({
+      columns: [table.scopeItemRevisionId, table.projectId],
+      foreignColumns: [
+        commercialScopeItemRevisions.id,
+        commercialScopeItemRevisions.projectId,
+      ],
+      name: "commercial_scope_revision_anchors_revision_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.evidenceAnchorId, table.projectId],
+      foreignColumns: [
+        commercialEvidenceAnchors.id,
+        commercialEvidenceAnchors.projectId,
+      ],
+      name: "commercial_scope_revision_anchors_anchor_project_fk",
+    }).onDelete("restrict"),
+  ],
+);
+
+export const commercialBasisLinks = pgTable(
+  "commercial_basis_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    workItemId: uuid("work_item_id").notNull(),
+    basisType: commercialBasisType("basis_type").notNull(),
+    scopeItemRevisionId: uuid("scope_item_revision_id"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.workItemId, table.projectId],
+      foreignColumns: [workItems.id, workItems.projectId],
+      name: "commercial_basis_links_work_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.scopeItemRevisionId, table.projectId],
+      foreignColumns: [
+        commercialScopeItemRevisions.id,
+        commercialScopeItemRevisions.projectId,
+      ],
+      name: "commercial_basis_links_scope_revision_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("commercial_basis_links_work_scope_uidx").on(
+      table.workItemId,
+      table.scopeItemRevisionId,
+    ),
+    index("commercial_basis_links_project_work_idx").on(
+      table.projectId,
+      table.workItemId,
+    ),
+    check(
+      "commercial_basis_links_target",
+      sql`${table.basisType} = 'baseline_scope_item' and ${table.scopeItemRevisionId} is not null`,
     ),
   ],
 );
@@ -892,6 +1278,15 @@ export type MilestoneStatus = (typeof milestoneStatus.enumValues)[number];
 export type CycleLifecycle = (typeof cycleLifecycle.enumValues)[number];
 export type WorkItemStatus = (typeof workItemStatus.enumValues)[number];
 export type WorkItemPriority = (typeof workItemPriority.enumValues)[number];
+export type WorkPurpose = (typeof workPurpose.enumValues)[number];
+export type CommercialSourceKind =
+  (typeof commercialSourceKind.enumValues)[number];
+export type CommercialParseState =
+  (typeof commercialParseState.enumValues)[number];
+export type CommercialScopeKind =
+  (typeof commercialScopeKind.enumValues)[number];
+export type CommercialBasisType =
+  (typeof commercialBasisType.enumValues)[number];
 export type WorkItemSubscriptionState =
   (typeof workItemSubscriptionState.enumValues)[number];
 export type WorkItemSubscriptionSource =

@@ -2,10 +2,12 @@
 
 ## Status
 
-Accepted through SC-005C. The SC-004 production platform kernel now supports
+Implemented through SC-006A. The SC-004 production platform kernel now supports
 the client-project delivery foundation plus production board, optional cycle
 planning, authorized cross-project daily execution, and internal project
-collaboration. SC-006 commercial-delivery behavior remains out of scope.
+collaboration. SC-006A adds the first evidence-backed commercial baseline and
+advisory work provenance; amendment ingestion, impact analysis, and change-order
+workflows remain in SC-006B/SC-006C.
 
 ## System decision
 
@@ -199,6 +201,53 @@ lock. All collaboration and inbox flows use PostgreSQL and the existing
 versioned API, so Local/LAN deployments need no email, queue, realtime
 infrastructure, or other external service.
 
+## Commercial baseline and delivery provenance
+
+Migration `0006_commercial_baseline.sql` adds a project-scoped commercial
+delivery graph in PostgreSQL. It stores immutable source originals and hashes,
+deterministically extracted text, one initial baseline version, human-curated
+scope items with immutable revisions, exact character-offset evidence anchors,
+work-purpose classification, and revision-specific commercial-basis links.
+Existing work items default to `unclassified`; the migration does not infer or
+rewrite business meaning.
+
+Commercial source intake accepts pasted text, text-bearing PDF, and DOCX. Each
+source is limited to 5 MB and each project to 100 sources. PDF extraction stops
+at 500 pages and all extracted text stops at 500,000 normalized characters.
+DOCX archives are inspected before extraction and reject more than 1,000 entries
+or 25 MB uncompressed. Image-only PDFs enter the explicit `needs_ocr` state;
+SC-006A does not perform OCR, semantic extraction, or AI classification.
+Malformed, password-protected, and resource-limit failures retain the private
+original with a stable parser state and safe error code so a manager can retry
+or use pasted text.
+
+The initial baseline is created only from a successfully parsed source and is
+fixed at version 1. Scope items are limited to 500, are manually classified as
+deliverable, requirement, exclusion, or constraint, and require at least one
+anchor into that baseline source. Editing creates a new immutable revision;
+archive/restore changes lifecycle without deleting history. Work links target a
+specific current scope-item revision, so later revisions do not rewrite the
+commercial meaning that authorized existing work.
+
+Workspace owners/admins and the project lead manage commercial evidence,
+baselines, scope, classification, and links. Other authorized project members
+can read concise work provenance without receiving source bodies or downloads.
+All identifiers are checked against the current project; cross-project anchors,
+scope revisions, and work links retain the same indistinguishable 404 boundary
+as the delivery domain. Source bodies, extracted text, scope text, and evidence
+excerpts are customer-confidential content and never enter audit metadata or
+operational logs.
+
+Drift is an advisory projection over active work: unclassified work needs
+classification, client-delivery work without a basis link is commercially
+unlinked, client-delivery work with a link is baseline-linked, and
+delivery-support/internal work is shown separately. Warnings appear in the
+Commercial workspace and compact work-item badges but do not block delivery
+mutations. Reads are bounded and drift supports normal URL pagination. The
+implementation deliberately uses relational constraints and aggregate queries;
+no graph database, queue, object store, or managed document service is required
+for managed or Local/LAN deployment.
+
 ## Invitations
 
 An invitation stores a normalized email, role, expiry, and SHA-256 hash of a
@@ -235,6 +284,9 @@ Better Auth is mounted at `/api/auth/*`. ScopeDelta owns `/api/v1` routes for
 workspaces, settings, memberships, invitations, fragment-token staging,
 acceptance, clients, projects, project memberships, milestones, cycles, labels,
 work items, My work, dependencies, lifecycle actions, and reorder actions.
+Project routes also expose commercial sources/downloads/retries, the initial
+baseline, scope revisions and archive lifecycle, work purpose/basis links, and
+paginated advisory drift.
 Successful payloads are `{ data: ... }`; paginated lists include page metadata
 inside `data`. Page size defaults to 50 and is capped at 100. Errors are
 `{ error: { code, message, fieldErrors? } }`. Route handlers parse bounded JSON,
@@ -256,10 +308,11 @@ authorization from drifting.
 
 Unit/component tests run in jsdom. PostgreSQL integration tests validate
 migrations, persistence, tenancy, roles, last-owner protection, concurrent work
-numbering, subtask/dependency rules, pagination, and safe audit metadata.
+numbering, subtask/dependency rules, commercial revision/link history, parser
+failure isolation, cross-project graph rejection, pagination, and safe audit metadata.
 Playwright verifies identity and workspace journeys plus client-project backlog
-creation/editing on desktop and mobile. CI runs the full suite plus production
-and container builds.
+creation/editing and the evidence-to-work commercial path on desktop and mobile.
+CI runs the full suite plus production and container builds.
 
 ## Deployment and privacy boundaries
 
@@ -306,6 +359,7 @@ and does not rely on source secrecy for security.
   without relocating authorization or durable tenant state onto user devices.
 - SC-005B deliberately keeps the fixed workflow and explicit accessible move
   controls; it does not add drag/drop, workflow configuration, saved views,
-  comments, notifications, commercial graphs, Git/CI integration, AI, billing,
-  SSO/SCIM, client portals, document storage, analytics, or outbound audit
-  webhooks.
+  Git/CI integration, AI, billing, SSO/SCIM, client portals, analytics, or
+  outbound audit webhooks. SC-006A stores only bounded commercial evidence in
+  PostgreSQL and does not add OCR, automated extraction, amendments, impact
+  analysis, or change-order workflows.

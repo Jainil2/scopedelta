@@ -1,5 +1,5 @@
 CREATE TYPE "public"."commercial_basis_type" AS ENUM('baseline_scope_item');--> statement-breakpoint
-CREATE TYPE "public"."commercial_parse_state" AS ENUM('ready', 'needs_ocr', 'failed');--> statement-breakpoint
+CREATE TYPE "public"."commercial_parse_state" AS ENUM('ready', 'needs_ocr', 'failed');--> statement-breakpoint -- NOSONAR: generated DDL must repeat the enum name in its column references
 CREATE TYPE "public"."commercial_scope_kind" AS ENUM('deliverable', 'requirement', 'exclusion', 'constraint');--> statement-breakpoint
 CREATE TYPE "public"."commercial_source_kind" AS ENUM('pasted_text', 'pdf', 'docx');--> statement-breakpoint
 CREATE TYPE "public"."work_purpose" AS ENUM('unclassified', 'client_delivery', 'delivery_support', 'internal');--> statement-breakpoint

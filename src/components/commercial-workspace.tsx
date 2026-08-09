@@ -8,6 +8,7 @@ import {
   useState,
   useTransition,
   type FormEvent,
+  type RefObject,
 } from "react";
 
 import { apiRequest, type Project } from "@/components/delivery-workspace";
@@ -598,104 +599,147 @@ export function CommercialWorkspace({
             </div>
           </section>
 
-          <section className="commercial-section drift-ledger-section">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Advisory only</p>
-                <h2>Active delivery drift</h2>
-              </div>
-              <span className="metadata">
-                Warnings never block delivery actions
-              </span>
-            </div>
-            <div className="drift-ledger">
-              {drift.data.map((item) => (
-                <Link
-                  href={`/app/${workspaceSlug}/projects/${project.key}/work/${item.id}`}
-                  key={item.id}
-                >
-                  <span className={`drift-state drift-${item.state}`}>
-                    {driftLabel(item.state)}
-                  </span>
-                  <strong>
-                    {project.key}-{item.number} · {item.title}
-                  </strong>
-                  <span>{item.status.replaceAll("_", " ")}</span>
-                </Link>
-              ))}
-              {!drift.data.length ? (
-                <p className="empty-copy">
-                  No active work needs commercial review.
-                </p>
-              ) : null}
-            </div>
-            {drift.page.pages > 1 ? (
-              <nav className="pagination" aria-label="Commercial drift pages">
-                {drift.page.number > 1 ? (
-                  <Link href={`?page=${drift.page.number - 1}`}>Previous</Link>
-                ) : (
-                  <span>Previous</span>
-                )}
-                <span>
-                  Page {drift.page.number} of {drift.page.pages}
-                </span>
-                {drift.page.number < drift.page.pages ? (
-                  <Link href={`?page=${drift.page.number + 1}`}>Next</Link>
-                ) : (
-                  <span>Next</span>
-                )}
-              </nav>
-            ) : null}
-          </section>
+          <DriftLedger
+            drift={drift}
+            workspaceSlug={workspaceSlug}
+            projectKey={project.key}
+          />
         </div>
 
-        <aside className="evidence-inspector" aria-label="Evidence inspector">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Evidence inspector</p>
-              <h2>{source?.name || "Choose a source"}</h2>
-            </div>
-          </div>
-          {loadingSource ? <p>Loading source…</p> : null}
-          {source?.parseState === "ready" && source.extractedText ? (
-            <>
-              <p className="metadata">
-                Select exact supporting text. Anchors store normalized character
-                offsets, not copied contract text.
-              </p>
-              <textarea
-                ref={sourceTextRef}
-                className="source-text-inspector"
-                readOnly
-                value={source.extractedText}
-                onSelect={(event) =>
-                  setSelection({
-                    start: event.currentTarget.selectionStart,
-                    end: event.currentTarget.selectionEnd,
-                  })
-                }
-              />
-              <div className="evidence-offsets">
-                <span>Start {selection.start}</span>
-                <span>End {selection.end}</span>
-                <span>
-                  {Math.max(0, selection.end - selection.start)} chars
-                </span>
-              </div>
-            </>
-          ) : source ? (
-            <p className="empty-copy">
-              {parseStateLabel(source)}. The original is preserved; retry
-              parsing or add pasted text as a fallback.
-            </p>
-          ) : (
-            <p className="empty-copy">
-              Inspect a source to select evidence for a scope item.
-            </p>
-          )}
-        </aside>
+        <EvidenceInspector
+          source={source}
+          loading={loadingSource}
+          selection={selection}
+          sourceTextRef={sourceTextRef}
+          onSelectionChange={setSelection}
+        />
       </div>
     </main>
+  );
+}
+
+function DriftLedger({
+  drift,
+  workspaceSlug,
+  projectKey,
+}: Readonly<{
+  drift: DriftPage;
+  workspaceSlug: string;
+  projectKey: string;
+}>) {
+  return (
+    <section className="commercial-section drift-ledger-section">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Advisory only</p>
+          <h2>Active delivery drift</h2>
+        </div>
+        <span className="metadata">Warnings never block delivery actions</span>
+      </div>
+      <div className="drift-ledger">
+        {drift.data.map((item) => (
+          <Link
+            href={`/app/${workspaceSlug}/projects/${projectKey}/work/${item.id}`}
+            key={item.id}
+          >
+            <span className={`drift-state drift-${item.state}`}>
+              {driftLabel(item.state)}
+            </span>
+            <strong>
+              {projectKey}-{item.number} · {item.title}
+            </strong>
+            <span>{item.status.replaceAll("_", " ")}</span>
+          </Link>
+        ))}
+        {!drift.data.length ? (
+          <p className="empty-copy">No active work needs commercial review.</p>
+        ) : null}
+      </div>
+      {drift.page.pages > 1 ? (
+        <nav className="pagination" aria-label="Commercial drift pages">
+          {drift.page.number > 1 ? (
+            <Link href={`?page=${drift.page.number - 1}`}>Previous</Link>
+          ) : (
+            <span>Previous</span>
+          )}
+          <span>
+            Page {drift.page.number} of {drift.page.pages}
+          </span>
+          {drift.page.number < drift.page.pages ? (
+            <Link href={`?page=${drift.page.number + 1}`}>Next</Link>
+          ) : (
+            <span>Next</span>
+          )}
+        </nav>
+      ) : null}
+    </section>
+  );
+}
+
+function EvidenceInspector({
+  source,
+  loading,
+  selection,
+  sourceTextRef,
+  onSelectionChange,
+}: Readonly<{
+  source: SourceDetail | null;
+  loading: boolean;
+  selection: { start: number; end: number };
+  sourceTextRef: RefObject<HTMLTextAreaElement | null>;
+  onSelectionChange: (selection: { start: number; end: number }) => void;
+}>) {
+  let content = (
+    <p className="empty-copy">
+      Inspect a source to select evidence for a scope item.
+    </p>
+  );
+  if (source?.parseState === "ready" && source.extractedText) {
+    content = (
+      <>
+        <p className="metadata">
+          Select exact supporting text. Anchors store normalized character
+          offsets, not copied contract text.
+        </p>
+        <textarea
+          ref={sourceTextRef}
+          className="source-text-inspector"
+          readOnly
+          value={source.extractedText}
+          onSelect={(event) =>
+            onSelectionChange({
+              start: event.currentTarget.selectionStart,
+              end: event.currentTarget.selectionEnd,
+            })
+          }
+        />
+        <div className="evidence-offsets">
+          <span>Start {selection.start}</span>
+          <span>End {selection.end}</span>
+          <span>{Math.max(0, selection.end - selection.start)} chars</span>
+        </div>
+      </>
+    );
+  } else if (source) {
+    content = (
+      <p className="empty-copy">
+        {parseStateLabel(source)}. The original is preserved; retry parsing or
+        add pasted text as a fallback.
+      </p>
+    );
+  }
+
+  return (
+    <aside className="evidence-inspector" aria-label="Evidence inspector">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Evidence inspector</p>
+          <h2>{source?.name || "Choose a source"}</h2>
+        </div>
+      </div>
+      {loading ? <p>Loading source…</p> : null}
+      {content}
+    </aside>
   );
 }
 

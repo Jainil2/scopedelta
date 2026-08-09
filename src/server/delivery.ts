@@ -22,6 +22,7 @@ import {
   auditEvents,
   clients,
   commercialBasisLinks,
+  commercialDecisions,
   commercialScopeItemRevisions,
   commercialScopeItems,
   cycles,
@@ -1920,7 +1921,7 @@ async function listCommercialBasisCounts(
       total: count(),
     })
     .from(commercialBasisLinks)
-    .innerJoin(
+    .leftJoin(
       commercialScopeItemRevisions,
       and(
         eq(
@@ -1933,17 +1934,34 @@ async function listCommercialBasisCounts(
         ),
       ),
     )
-    .innerJoin(
+    .leftJoin(
       commercialScopeItems,
       and(
         eq(commercialScopeItems.id, commercialScopeItemRevisions.scopeItemId),
         eq(commercialScopeItems.projectId, commercialBasisLinks.projectId),
       ),
     )
+    .leftJoin(
+      commercialDecisions,
+      and(
+        eq(commercialDecisions.id, commercialBasisLinks.decisionId),
+        eq(commercialDecisions.projectId, commercialBasisLinks.projectId),
+      ),
+    )
     .where(
       and(
         inArray(commercialBasisLinks.workItemId, workItemIds),
-        isNull(commercialScopeItems.archivedAt),
+        or(
+          and(
+            eq(commercialBasisLinks.basisType, "baseline_scope_item"),
+            isNull(commercialScopeItems.archivedAt),
+          ),
+          and(
+            eq(commercialBasisLinks.basisType, "commercial_decision"),
+            isNull(commercialDecisions.supersededAt),
+            sql`${commercialDecisions.disposition} in ('covered', 'absorbed', 'swap', 'paid_change')`,
+          ),
+        ),
         ...(projectId ? [eq(commercialBasisLinks.projectId, projectId)] : []),
       ),
     )

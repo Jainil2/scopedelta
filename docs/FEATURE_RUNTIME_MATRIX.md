@@ -85,7 +85,9 @@ Layer 1 has **no mandatory external API or paid service dependency**.
 
 ## Layer 2 — Commercial Delivery Graph
 
-Layer-2 research is complete. The executable sequence is SC-006A → SC-006B → SC-006C. See `docs/research/LAYER2_COMMERCIAL_DELIVERY_GRAPH_RESEARCH_2026-08.md`.
+Layer-2 research is complete. SC-006A and SC-006B are implemented; SC-006C is
+the remaining baseline-amendment slice. See
+`docs/research/LAYER2_COMMERCIAL_DELIVERY_GRAPH_RESEARCH_2026-08.md`.
 
 | Capability | Runtime class | Planned slice |
 |---|---|---|

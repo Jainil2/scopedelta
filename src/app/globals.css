@@ -20,6 +20,191 @@
     "Segoe UI", sans-serif;
 }
 
+.commercial-change-control {
+  margin-top: 2.5rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--line);
+}
+
+.commercial-request-composer {
+  margin: 1.5rem 0 2rem;
+  border-block: 1px solid var(--line);
+  padding: 1rem 0;
+}
+
+.commercial-request-composer > summary,
+.commercial-request-card > details > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.commercial-change-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+  align-items: start;
+}
+
+.commercial-change-form > label,
+.commercial-change-form fieldset > label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.commercial-change-form .field-wide,
+.commercial-change-form fieldset,
+.commercial-change-form > button,
+.commercial-change-form > output {
+  grid-column: 1 / -1;
+}
+
+.commercial-change-form fieldset {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+  padding: 1rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.commercial-change-form legend {
+  padding-right: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.commercial-check-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem 1rem;
+}
+
+.commercial-check-grid label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.commercial-request-group {
+  margin-top: 2rem;
+}
+
+.commercial-request-group > h3 {
+  margin-bottom: 0.25rem;
+  font-size: 0.84rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.commercial-request-card {
+  padding: 1.35rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.commercial-request-card h4 {
+  margin: 0.15rem 0 0.45rem;
+  font-size: 1.1rem;
+}
+
+.commercial-request-card .section-heading {
+  align-items: flex-start;
+}
+
+.commercial-request-actions,
+.commercial-linked-work,
+.commercial-impact-list,
+.commercial-evidence-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+  margin-top: 0.85rem;
+}
+
+.commercial-request-actions button {
+  width: auto;
+}
+
+.commercial-linked-work,
+.commercial-impact-list {
+  align-items: baseline;
+}
+
+.commercial-linked-work a,
+.commercial-evidence-links a,
+.commercial-impact-list span {
+  font-size: 0.84rem;
+}
+
+.commercial-decision-summary {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  padding-left: 1rem;
+  border-left: 3px solid var(--accent);
+}
+
+.commercial-decision-summary > span {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.commercial-request-card > details {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--line);
+}
+
+.commercial-decision-history > div {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.commercial-decision-history span,
+.commercial-decision-history p {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.commercial-decision-history span {
+  color: var(--muted);
+}
+
+.form-status {
+  display: block;
+  margin-top: 1rem;
+  color: var(--accent-dark);
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .commercial-change-form,
+  .commercial-change-form fieldset,
+  .commercial-check-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .commercial-change-form fieldset > *,
+  .commercial-check-grid {
+    grid-column: 1;
+  }
+
+  .commercial-request-card .section-heading {
+    display: grid;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

@@ -30,6 +30,14 @@ import {
   updateWorkPurpose,
 } from "@/server/commercial";
 import {
+  createCommercialDecision,
+  createCommercialImpactAssessment,
+  createCommercialRequest,
+  getCommercialRequest,
+  listCommercialRequests,
+  updateCommercialRequestState,
+} from "@/server/commercial-change-control";
+import {
   createClient,
   createProject,
   createWorkItem,
@@ -52,7 +60,15 @@ describe("commercial baseline domain boundary", () => {
   beforeEach(async () => {
     await db.execute(sql`
       truncate table
+        commercial_impact_assessment_anchors,
+        commercial_impact_assessments,
+        commercial_decision_anchors,
+        commercial_decision_scope_items,
+        commercial_request_anchors,
+        commercial_request_scope_items,
         commercial_basis_links,
+        commercial_decisions,
+        commercial_requests,
         commercial_scope_revision_anchors,
         commercial_evidence_anchors,
         commercial_scope_item_revisions,
@@ -460,6 +476,469 @@ describe("commercial baseline domain boundary", () => {
     expect(work.id).toBeTruthy();
   });
 
+  it("keeps request and decision history while only current authorizing decisions cover active work", async () => {
+    const { owner, member, workspace, project, work } = await createFixture();
+    await updateWorkPurpose(owner, workspace.id, project.id, work.id, {
+      purpose: "client_delivery",
+    });
+    const requestText = "Client asked for a production export workflow.";
+    const source = await createCommercialSource(
+      owner,
+      workspace.id,
+      project.id,
+      {
+        idempotencyKey: randomUUID(),
+        kind: "pasted_text",
+        name: "Client request excerpt",
+        mediaType: "text/plain",
+        contentBase64: Buffer.from(requestText).toString("base64"),
+      },
+    );
+    const requestKey = randomUUID();
+    const requestInput = {
+      idempotencyKey: requestKey,
+      title: "Add export workflow",
+      requestText,
+      externalRequester: "Product sponsor",
+      receivedAt: "2026-08-09T09:30:00.000Z",
+      scopeItemIds: [],
+      anchors: [
+        {
+          sourceId: source.id,
+          startOffset: 0,
+          endOffset: requestText.length,
+          label: "Original client language",
+        },
+      ],
+      impact: {
+        idempotencyKey: randomUUID(),
+        confidence: "estimate" as const,
+        effortMinutes: 960,
+        scheduleDeltaDays: 3,
+        targetDate: null,
+        monetaryAmount: "1250.50",
+        currencyCode: "USD",
+        notes: "Initial planning range",
+        anchors: [],
+      },
+    };
+    const created = await createCommercialRequest(
+      owner,
+      workspace.id,
+      project.id,
+      requestInput,
+    );
+    await expect(
+      createCommercialRequest(owner, workspace.id, project.id, requestInput),
+    ).resolves.toMatchObject({ id: created.id });
+    await updateCommercialRequestState(
+      owner,
+      workspace.id,
+      project.id,
+      created.id,
+      { state: "needs_clarification" },
+    );
+
+    const deferredInput = decisionInput("deferred");
+    const deferred = await createCommercialDecision(
+      owner,
+      workspace.id,
+      project.id,
+      created.id,
+      deferredInput,
+    );
+    expect(deferred).toMatchObject({
+      state: "resolved",
+      currentDecision: { disposition: "deferred" },
+    });
+    const deferredId = deferred.currentDecision!.id;
+    await expect(
+      createCommercialBasisLink(owner, workspace.id, project.id, work.id, {
+        basisType: "commercial_decision",
+        decisionId: deferredId,
+      }),
+    ).rejects.toMatchObject({ code: "decision_not_authorizing", status: 409 });
+
+    const paid = await createCommercialDecision(
+      owner,
+      workspace.id,
+      project.id,
+      created.id,
+      {
+        ...decisionInput("paid_change"),
+        supersedesDecisionId: deferredId,
+        impact: {
+          idempotencyKey: randomUUID(),
+          confidence: "confirmed",
+          effortMinutes: 840,
+          scheduleDeltaDays: 2,
+          targetDate: "2026-08-21",
+          monetaryAmount: "1200.00",
+          currencyCode: "USD",
+          notes: "Confirmed change order",
+          anchors: [],
+        },
+      },
+    );
+    const paidId = paid.currentDecision!.id;
+    await createCommercialBasisLink(owner, workspace.id, project.id, work.id, {
+      basisType: "commercial_decision",
+      decisionId: paidId,
+    });
+    await expect(
+      getWorkCommercialProvenance(owner, workspace.id, project.id, work.id),
+    ).resolves.toMatchObject({
+      state: "linked",
+      links: [
+        expect.objectContaining({
+          basisType: "commercial_decision",
+          decisionId: paidId,
+          requestTitle: "Add export workflow",
+          effective: true,
+          contradiction: false,
+        }),
+      ],
+    });
+    await expect(
+      listMyWork(owner, workspace.id, { page: 1, pageSize: 50 }),
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({ id: work.id, commercialBasisCount: 1 }),
+      ],
+    });
+
+    const rejected = await createCommercialDecision(
+      owner,
+      workspace.id,
+      project.id,
+      created.id,
+      {
+        ...decisionInput("rejected"),
+        supersedesDecisionId: paidId,
+      },
+    );
+    expect(rejected.currentDecision).toMatchObject({ disposition: "rejected" });
+    await expect(
+      createCommercialDecision(
+        owner,
+        workspace.id,
+        project.id,
+        created.id,
+        deferredInput,
+      ),
+    ).resolves.toMatchObject({
+      currentDecision: {
+        id: rejected.currentDecision!.id,
+        disposition: "rejected",
+      },
+    });
+    await expect(
+      getWorkCommercialProvenance(owner, workspace.id, project.id, work.id),
+    ).resolves.toMatchObject({
+      state: "commercially_unlinked",
+      links: [
+        expect.objectContaining({
+          decisionId: paidId,
+          effective: false,
+          contradiction: true,
+          decisionSupersededAt: expect.any(Date),
+        }),
+      ],
+    });
+    await expect(
+      listCommercialDrift(owner, workspace.id, project.id, {
+        page: 1,
+        pageSize: 50,
+        state: "commercially_unlinked",
+      }),
+    ).resolves.toMatchObject({
+      data: [
+        expect.objectContaining({
+          id: work.id,
+          state: "commercially_unlinked",
+          basisCount: 0,
+        }),
+      ],
+    });
+    const history = await getCommercialRequest(
+      owner,
+      workspace.id,
+      project.id,
+      created.id,
+    );
+    expect(history.decisionHistory).toHaveLength(3);
+    expect(history.decisionHistory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          actorUserId: owner.userId,
+          actorName: "Owner",
+        }),
+      ]),
+    );
+    expect(history.anchors).toEqual([
+      expect.objectContaining({
+        sourceId: source.id,
+        startOffset: 0,
+        endOffset: requestText.length,
+      }),
+    ]);
+    expect(history.impacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          confidence: "estimate",
+          monetaryAmount: "1250.50",
+          currencyCode: "USD",
+        }),
+        expect.objectContaining({
+          confidence: "confirmed",
+          monetaryAmount: "1200.00",
+          currencyCode: "USD",
+        }),
+      ]),
+    );
+    const estimatedImpact = history.impacts.find(
+      (impact) => impact.confidence === "estimate",
+    );
+    const confirmedImpact = history.impacts.find(
+      (impact) => impact.confidence === "confirmed",
+    );
+    expect(confirmedImpact?.supersedesImpactAssessmentId).toBe(
+      estimatedImpact?.id,
+    );
+    expect(history.contradictionCount).toBe(1);
+    await expect(
+      listCommercialRequests(owner, workspace.id, project.id, {
+        page: 1,
+        pageSize: 20,
+      }),
+    ).resolves.toMatchObject({
+      data: [
+        expect.objectContaining({ id: created.id, contradictionCount: 1 }),
+      ],
+    });
+    await expect(
+      getCommercialRequest(member, workspace.id, project.id, created.id),
+    ).rejects.toMatchObject({ code: "forbidden", status: 403 });
+
+    const audits = await db
+      .select({ metadata: auditEvents.metadata })
+      .from(auditEvents);
+    const auditJson = JSON.stringify(audits);
+    expect(auditJson).not.toContain(requestInput.requestText);
+    expect(auditJson).not.toContain("Confirmed change order");
+  });
+
+  it("persists all six outcomes and exposes only the four authorizing decisions as work bases", async () => {
+    const { owner, workspace, project, work } = await createFixture();
+    const sourceText =
+      "Current commitment available for an explicit scope swap.";
+    const source = await createCommercialSource(
+      owner,
+      workspace.id,
+      project.id,
+      {
+        idempotencyKey: randomUUID(),
+        kind: "pasted_text",
+        name: "Current scope",
+        mediaType: "text/plain",
+        contentBase64: Buffer.from(sourceText).toString("base64"),
+      },
+    );
+    const baseline = await createCommercialBaseline(
+      owner,
+      workspace.id,
+      project.id,
+      { sourceId: source.id },
+    );
+    const offsetScope = await createCommercialScopeItem(
+      owner,
+      workspace.id,
+      project.id,
+      {
+        idempotencyKey: randomUUID(),
+        revisionIdempotencyKey: randomUUID(),
+        baselineVersionId: baseline.versionId,
+        kind: "deliverable",
+        title: "Current export commitment",
+        details: null,
+        anchors: [
+          {
+            sourceId: source.id,
+            startOffset: 0,
+            endOffset: sourceText.length,
+            label: null,
+          },
+        ],
+      },
+    );
+    const decisions: Array<{ disposition: string; id: string }> = [];
+    for (const disposition of [
+      "covered",
+      "absorbed",
+      "swap",
+      "paid_change",
+      "deferred",
+      "rejected",
+    ] as const) {
+      const request = await createCommercialRequest(
+        owner,
+        workspace.id,
+        project.id,
+        {
+          idempotencyKey: randomUUID(),
+          title: `${disposition} request`,
+          requestText: `Commercial question for ${disposition}.`,
+          externalRequester: null,
+          receivedAt: "2026-08-09T10:00:00.000Z",
+          scopeItemIds: [],
+          anchors: [],
+          impact: null,
+        },
+      );
+      const decided = await createCommercialDecision(
+        owner,
+        workspace.id,
+        project.id,
+        request.id,
+        {
+          ...decisionInput(disposition),
+          coverageBasis: disposition === "covered" ? "baseline" : null,
+          swapOffsetScopeItemIds:
+            disposition === "swap" ? [offsetScope.id] : [],
+        },
+      );
+      decisions.push({ disposition, id: decided.currentDecision!.id });
+    }
+
+    const options = await listCommercialBasisOptions(
+      owner,
+      workspace.id,
+      project.id,
+    );
+    const decisionOptions = options.filter(
+      (option) => option.basisType === "commercial_decision",
+    );
+    expect(decisionOptions).toHaveLength(4);
+    expect(decisionOptions).toEqual(
+      expect.arrayContaining(
+        decisions
+          .filter(({ disposition }) =>
+            ["covered", "absorbed", "swap", "paid_change"].includes(
+              disposition,
+            ),
+          )
+          .map(({ id }) => expect.objectContaining({ decisionId: id })),
+      ),
+    );
+    expect(decisionOptions.map((option) => option.disposition).sort()).toEqual([
+      "absorbed",
+      "covered",
+      "paid_change",
+      "swap",
+    ]);
+    for (const disposition of ["deferred", "rejected"] as const) {
+      const decision = decisions.find(
+        (candidate) => candidate.disposition === disposition,
+      )!;
+      await expect(
+        createCommercialBasisLink(owner, workspace.id, project.id, work.id, {
+          basisType: "commercial_decision",
+          decisionId: decision.id,
+        }),
+      ).rejects.toMatchObject({
+        code: "decision_not_authorizing",
+        status: 409,
+      });
+    }
+  });
+
+  it("blocks cross-project and cross-tenant request, decision, impact and work links", async () => {
+    const { owner, workspace, project } = await createFixture();
+    const stranger = await createUser("stranger@example.test", "Stranger");
+    const request = await createCommercialRequest(
+      owner,
+      workspace.id,
+      project.id,
+      {
+        idempotencyKey: randomUUID(),
+        title: "Project-bound request",
+        requestText: "This request belongs only to COM.",
+        externalRequester: null,
+        receivedAt: "2026-08-09T10:30:00.000Z",
+        scopeItemIds: [],
+        anchors: [],
+        impact: null,
+      },
+    );
+    const decided = await createCommercialDecision(
+      owner,
+      workspace.id,
+      project.id,
+      request.id,
+      decisionInput("paid_change"),
+    );
+    await expect(
+      getCommercialRequest(stranger, workspace.id, project.id, request.id),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
+
+    const otherClient = await createClient(owner, workspace.id, {
+      name: "Second client",
+      internalReference: null,
+      summary: null,
+    });
+    const otherProject = await createProject(owner, workspace.id, {
+      clientId: otherClient.id,
+      key: "BOUND",
+      name: "Second project",
+      summary: null,
+      leadUserId: owner.userId,
+      startDate: null,
+      targetDate: null,
+    });
+    const otherWork = await createWorkItem(
+      owner,
+      workspace.id,
+      otherProject.id,
+      workInput("Other project work"),
+    );
+    await expect(
+      getCommercialRequest(owner, workspace.id, otherProject.id, request.id),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
+    await expect(
+      createCommercialImpactAssessment(
+        owner,
+        workspace.id,
+        otherProject.id,
+        request.id,
+        {
+          idempotencyKey: randomUUID(),
+          decisionId: decided.currentDecision!.id,
+          supersedesImpactAssessmentId: null,
+          confidence: "estimate",
+          effortMinutes: 60,
+          scheduleDeltaDays: null,
+          targetDate: null,
+          monetaryAmount: null,
+          currencyCode: null,
+          notes: null,
+          anchors: [],
+        },
+      ),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
+    await expect(
+      createCommercialBasisLink(
+        owner,
+        workspace.id,
+        otherProject.id,
+        otherWork.id,
+        {
+          basisType: "commercial_decision",
+          decisionId: decided.currentDecision!.id,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
+  });
+
   it("persists recoverable parser failure without allowing a trusted baseline", async () => {
     const { owner, workspace, project } = await createFixture();
     const malformed = Buffer.from("%PDF-not-a-document");
@@ -551,6 +1030,23 @@ function workInput(title: string, assigneeUserId: string | null = null) {
     cycleId: null,
     parentId: null,
     labelIds: [],
+  };
+}
+
+function decisionInput(
+  disposition:
+    "covered" | "absorbed" | "swap" | "paid_change" | "deferred" | "rejected",
+) {
+  return {
+    idempotencyKey: randomUUID(),
+    disposition,
+    coverageBasis: disposition === "covered" ? ("baseline" as const) : null,
+    rationale: null,
+    supersedesDecisionId: null,
+    affectedScopeItemIds: [],
+    swapOffsetScopeItemIds: [],
+    anchors: [],
+    impact: null,
   };
 }
 

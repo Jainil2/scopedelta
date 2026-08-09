@@ -72,6 +72,8 @@ export type WorkItem = {
   status:
     "backlog" | "ready" | "in_progress" | "in_review" | "done" | "canceled";
   priority: "none" | "low" | "medium" | "high" | "urgent";
+  purpose: "unclassified" | "client_delivery" | "delivery_support" | "internal";
+  commercialBasisCount: number;
   assigneeUserId: string | null;
   assigneeName: string | null;
   estimatePoints: number | null;
@@ -674,6 +676,11 @@ export function ProjectOverview({
           <Link href={`/app/${workspaceSlug}/projects/${project.key}/brief`}>
             Brief
           </Link>
+          <Link
+            href={`/app/${workspaceSlug}/projects/${project.key}/commercial`}
+          >
+            Commercial
+          </Link>
           <Link href={`/app/${workspaceSlug}/projects/${project.key}/activity`}>
             Activity
           </Link>
@@ -1061,6 +1068,17 @@ export function BacklogWorkspace({
           <Link href={`/app/${workspaceSlug}/projects/${project.key}/cycles`}>
             Cycles
           </Link>
+          <Link href={`/app/${workspaceSlug}/projects/${project.key}/brief`}>
+            Brief
+          </Link>
+          <Link
+            href={`/app/${workspaceSlug}/projects/${project.key}/commercial`}
+          >
+            Commercial
+          </Link>
+          <Link href={`/app/${workspaceSlug}/projects/${project.key}/activity`}>
+            Activity
+          </Link>
         </nav>
       </header>
       {message ? <p role="status">{message}</p> : null}
@@ -1216,6 +1234,7 @@ export function BacklogWorkspace({
                     <span>{item.assigneeName || "Unassigned"}</span>
                     <span>{item.milestoneName || "No milestone"}</span>
                     <span>{item.cycleName || "Backlog / no cycle"}</span>
+                    <CommercialProvenanceBadge item={item} />
                     {item.labels.map((label) => (
                       <span
                         className={`label-token label-${label.color}`}
@@ -1594,6 +1613,24 @@ function projectDirectoryHref(
   });
   if (search) query.set("query", search);
   return `/app/${workspaceSlug}/projects?${query.toString()}`;
+}
+
+export function CommercialProvenanceBadge({
+  item,
+}: Readonly<{
+  item: Pick<WorkItem, "purpose" | "commercialBasisCount">;
+}>) {
+  const state =
+    item.purpose === "unclassified"
+      ? ["commercial-needs-classification", "Needs classification"]
+      : item.purpose === "client_delivery" && item.commercialBasisCount === 0
+        ? ["commercial-unlinked", "Commercially unlinked"]
+        : item.purpose === "client_delivery"
+          ? ["commercial-linked", "Baseline linked"]
+          : item.purpose === "delivery_support"
+            ? ["commercial-support", "Delivery support"]
+            : ["commercial-internal", "Internal"];
+  return <span className={`commercial-badge ${state[0]}`}>{state[1]}</span>;
 }
 
 export function workItemPayload(formData: FormData) {

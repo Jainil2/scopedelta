@@ -1299,6 +1299,16 @@ const ACTIVITY_LABELS: Record<string, string> = {
   "milestone.updated.v1": "updated a milestone",
   "cycle.created.v1": "created a cycle",
   "cycle.updated.v1": "updated a cycle",
+  "commercial.source.created.v1": "added commercial evidence",
+  "commercial.source.parsing.retried.v1": "retried commercial evidence parsing",
+  "commercial.baseline.created.v1": "created the commercial baseline",
+  "commercial.scope_item.created.v1": "added baseline scope",
+  "commercial.scope_item.revised.v1": "revised baseline scope",
+  "commercial.scope_item.archived.v1": "archived baseline scope",
+  "commercial.scope_item.restored.v1": "restored baseline scope",
+  "work_item.purpose.updated.v1": "classified the work item",
+  "work_item.commercial_basis.linked.v1": "linked commercial basis",
+  "work_item.commercial_basis.unlinked.v1": "removed commercial basis",
 };
 
 export async function listActivity(

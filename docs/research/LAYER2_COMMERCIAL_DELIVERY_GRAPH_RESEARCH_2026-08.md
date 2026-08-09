@@ -155,8 +155,8 @@ The graph is a **logical domain graph on the existing relational/server-authorit
    - existing Layer-1 work item; no duplicate delivery-ticket system.
 
 10. **Commercial basis relationship**
-   - links a work item to one or more effective baseline scope items and/or confirmed commercial decisions;
-   - this edge is the core differentiating relationship used by drift UX.
+    - links a work item to one or more effective baseline scope items and/or confirmed commercial decisions;
+    - this edge is the core differentiating relationship used by drift UX.
 
 ### Important relationships
 

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { WorkCollaborationWorkspace } from "@/components/collaboration-workspace";
+import { WorkCommercialPanel } from "@/components/commercial-workspace";
 import { paginationSchema } from "@/lib/delivery-validation";
 import { parseInput } from "@/lib/platform-validation";
 import { requireSession } from "@/lib/session";
@@ -10,6 +11,10 @@ import {
   listComments,
   listMentionableMembers,
 } from "@/server/collaboration";
+import {
+  getWorkCommercialProvenance,
+  listCommercialBasisOptions,
+} from "@/server/commercial";
 import { getProjectByKey, getWorkItem } from "@/server/delivery";
 import { getWorkspaceBySlug } from "@/server/workspaces";
 
@@ -48,6 +53,16 @@ export default async function WorkCollaborationPage({
       activityPage={data.activity.page}
       members={data.members.data}
       initialWatching={data.subscription.watching}
+      commercialPanel={
+        <WorkCommercialPanel
+          key="commercial-provenance"
+          workspaceId={data.workspace.id}
+          projectId={data.project.id}
+          provenance={data.provenance}
+          options={data.basisOptions}
+          canManage={data.canManageCommercial}
+        />
+      }
     />
   );
 }
@@ -74,27 +89,40 @@ async function loadWorkCollaboration(
       workspace.id,
       projectKey.toUpperCase(),
     );
-    const [workItem, comments, activity, members, subscription] =
-      await Promise.all([
-        getWorkItem(actor, workspace.id, project.id, workItemId),
-        listComments(
-          actor,
-          workspace.id,
-          project.id,
-          workItemId,
-          commentPagination.page,
-          commentPagination.pageSize,
-        ),
-        listActivity(
-          actor,
-          workspace.id,
-          project.id,
-          activityPagination,
-          workItemId,
-        ),
-        listMentionableMembers(actor, workspace.id, project.id),
-        getSubscription(actor, workspace.id, project.id, workItemId),
-      ]);
+    const canManageCommercial =
+      workspace.role !== "member" || project.leadUserId === actor.userId;
+    const [
+      workItem,
+      comments,
+      activity,
+      members,
+      subscription,
+      provenance,
+      basisOptions,
+    ] = await Promise.all([
+      getWorkItem(actor, workspace.id, project.id, workItemId),
+      listComments(
+        actor,
+        workspace.id,
+        project.id,
+        workItemId,
+        commentPagination.page,
+        commentPagination.pageSize,
+      ),
+      listActivity(
+        actor,
+        workspace.id,
+        project.id,
+        activityPagination,
+        workItemId,
+      ),
+      listMentionableMembers(actor, workspace.id, project.id),
+      getSubscription(actor, workspace.id, project.id, workItemId),
+      getWorkCommercialProvenance(actor, workspace.id, project.id, workItemId),
+      canManageCommercial
+        ? listCommercialBasisOptions(actor, workspace.id, project.id)
+        : Promise.resolve([]),
+    ]);
     return {
       workspace,
       project,
@@ -103,6 +131,9 @@ async function loadWorkCollaboration(
       activity,
       members,
       subscription,
+      provenance,
+      basisOptions,
+      canManageCommercial,
     };
   } catch {
     notFound();

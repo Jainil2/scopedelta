@@ -21,6 +21,9 @@ import { getDb } from "@/db";
 import {
   auditEvents,
   clients,
+  commercialBasisLinks,
+  commercialScopeItemRevisions,
+  commercialScopeItems,
   cycles,
   memberships,
   milestones,
@@ -905,6 +908,7 @@ export async function listWorkItems(
       acceptanceCriteria: workItems.acceptanceCriteria,
       status: workItems.status,
       priority: workItems.priority,
+      purpose: workItems.purpose,
       estimatePoints: workItems.estimatePoints,
       targetDate: workItems.targetDate,
       sortOrder: workItems.sortOrder,
@@ -940,19 +944,28 @@ export async function listWorkItems(
     .limit(filters.pageSize)
     .offset((filters.page - 1) * filters.pageSize);
   const ids = rows.map((row) => row.id);
-  const labels = ids.length
-    ? await getDb()
-        .select({
-          workItemId: workItemLabels.workItemId,
-          id: projectLabels.id,
-          name: projectLabels.name,
-          color: projectLabels.color,
-        })
-        .from(workItemLabels)
-        .innerJoin(projectLabels, eq(projectLabels.id, workItemLabels.labelId))
-        .where(inArray(workItemLabels.workItemId, ids))
-        .orderBy(asc(projectLabels.name))
-    : [];
+  const [labels, commercialBasisCounts] = await Promise.all([
+    ids.length
+      ? getDb()
+          .select({
+            workItemId: workItemLabels.workItemId,
+            id: projectLabels.id,
+            name: projectLabels.name,
+            color: projectLabels.color,
+          })
+          .from(workItemLabels)
+          .innerJoin(
+            projectLabels,
+            eq(projectLabels.id, workItemLabels.labelId),
+          )
+          .where(inArray(workItemLabels.workItemId, ids))
+          .orderBy(asc(projectLabels.name))
+      : [],
+    listCommercialBasisCounts(projectId, ids),
+  ]);
+  const commercialBasisByWorkItem = new Map(
+    commercialBasisCounts.map((row) => [row.workItemId, row.total]),
+  );
   const totalRows = await getDb()
     .select({ total: count() })
     .from(workItems)
@@ -977,6 +990,7 @@ export async function listWorkItems(
   const withLabels = rows.map((row) => ({
     ...row,
     identifier: `${projectKey}-${row.number}`,
+    commercialBasisCount: commercialBasisByWorkItem.get(row.id) ?? 0,
     labels: labels.filter((label) => label.workItemId === row.id),
   }));
   return pageResult(
@@ -1032,6 +1046,7 @@ export async function listMyWork(
       title: workItems.title,
       status: workItems.status,
       priority: workItems.priority,
+      purpose: workItems.purpose,
       targetDate: workItems.targetDate,
       estimatePoints: workItems.estimatePoints,
       projectId: projects.id,
@@ -1083,19 +1098,28 @@ export async function listMyWork(
     .limit(filters.pageSize)
     .offset((filters.page - 1) * filters.pageSize);
   const ids = rows.map((row) => row.id);
-  const labels = ids.length
-    ? await getDb()
-        .select({
-          workItemId: workItemLabels.workItemId,
-          id: projectLabels.id,
-          name: projectLabels.name,
-          color: projectLabels.color,
-        })
-        .from(workItemLabels)
-        .innerJoin(projectLabels, eq(projectLabels.id, workItemLabels.labelId))
-        .where(inArray(workItemLabels.workItemId, ids))
-        .orderBy(asc(projectLabels.name))
-    : [];
+  const [labels, commercialBasisCounts] = await Promise.all([
+    ids.length
+      ? getDb()
+          .select({
+            workItemId: workItemLabels.workItemId,
+            id: projectLabels.id,
+            name: projectLabels.name,
+            color: projectLabels.color,
+          })
+          .from(workItemLabels)
+          .innerJoin(
+            projectLabels,
+            eq(projectLabels.id, workItemLabels.labelId),
+          )
+          .where(inArray(workItemLabels.workItemId, ids))
+          .orderBy(asc(projectLabels.name))
+      : [],
+    listCommercialBasisCounts(undefined, ids),
+  ]);
+  const commercialBasisByWorkItem = new Map(
+    commercialBasisCounts.map((row) => [row.workItemId, row.total]),
+  );
   const totalRows = await getDb()
     .select({ total: count() })
     .from(workItems)
@@ -1129,6 +1153,7 @@ export async function listMyWork(
     rows.map((row) => ({
       ...row,
       identifier: `${row.projectKey}-${row.number}`,
+      commercialBasisCount: commercialBasisByWorkItem.get(row.id) ?? 0,
       labels: labels.filter((label) => label.workItemId === row.id),
     })),
     filters.page,
@@ -1317,6 +1342,7 @@ export async function getWorkItem(
       acceptanceCriteria: workItems.acceptanceCriteria,
       status: workItems.status,
       priority: workItems.priority,
+      purpose: workItems.purpose,
       assigneeUserId: users.id,
       assigneeName: users.name,
       estimatePoints: workItems.estimatePoints,
@@ -1340,20 +1366,24 @@ export async function getWorkItem(
     )
     .limit(1);
   if (!rows[0]) throw notFound();
-  const labels = await getDb()
-    .select({
-      id: projectLabels.id,
-      name: projectLabels.name,
-      color: projectLabels.color,
-    })
-    .from(workItemLabels)
-    .innerJoin(projectLabels, eq(projectLabels.id, workItemLabels.labelId))
-    .where(eq(workItemLabels.workItemId, workItemId))
-    .orderBy(asc(projectLabels.name));
+  const [labels, commercialBasisCounts] = await Promise.all([
+    getDb()
+      .select({
+        id: projectLabels.id,
+        name: projectLabels.name,
+        color: projectLabels.color,
+      })
+      .from(workItemLabels)
+      .innerJoin(projectLabels, eq(projectLabels.id, workItemLabels.labelId))
+      .where(eq(workItemLabels.workItemId, workItemId))
+      .orderBy(asc(projectLabels.name)),
+    listCommercialBasisCounts(projectId, [workItemId]),
+  ]);
   const key = await awaitProjectKey(projectId);
   return {
     ...rows[0],
     identifier: `${key}-${rows[0].number}`,
+    commercialBasisCount: commercialBasisCounts[0]?.total ?? 0,
     labels,
   };
 }
@@ -1867,7 +1897,7 @@ export async function assertWritableProject(
   return access;
 }
 
-function assertProjectManager(
+export function assertProjectManager(
   access: {
     workspaceRole: "owner" | "admin" | "member";
     leadUserId: string;
@@ -1877,6 +1907,47 @@ function assertProjectManager(
   if (access.workspaceRole === "member" && access.leadUserId !== actorUserId) {
     throw forbidden();
   }
+}
+
+async function listCommercialBasisCounts(
+  projectId: string | undefined,
+  workItemIds: string[],
+) {
+  if (!workItemIds.length) return [];
+  return getDb()
+    .select({
+      workItemId: commercialBasisLinks.workItemId,
+      total: count(),
+    })
+    .from(commercialBasisLinks)
+    .innerJoin(
+      commercialScopeItemRevisions,
+      and(
+        eq(
+          commercialScopeItemRevisions.id,
+          commercialBasisLinks.scopeItemRevisionId,
+        ),
+        eq(
+          commercialScopeItemRevisions.projectId,
+          commercialBasisLinks.projectId,
+        ),
+      ),
+    )
+    .innerJoin(
+      commercialScopeItems,
+      and(
+        eq(commercialScopeItems.id, commercialScopeItemRevisions.scopeItemId),
+        eq(commercialScopeItems.projectId, commercialBasisLinks.projectId),
+      ),
+    )
+    .where(
+      and(
+        inArray(commercialBasisLinks.workItemId, workItemIds),
+        isNull(commercialScopeItems.archivedAt),
+        ...(projectId ? [eq(commercialBasisLinks.projectId, projectId)] : []),
+      ),
+    )
+    .groupBy(commercialBasisLinks.workItemId);
 }
 
 async function assertWorkspaceMember(

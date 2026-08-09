@@ -2,12 +2,12 @@
 
 ## Status and change boundary
 
-Accepted through SC-005C. This runbook covers the public lead flow, production
+Implemented through SC-006A. This runbook covers the public lead flow, production
 platform kernel, additive client-project backlog migration, and optional cycle
-planning and collaboration migrations. It does not
+planning, collaboration, and initial commercial-baseline migrations. It does not
 authorize production credentials, database creation, DNS changes, a paid
 service, or destructive database work without founder approval. It does not
-cover SC-006, AI, billing, SSO, or client portals.
+cover SC-006B/SC-006C, OCR/AI extraction, billing, SSO, or client portals.
 
 ## Supported deployment shapes
 
@@ -204,6 +204,37 @@ authorization and notification delivery use 100-user keyset batches rather
 than truncating the valid project audience; monitor batch counts if a workspace
 grows materially beyond the current 500-person target.
 
+### SC-006A migration `0006_commercial_baseline.sql`
+
+This migration is additive. It adds commercial source/parser enums, scope and
+basis-link enums, a defaulted `work_items.purpose` column, and project-scoped
+tables for source originals, baselines/versions, scope items/revisions,
+evidence anchors, and work-to-scope basis links. Existing work remains
+`unclassified`; no customer content is backfilled or inferred. Apply it before
+serving Commercial routes or the provenance controls on work items.
+
+The application stores immutable source bytes and normalized extracted text in
+PostgreSQL. Protect primary storage, replicas, snapshots, dumps, and restored
+test databases as customer-confidential document storage. Source bodies,
+extracted text, scope titles/details, and excerpts must never be copied to logs,
+audit metadata, tickets, fixtures, or release evidence. Audit events may contain
+only project/source/revision/work IDs, enum states, sizes, and changed-field names.
+
+Capacity is intentionally local and bounded: 5 MB per source, 100 sources per
+project, 500 PDF pages, 500,000 extracted characters, 1,000 DOCX archive entries,
+25 MB DOCX uncompressed content, and 500 scope items per baseline. Monitor
+database and backup growth before raising any limit. Parser states are `ready`,
+`needs_ocr`, and `failed`; image-only PDFs require a human fallback because this
+release installs no OCR or external document service. PDF/DOCX parsing occurs in
+the application process, so investigate repeated parser-limit failures rather
+than increasing function memory or timeouts without evidence.
+
+If the new application fails after migration, the SC-005C application can run
+against the additive schema and ignores the defaulted purpose column and new
+tables. Leave them in place and fix forward. Restore tests must verify that an
+authorized manager can download an original, inspect extracted text, open the
+baseline and scope history, and see work provenance after the database restore.
+
 ## SMTP and DNS readiness
 
 Use a transactional sender and a company-controlled domain. Before enabling
@@ -256,6 +287,11 @@ Mailpit is development-only and must never be public or connected to production.
   accepted only by a verified matching email.
 - Password recovery succeeds and prior sessions are revoked.
 - Desktop and mobile shell layouts are keyboard-operable with visible focus.
+- A manager can preserve a synthetic pasted/PDF/DOCX source, create baseline v1,
+  anchor one scope item, classify work, link its basis, and see linked advisory
+  drift without exposing the source to a regular project member.
+- An image-only synthetic PDF reports `needs_ocr`; its original remains
+  downloadable to an authorized manager and no document text appears in logs.
 - Browser console and Netlify logs contain no secrets, tokens, names, emails,
   message bodies, provider responses, or customer content.
 

@@ -45,6 +45,8 @@ const item = {
   acceptanceCriteria: "Tenant access is enforced.",
   status: "backlog" as const,
   priority: "high" as const,
+  purpose: "unclassified" as const,
+  commercialBasisCount: 0,
   assigneeUserId: "member-id",
   assigneeName: "Member",
   estimatePoints: 5,

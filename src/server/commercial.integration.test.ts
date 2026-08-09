@@ -25,6 +25,7 @@ import {
   listCommercialDrift,
   listCommercialOverview,
   retryCommercialSource,
+  setCommercialScopeItemArchived,
   updateCommercialScopeItem,
   updateWorkPurpose,
 } from "@/server/commercial";
@@ -32,6 +33,7 @@ import {
   createClient,
   createProject,
   createWorkItem,
+  listMyWork,
   listWorkItems,
 } from "@/server/delivery";
 import { createWorkspace } from "@/server/workspaces";
@@ -84,13 +86,13 @@ describe("commercial baseline domain boundary", () => {
   it("preserves source, revision and work-link history while projecting advisory drift", async () => {
     const { owner, workspace, project, work } = await createFixture();
     const secret = "Deliver an authenticated client portal by launch";
-    const requestId = randomUUID();
+    const idempotencyKey = randomUUID();
     const source = await createCommercialSource(
       owner,
       workspace.id,
       project.id,
       {
-        requestId,
+        idempotencyKey,
         kind: "pasted_text",
         name: "Signed SOW extract",
         mediaType: "text/plain",
@@ -103,7 +105,7 @@ describe("commercial baseline domain boundary", () => {
     });
     await expect(
       createCommercialSource(owner, workspace.id, project.id, {
-        requestId,
+        idempotencyKey,
         kind: "pasted_text",
         name: "Signed SOW extract",
         mediaType: "text/plain",
@@ -127,8 +129,8 @@ describe("commercial baseline domain boundary", () => {
       workspace.id,
       project.id,
       {
-        requestId: randomUUID(),
-        revisionRequestId: randomUUID(),
+        idempotencyKey: randomUUID(),
+        revisionIdempotencyKey: randomUUID(),
         baselineVersionId: baseline.versionId,
         kind: "deliverable",
         title: "Authenticated client portal",
@@ -164,7 +166,7 @@ describe("commercial baseline domain boundary", () => {
       project.id,
       item.id,
       {
-        requestId: randomUUID(),
+        idempotencyKey: randomUUID(),
         kind: "deliverable",
         title: "Authenticated client portal with SSO",
         details: "Manual clarification recorded without rewriting version 1.",
@@ -214,6 +216,13 @@ describe("commercial baseline domain boundary", () => {
       ],
     });
     await expect(
+      listMyWork(owner, workspace.id, { page: 1, pageSize: 50 }),
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({ id: work.id, commercialBasisCount: 1 }),
+      ],
+    });
+    await expect(
       listCommercialDrift(owner, workspace.id, project.id, {
         page: 1,
         pageSize: 50,
@@ -227,6 +236,102 @@ describe("commercial baseline domain boundary", () => {
       }),
     ).resolves.toMatchObject({
       data: [expect.objectContaining({ id: work.id, state: "linked" })],
+    });
+
+    await setCommercialScopeItemArchived(
+      owner,
+      workspace.id,
+      project.id,
+      item.id,
+      true,
+    );
+    await expect(
+      getWorkCommercialProvenance(owner, workspace.id, project.id, work.id),
+    ).resolves.toMatchObject({
+      purpose: "client_delivery",
+      state: "commercially_unlinked",
+      links: [
+        expect.objectContaining({
+          scopeItemRevisionId: item.revisionId,
+          archivedAt: expect.any(Date),
+        }),
+      ],
+    });
+    await expect(
+      listWorkItems(owner, workspace.id, project.id, {
+        page: 1,
+        pageSize: 50,
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({ id: work.id, commercialBasisCount: 0 }),
+      ],
+    });
+    await expect(
+      listMyWork(owner, workspace.id, { page: 1, pageSize: 50 }),
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({ id: work.id, commercialBasisCount: 0 }),
+      ],
+    });
+    await expect(
+      listCommercialDrift(owner, workspace.id, project.id, {
+        page: 1,
+        pageSize: 50,
+        state: "commercially_unlinked",
+      }),
+    ).resolves.toMatchObject({
+      page: { total: 1 },
+      data: [
+        expect.objectContaining({
+          id: work.id,
+          state: "commercially_unlinked",
+          basisCount: 0,
+        }),
+      ],
+    });
+    await expect(
+      listCommercialDrift(owner, workspace.id, project.id, {
+        page: 1,
+        pageSize: 50,
+        state: "linked",
+      }),
+    ).resolves.toMatchObject({ page: { total: 0 }, data: [] });
+
+    await setCommercialScopeItemArchived(
+      owner,
+      workspace.id,
+      project.id,
+      item.id,
+      false,
+    );
+    await expect(
+      getWorkCommercialProvenance(owner, workspace.id, project.id, work.id),
+    ).resolves.toMatchObject({
+      state: "linked",
+      links: [
+        expect.objectContaining({
+          scopeItemRevisionId: item.revisionId,
+          archivedAt: null,
+        }),
+      ],
+    });
+    await expect(
+      listWorkItems(owner, workspace.id, project.id, {
+        page: 1,
+        pageSize: 50,
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({ id: work.id, commercialBasisCount: 1 }),
+      ],
+    });
+    await expect(
+      listMyWork(owner, workspace.id, { page: 1, pageSize: 50 }),
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({ id: work.id, commercialBasisCount: 1 }),
+      ],
     });
 
     await updateWorkPurpose(owner, workspace.id, project.id, work.id, {
@@ -255,7 +360,7 @@ describe("commercial baseline domain boundary", () => {
       workspace.id,
       project.id,
       {
-        requestId: randomUUID(),
+        idempotencyKey: randomUUID(),
         kind: "pasted_text",
         name: "Private terms",
         mediaType: "text/plain",
@@ -302,8 +407,8 @@ describe("commercial baseline domain boundary", () => {
       workspace.id,
       project.id,
       {
-        requestId: randomUUID(),
-        revisionRequestId: randomUUID(),
+        idempotencyKey: randomUUID(),
+        revisionIdempotencyKey: randomUUID(),
         baselineVersionId: baseline.versionId,
         kind: "requirement",
         title: "Private requirement",
@@ -363,7 +468,7 @@ describe("commercial baseline domain boundary", () => {
       workspace.id,
       project.id,
       {
-        requestId: randomUUID(),
+        idempotencyKey: randomUUID(),
         kind: "pdf",
         name: "malformed.pdf",
         mediaType: "application/pdf",
@@ -427,19 +532,19 @@ async function createFixture() {
     owner,
     workspace.id,
     project.id,
-    workInput("Build client portal"),
+    workInput("Build client portal", owner.userId),
   );
   return { owner, member, outsider, workspace, project, work };
 }
 
-function workInput(title: string) {
+function workInput(title: string, assigneeUserId: string | null = null) {
   return {
     title,
     description: null,
     acceptanceCriteria: null,
     status: "in_progress" as const,
     priority: "high" as const,
-    assigneeUserId: null,
+    assigneeUserId,
     estimatePoints: null,
     targetDate: null,
     milestoneId: null,

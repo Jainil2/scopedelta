@@ -275,7 +275,7 @@ export async function createCommercialSource(
       .where(
         and(
           eq(commercialEvidenceSources.projectId, projectId),
-          eq(commercialEvidenceSources.requestId, input.requestId),
+          eq(commercialEvidenceSources.idempotencyKey, input.idempotencyKey),
         ),
       )
       .limit(1);
@@ -283,8 +283,8 @@ export async function createCommercialSource(
       if (existing[0].contentSha256 === hash && existing[0].kind === input.kind)
         return existing[0].id;
       throw conflict(
-        "request_conflict",
-        "That request identifier is already in use.",
+        "idempotency_conflict",
+        "That idempotency key is already in use.",
       );
     }
     await assertSourceCapacity(transaction, projectId);
@@ -292,7 +292,7 @@ export async function createCommercialSource(
     await transaction.insert(commercialEvidenceSources).values({
       id,
       projectId,
-      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
       kind: input.kind,
       name: input.name,
       mediaType: input.mediaType,
@@ -499,7 +499,7 @@ export async function createCommercialScopeItem(
       .where(
         and(
           eq(commercialScopeItems.projectId, projectId),
-          eq(commercialScopeItems.requestId, input.requestId),
+          eq(commercialScopeItems.idempotencyKey, input.idempotencyKey),
         ),
       )
       .limit(1);
@@ -516,14 +516,14 @@ export async function createCommercialScopeItem(
       id,
       projectId,
       baselineVersionId: input.baselineVersionId,
-      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
       createdByUserId: actor.userId,
     });
     await transaction.insert(commercialScopeItemRevisions).values({
       id: revisionId,
       projectId,
       scopeItemId: id,
-      requestId: input.revisionRequestId,
+      idempotencyKey: input.revisionIdempotencyKey,
       revisionNumber: 1,
       kind: input.kind,
       title: input.title,
@@ -595,7 +595,7 @@ export async function updateCommercialScopeItem(
       .where(
         and(
           eq(commercialScopeItemRevisions.scopeItemId, itemId),
-          eq(commercialScopeItemRevisions.requestId, input.requestId),
+          eq(commercialScopeItemRevisions.idempotencyKey, input.idempotencyKey),
         ),
       )
       .limit(1);
@@ -614,7 +614,7 @@ export async function updateCommercialScopeItem(
       id: revisionId,
       projectId,
       scopeItemId: itemId,
-      requestId: input.requestId,
+      idempotencyKey: input.idempotencyKey,
       revisionNumber: (latest[0]?.number ?? 0) + 1,
       kind: input.kind,
       title: input.title,
@@ -741,7 +741,10 @@ export async function getWorkCommercialProvenance(
     );
   return {
     ...work[0],
-    state: commercialState(work[0].purpose, links.length),
+    state: commercialState(
+      work[0].purpose,
+      links.filter((link) => link.archivedAt === null).length,
+    ),
     links,
   };
 }
@@ -975,10 +978,18 @@ export async function listCommercialDrift(
   filters: CommercialDriftFilters,
 ) {
   await getCommercialManagerAccess(getDb(), actor, workspaceId, projectId);
-  const linkedBasisCount = sql<number>`(
-    select count(*)::int from ${commercialBasisLinks}
+  const effectiveBasisCount = sql<number>`(
+    select count(*)::int
+    from ${commercialBasisLinks}
+    inner join ${commercialScopeItemRevisions}
+      on ${commercialScopeItemRevisions.id} = ${commercialBasisLinks.scopeItemRevisionId}
+      and ${commercialScopeItemRevisions.projectId} = ${commercialBasisLinks.projectId}
+    inner join ${commercialScopeItems}
+      on ${commercialScopeItems.id} = ${commercialScopeItemRevisions.scopeItemId}
+      and ${commercialScopeItems.projectId} = ${commercialBasisLinks.projectId}
     where ${commercialBasisLinks.workItemId} = ${workItems.id}
       and ${commercialBasisLinks.projectId} = ${projectId}
+      and ${commercialScopeItems.archivedAt} is null
   )`;
   const conditions = [
     eq(workItems.projectId, projectId),
@@ -987,12 +998,12 @@ export async function listCommercialDrift(
   ];
   if (filters.state === "commercially_unlinked") {
     conditions.push(eq(workItems.purpose, "client_delivery"));
-    conditions.push(sql`${linkedBasisCount} = 0`);
+    conditions.push(sql`${effectiveBasisCount} = 0`);
   } else if (filters.state === "needs_classification") {
     conditions.push(eq(workItems.purpose, "unclassified"));
   } else if (filters.state === "linked") {
     conditions.push(eq(workItems.purpose, "client_delivery"));
-    conditions.push(sql`${linkedBasisCount} > 0`);
+    conditions.push(sql`${effectiveBasisCount} > 0`);
   } else if (filters.state === "support_internal") {
     conditions.push(
       sql`${workItems.purpose} in ('delivery_support', 'internal')`,
@@ -1007,7 +1018,7 @@ export async function listCommercialDrift(
         title: workItems.title,
         status: workItems.status,
         purpose: workItems.purpose,
-        basisCount: count(commercialBasisLinks.id),
+        basisCount: count(commercialScopeItems.id),
         updatedAt: workItems.updatedAt,
       })
       .from(workItems)
@@ -1016,6 +1027,24 @@ export async function listCommercialDrift(
         and(
           eq(commercialBasisLinks.workItemId, workItems.id),
           eq(commercialBasisLinks.projectId, projectId),
+        ),
+      )
+      .leftJoin(
+        commercialScopeItemRevisions,
+        and(
+          eq(
+            commercialScopeItemRevisions.id,
+            commercialBasisLinks.scopeItemRevisionId,
+          ),
+          eq(commercialScopeItemRevisions.projectId, projectId),
+        ),
+      )
+      .leftJoin(
+        commercialScopeItems,
+        and(
+          eq(commercialScopeItems.id, commercialScopeItemRevisions.scopeItemId),
+          eq(commercialScopeItems.projectId, projectId),
+          isNull(commercialScopeItems.archivedAt),
         ),
       )
       .where(where)

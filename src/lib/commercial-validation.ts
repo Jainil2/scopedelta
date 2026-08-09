@@ -24,7 +24,7 @@ export const workPurposeSchema = z.enum([
 ]);
 
 export const createCommercialSourceSchema = z.object({
-  requestId: z.string().uuid(),
+  idempotencyKey: z.string().uuid(),
   kind: commercialSourceKindSchema,
   name: z.string().trim().min(1).max(160),
   mediaType: z.string().trim().min(1).max(120),
@@ -63,13 +63,13 @@ const scopeItemContentSchema = z.object({
 });
 
 export const createCommercialScopeItemSchema = scopeItemContentSchema.extend({
-  requestId: z.string().uuid(),
-  revisionRequestId: z.string().uuid(),
+  idempotencyKey: z.string().uuid(),
+  revisionIdempotencyKey: z.string().uuid(),
   baselineVersionId: z.string().uuid(),
 });
 
 export const updateCommercialScopeItemSchema = scopeItemContentSchema.extend({
-  requestId: z.string().uuid(),
+  idempotencyKey: z.string().uuid(),
 });
 
 export const updateWorkPurposeSchema = z.object({

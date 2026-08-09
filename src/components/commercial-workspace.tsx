@@ -183,7 +183,7 @@ export function CommercialWorkspace({
       kind = file.name.toLowerCase().endsWith(".pdf") ? "pdf" : "docx";
     }
     const response = await apiRequest(`${base}/sources`, "POST", {
-      requestId: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
       kind,
       name,
       mediaType,
@@ -228,12 +228,12 @@ export function CommercialWorkspace({
     const response = editing
       ? await apiRequest(`${base}/scope-items/${editing.id}`, "PATCH", {
           ...content,
-          requestId: crypto.randomUUID(),
+          idempotencyKey: crypto.randomUUID(),
         })
       : await apiRequest(`${base}/scope-items`, "POST", {
           ...content,
-          requestId: crypto.randomUUID(),
-          revisionRequestId: crypto.randomUUID(),
+          idempotencyKey: crypto.randomUUID(),
+          revisionIdempotencyKey: crypto.randomUUID(),
           baselineVersionId: overview.baseline.versionId,
         });
     if (response.ok) {

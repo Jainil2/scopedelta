@@ -22,6 +22,8 @@ import {
   auditEvents,
   clients,
   commercialBasisLinks,
+  commercialScopeItemRevisions,
+  commercialScopeItems,
   cycles,
   memberships,
   milestones,
@@ -1918,9 +1920,30 @@ async function listCommercialBasisCounts(
       total: count(),
     })
     .from(commercialBasisLinks)
+    .innerJoin(
+      commercialScopeItemRevisions,
+      and(
+        eq(
+          commercialScopeItemRevisions.id,
+          commercialBasisLinks.scopeItemRevisionId,
+        ),
+        eq(
+          commercialScopeItemRevisions.projectId,
+          commercialBasisLinks.projectId,
+        ),
+      ),
+    )
+    .innerJoin(
+      commercialScopeItems,
+      and(
+        eq(commercialScopeItems.id, commercialScopeItemRevisions.scopeItemId),
+        eq(commercialScopeItems.projectId, commercialBasisLinks.projectId),
+      ),
+    )
     .where(
       and(
         inArray(commercialBasisLinks.workItemId, workItemIds),
+        isNull(commercialScopeItems.archivedAt),
         ...(projectId ? [eq(commercialBasisLinks.projectId, projectId)] : []),
       ),
     )

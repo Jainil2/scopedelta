@@ -51,7 +51,7 @@ CREATE TABLE "commercial_evidence_anchors" (
 CREATE TABLE "commercial_evidence_sources" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"project_id" uuid NOT NULL,
-	"request_id" uuid NOT NULL,
+	"idempotency_key" uuid NOT NULL,
 	"kind" "commercial_source_kind" NOT NULL,
 	"name" text NOT NULL,
 	"media_type" text NOT NULL,
@@ -75,7 +75,7 @@ CREATE TABLE "commercial_scope_item_revisions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"project_id" uuid NOT NULL,
 	"scope_item_id" uuid NOT NULL,
-	"request_id" uuid NOT NULL,
+	"idempotency_key" uuid NOT NULL,
 	"revision_number" integer NOT NULL,
 	"kind" "commercial_scope_kind" NOT NULL,
 	"title" text NOT NULL,
@@ -92,7 +92,7 @@ CREATE TABLE "commercial_scope_items" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"project_id" uuid NOT NULL,
 	"baseline_version_id" uuid NOT NULL,
-	"request_id" uuid NOT NULL,
+	"idempotency_key" uuid NOT NULL,
 	"created_by_user_id" uuid NOT NULL,
 	"archived_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -137,9 +137,9 @@ CREATE UNIQUE INDEX "commercial_baselines_project_uidx" ON "commercial_baselines
 CREATE UNIQUE INDEX "commercial_basis_links_work_scope_uidx" ON "commercial_basis_links" USING btree ("work_item_id","scope_item_revision_id");--> statement-breakpoint
 CREATE INDEX "commercial_basis_links_project_work_idx" ON "commercial_basis_links" USING btree ("project_id","work_item_id");--> statement-breakpoint
 CREATE INDEX "commercial_evidence_anchors_source_offset_idx" ON "commercial_evidence_anchors" USING btree ("source_id","start_offset","id");--> statement-breakpoint
-CREATE UNIQUE INDEX "commercial_sources_project_request_uidx" ON "commercial_evidence_sources" USING btree ("project_id","request_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "commercial_sources_project_idempotency_uidx" ON "commercial_evidence_sources" USING btree ("project_id","idempotency_key");--> statement-breakpoint
 CREATE INDEX "commercial_sources_project_created_idx" ON "commercial_evidence_sources" USING btree ("project_id","created_at","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "commercial_scope_revisions_number_uidx" ON "commercial_scope_item_revisions" USING btree ("scope_item_id","revision_number");--> statement-breakpoint
-CREATE UNIQUE INDEX "commercial_scope_revisions_request_uidx" ON "commercial_scope_item_revisions" USING btree ("scope_item_id","request_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "commercial_scope_items_project_request_uidx" ON "commercial_scope_items" USING btree ("project_id","request_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "commercial_scope_revisions_idempotency_uidx" ON "commercial_scope_item_revisions" USING btree ("scope_item_id","idempotency_key");--> statement-breakpoint
+CREATE UNIQUE INDEX "commercial_scope_items_project_idempotency_uidx" ON "commercial_scope_items" USING btree ("project_id","idempotency_key");--> statement-breakpoint
 CREATE INDEX "commercial_scope_items_version_archived_idx" ON "commercial_scope_items" USING btree ("baseline_version_id","archived_at","id");

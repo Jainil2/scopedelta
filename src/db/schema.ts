@@ -591,7 +591,7 @@ export const commercialEvidenceSources = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    requestId: uuid("request_id").notNull(),
+    idempotencyKey: uuid("idempotency_key").notNull(),
     kind: commercialSourceKind("kind").notNull(),
     name: text("name").notNull(),
     mediaType: text("media_type").notNull(),
@@ -611,9 +611,9 @@ export const commercialEvidenceSources = pgTable(
       table.id,
       table.projectId,
     ),
-    uniqueIndex("commercial_sources_project_request_uidx").on(
+    uniqueIndex("commercial_sources_project_idempotency_uidx").on(
       table.projectId,
-      table.requestId,
+      table.idempotencyKey,
     ),
     index("commercial_sources_project_created_idx").on(
       table.projectId,
@@ -716,7 +716,7 @@ export const commercialScopeItems = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     baselineVersionId: uuid("baseline_version_id").notNull(),
-    requestId: uuid("request_id").notNull(),
+    idempotencyKey: uuid("idempotency_key").notNull(),
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -736,9 +736,9 @@ export const commercialScopeItems = pgTable(
       ],
       name: "commercial_scope_items_version_project_fk",
     }).onDelete("restrict"),
-    uniqueIndex("commercial_scope_items_project_request_uidx").on(
+    uniqueIndex("commercial_scope_items_project_idempotency_uidx").on(
       table.projectId,
-      table.requestId,
+      table.idempotencyKey,
     ),
     index("commercial_scope_items_version_archived_idx").on(
       table.baselineVersionId,
@@ -756,7 +756,7 @@ export const commercialScopeItemRevisions = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     scopeItemId: uuid("scope_item_id").notNull(),
-    requestId: uuid("request_id").notNull(),
+    idempotencyKey: uuid("idempotency_key").notNull(),
     revisionNumber: integer("revision_number").notNull(),
     kind: commercialScopeKind("kind").notNull(),
     title: text("title").notNull(),
@@ -782,9 +782,9 @@ export const commercialScopeItemRevisions = pgTable(
       table.scopeItemId,
       table.revisionNumber,
     ),
-    uniqueIndex("commercial_scope_revisions_request_uidx").on(
+    uniqueIndex("commercial_scope_revisions_idempotency_uidx").on(
       table.scopeItemId,
-      table.requestId,
+      table.idempotencyKey,
     ),
     check(
       "commercial_scope_revisions_number_positive",

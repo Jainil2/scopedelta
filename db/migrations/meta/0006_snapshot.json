@@ -1000,8 +1000,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "request_id": {
-          "name": "request_id",
+        "idempotency_key": {
+          "name": "idempotency_key",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -1084,8 +1084,8 @@
         }
       },
       "indexes": {
-        "commercial_sources_project_request_uidx": {
-          "name": "commercial_sources_project_request_uidx",
+        "commercial_sources_project_idempotency_uidx": {
+          "name": "commercial_sources_project_idempotency_uidx",
           "columns": [
             {
               "expression": "project_id",
@@ -1094,7 +1094,7 @@
               "nulls": "last"
             },
             {
-              "expression": "request_id",
+              "expression": "idempotency_key",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1205,8 +1205,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "request_id": {
-          "name": "request_id",
+        "idempotency_key": {
+          "name": "idempotency_key",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -1272,8 +1272,8 @@
           "method": "btree",
           "with": {}
         },
-        "commercial_scope_revisions_request_uidx": {
-          "name": "commercial_scope_revisions_request_uidx",
+        "commercial_scope_revisions_idempotency_uidx": {
+          "name": "commercial_scope_revisions_idempotency_uidx",
           "columns": [
             {
               "expression": "scope_item_id",
@@ -1282,7 +1282,7 @@
               "nulls": "last"
             },
             {
-              "expression": "request_id",
+              "expression": "idempotency_key",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1371,8 +1371,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "request_id": {
-          "name": "request_id",
+        "idempotency_key": {
+          "name": "idempotency_key",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -1405,8 +1405,8 @@
         }
       },
       "indexes": {
-        "commercial_scope_items_project_request_uidx": {
-          "name": "commercial_scope_items_project_request_uidx",
+        "commercial_scope_items_project_idempotency_uidx": {
+          "name": "commercial_scope_items_project_idempotency_uidx",
           "columns": [
             {
               "expression": "project_id",
@@ -1415,7 +1415,7 @@
               "nulls": "last"
             },
             {
-              "expression": "request_id",
+              "expression": "idempotency_key",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

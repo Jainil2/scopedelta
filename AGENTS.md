@@ -19,6 +19,38 @@ Owns technical architecture, implementation, migrations, tests, CI, deployment c
 
 Do not change product/business rules without an issue or documented decision.
 
+## Issue sizing and delivery speed
+
+Default to **one business task / product layer outcome = one engineering issue and one primary implementation PR**.
+
+Do not automatically split work into A/B/C issues merely because the implementation has phases. Internal phases, commits, or checklists are preferred when one coherent PR is safe.
+
+Split an issue only when there is a concrete reason, such as:
+
+- the combined change is too large to review or reason about safely;
+- one part has a real dependency that blocks the rest;
+- separate migrations/deployments or rollback boundaries materially reduce production risk;
+- a security/authorization boundary should be reviewed independently;
+- independent customer value can ship materially earlier;
+- parallel work would actually reduce elapsed time without creating integration overhead.
+
+When splitting, record the reason in the parent/child issues. The goal is not small issues for their own sake; optimize for **elapsed time to validated customer value** while preserving reasonable engineering quality.
+
+## Testing and CI efficiency
+
+Quality gates remain mandatory, but avoid redundant full-suite execution during iterative development.
+
+During implementation:
+
+1. Run the smallest relevant unit/integration tests for the code being changed.
+2. Use focused browser/E2E coverage for the journey currently under construction.
+3. Do not repeatedly run the full E2E + production build + Docker/container suite after every small edit unless the change specifically affects those boundaries.
+4. Run the complete required migration/lint/typecheck/unit/integration/E2E/build/container gate when the PR is genuinely ready for review.
+5. After review feedback, first run focused regression coverage for the fix; when the fix set is complete, run one final full hosted gate before merge.
+6. Do not weaken, skip, or suppress the final merge-quality gate merely to save time.
+
+Prefer fewer meaningful pushes/full CI cycles over many tiny pushes that each trigger the entire pipeline when the work can be validated locally/focused first.
+
 ## Before implementing an issue
 
 1. Read the issue completely.

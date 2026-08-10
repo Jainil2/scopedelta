@@ -888,40 +888,42 @@ async function assertDiscussionTarget(
   projectId: string,
   input: CreateClientDiscussionInput,
 ) {
-  const found =
-    input.target === "request"
-      ? await database
-          .select({ id: commercialRequests.id })
-          .from(commercialRequests)
-          .where(
-            and(
-              eq(commercialRequests.id, input.targetId),
-              eq(commercialRequests.projectId, projectId),
-              sql`${commercialRequests.submittedByClientParticipantId} is not null`,
-            ),
-          )
-          .limit(1)
-      : input.target === "packet"
-        ? await database
-            .select({ id: clientCommercialPackets.id })
-            .from(clientCommercialPackets)
-            .where(
-              and(
-                eq(clientCommercialPackets.id, input.targetId),
-                eq(clientCommercialPackets.projectId, projectId),
-              ),
-            )
-            .limit(1)
-        : await database
-            .select({ id: clientAcceptanceTargets.id })
-            .from(clientAcceptanceTargets)
-            .where(
-              and(
-                eq(clientAcceptanceTargets.id, input.targetId),
-                eq(clientAcceptanceTargets.projectId, projectId),
-              ),
-            )
-            .limit(1);
+  let found: Array<{ id: string }>;
+  if (input.target === "request") {
+    found = await database
+      .select({ id: commercialRequests.id })
+      .from(commercialRequests)
+      .where(
+        and(
+          eq(commercialRequests.id, input.targetId),
+          eq(commercialRequests.projectId, projectId),
+          sql`${commercialRequests.submittedByClientParticipantId} is not null`,
+        ),
+      )
+      .limit(1);
+  } else if (input.target === "packet") {
+    found = await database
+      .select({ id: clientCommercialPackets.id })
+      .from(clientCommercialPackets)
+      .where(
+        and(
+          eq(clientCommercialPackets.id, input.targetId),
+          eq(clientCommercialPackets.projectId, projectId),
+        ),
+      )
+      .limit(1);
+  } else {
+    found = await database
+      .select({ id: clientAcceptanceTargets.id })
+      .from(clientAcceptanceTargets)
+      .where(
+        and(
+          eq(clientAcceptanceTargets.id, input.targetId),
+          eq(clientAcceptanceTargets.projectId, projectId),
+        ),
+      )
+      .limit(1);
+  }
   if (!found[0]) throw notFound();
 }
 
@@ -1017,6 +1019,79 @@ export async function createInternalClientDiscussionMessage(
   });
 }
 
+type ClientSafeImpact = {
+  scheduleDeltaDays: number | null;
+  targetDate: string | null;
+  monetaryAmount: string | null;
+  currencyCode: string | null;
+};
+
+async function loadConfirmedClientImpact(
+  transaction: Transaction,
+  projectId: string,
+  requestId: string,
+  input: PublishClientPacketInput,
+): Promise<ClientSafeImpact | null> {
+  if (!input.impactAssessmentId) {
+    if (
+      input.includeScheduleDeltaDays ||
+      input.includeTargetDate ||
+      input.includeMonetaryAmount
+    ) {
+      throw new PlatformError(
+        "confirmed_impact_required",
+        409,
+        "Select a confirmed impact assessment before publishing those values.",
+      );
+    }
+    return null;
+  }
+  const rows = await transaction
+    .select({
+      scheduleDeltaDays: commercialImpactAssessments.scheduleDeltaDays,
+      targetDate: commercialImpactAssessments.targetDate,
+      monetaryAmount: commercialImpactAssessments.monetaryAmount,
+      currencyCode: commercialImpactAssessments.currencyCode,
+    })
+    .from(commercialImpactAssessments)
+    .where(
+      and(
+        eq(commercialImpactAssessments.id, input.impactAssessmentId),
+        eq(commercialImpactAssessments.projectId, projectId),
+        eq(commercialImpactAssessments.requestId, requestId),
+        eq(commercialImpactAssessments.decisionId, input.decisionId),
+        eq(commercialImpactAssessments.confidence, "confirmed"),
+      ),
+    )
+    .limit(1);
+  if (!rows[0]) {
+    throw new PlatformError(
+      "confirmed_impact_required",
+      409,
+      "Select a confirmed impact assessment before publishing those values.",
+    );
+  }
+  return rows[0];
+}
+
+async function assertClientScopeRevisions(
+  transaction: Transaction,
+  projectId: string,
+  scopeIds: string[],
+) {
+  if (!scopeIds.length) return;
+  const valid = await transaction
+    .select({ id: commercialScopeItemRevisions.id })
+    .from(commercialScopeItemRevisions)
+    .where(
+      and(
+        eq(commercialScopeItemRevisions.projectId, projectId),
+        inArray(commercialScopeItemRevisions.id, scopeIds),
+      ),
+    );
+  if (valid.length !== scopeIds.length) throw notFound();
+}
+
 export async function publishClientCommercialPacket(
   actor: UserActor,
   workspaceId: string,
@@ -1065,65 +1140,14 @@ export async function publishClientCommercialPacket(
       .limit(1);
     if (existing[0]) return existing[0];
 
-    let impact: {
-      scheduleDeltaDays: number | null;
-      targetDate: string | null;
-      monetaryAmount: string | null;
-      currencyCode: string | null;
-    } | null = null;
-    if (input.impactAssessmentId) {
-      const impactRows = await transaction
-        .select({
-          scheduleDeltaDays: commercialImpactAssessments.scheduleDeltaDays,
-          targetDate: commercialImpactAssessments.targetDate,
-          monetaryAmount: commercialImpactAssessments.monetaryAmount,
-          currencyCode: commercialImpactAssessments.currencyCode,
-        })
-        .from(commercialImpactAssessments)
-        .where(
-          and(
-            eq(commercialImpactAssessments.id, input.impactAssessmentId),
-            eq(commercialImpactAssessments.projectId, projectId),
-            eq(commercialImpactAssessments.requestId, requestId),
-            eq(commercialImpactAssessments.decisionId, input.decisionId),
-            eq(commercialImpactAssessments.confidence, "confirmed"),
-          ),
-        )
-        .limit(1);
-      impact = impactRows[0] ?? null;
-      if (!impact) {
-        throw new PlatformError(
-          "confirmed_impact_required",
-          409,
-          "Select a confirmed impact assessment before publishing those values.",
-        );
-      }
-    }
-    if (
-      (input.includeScheduleDeltaDays ||
-        input.includeTargetDate ||
-        input.includeMonetaryAmount) &&
-      !impact
-    ) {
-      throw new PlatformError(
-        "confirmed_impact_required",
-        409,
-        "Select a confirmed impact assessment before publishing those values.",
-      );
-    }
+    const impact = await loadConfirmedClientImpact(
+      transaction,
+      projectId,
+      requestId,
+      input,
+    );
     const scopeIds = [...new Set(input.scopeItemRevisionIds)];
-    if (scopeIds.length) {
-      const valid = await transaction
-        .select({ id: commercialScopeItemRevisions.id })
-        .from(commercialScopeItemRevisions)
-        .where(
-          and(
-            eq(commercialScopeItemRevisions.projectId, projectId),
-            inArray(commercialScopeItemRevisions.id, scopeIds),
-          ),
-        );
-      if (valid.length !== scopeIds.length) throw notFound();
-    }
+    await assertClientScopeRevisions(transaction, projectId, scopeIds);
     const current = await transaction
       .select({
         id: clientCommercialPackets.id,

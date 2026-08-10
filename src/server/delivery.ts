@@ -21,6 +21,7 @@ import { getDb } from "@/db";
 import {
   auditEvents,
   clients,
+  commercialBaselineVersions,
   commercialBasisLinks,
   commercialDecisions,
   commercialScopeItemRevisions,
@@ -965,7 +966,7 @@ export async function listWorkItems(
     listCommercialBasisCounts(projectId, ids),
   ]);
   const commercialBasisByWorkItem = new Map(
-    commercialBasisCounts.map((row) => [row.workItemId, row.total]),
+    commercialBasisCounts.map((row) => [row.workItemId, row]),
   );
   const totalRows = await getDb()
     .select({ total: count() })
@@ -991,7 +992,11 @@ export async function listWorkItems(
   const withLabels = rows.map((row) => ({
     ...row,
     identifier: `${projectKey}-${row.number}`,
-    commercialBasisCount: commercialBasisByWorkItem.get(row.id) ?? 0,
+    commercialBasisCount: commercialBasisByWorkItem.get(row.id)?.total ?? 0,
+    commercialHistoricalBasisCount:
+      commercialBasisByWorkItem.get(row.id)?.historicalTotal ?? 0,
+    commercialStaleBasisCount:
+      commercialBasisByWorkItem.get(row.id)?.staleTotal ?? 0,
     labels: labels.filter((label) => label.workItemId === row.id),
   }));
   return pageResult(
@@ -1119,7 +1124,7 @@ export async function listMyWork(
     listCommercialBasisCounts(undefined, ids),
   ]);
   const commercialBasisByWorkItem = new Map(
-    commercialBasisCounts.map((row) => [row.workItemId, row.total]),
+    commercialBasisCounts.map((row) => [row.workItemId, row]),
   );
   const totalRows = await getDb()
     .select({ total: count() })
@@ -1154,7 +1159,11 @@ export async function listMyWork(
     rows.map((row) => ({
       ...row,
       identifier: `${row.projectKey}-${row.number}`,
-      commercialBasisCount: commercialBasisByWorkItem.get(row.id) ?? 0,
+      commercialBasisCount: commercialBasisByWorkItem.get(row.id)?.total ?? 0,
+      commercialHistoricalBasisCount:
+        commercialBasisByWorkItem.get(row.id)?.historicalTotal ?? 0,
+      commercialStaleBasisCount:
+        commercialBasisByWorkItem.get(row.id)?.staleTotal ?? 0,
       labels: labels.filter((label) => label.workItemId === row.id),
     })),
     filters.page,
@@ -1385,6 +1394,9 @@ export async function getWorkItem(
     ...rows[0],
     identifier: `${key}-${rows[0].number}`,
     commercialBasisCount: commercialBasisCounts[0]?.total ?? 0,
+    commercialHistoricalBasisCount:
+      commercialBasisCounts[0]?.historicalTotal ?? 0,
+    commercialStaleBasisCount: commercialBasisCounts[0]?.staleTotal ?? 0,
     labels,
   };
 }
@@ -1980,12 +1992,52 @@ async function listCommercialBasisCounts(
   workItemIds: string[],
 ) {
   if (!workItemIds.length) return [];
+  const currentBaselineBasis = sql`exists (
+    select 1
+    from ${commercialScopeItems} current_scope
+    inner join ${commercialBaselineVersions} current_version
+      on current_version.id = current_scope.baseline_version_id
+      and current_version.project_id = current_scope.project_id
+    where current_scope.project_id = ${commercialBasisLinks.projectId}
+      and current_scope.material_basis_scope_item_id = ${commercialScopeItems.id}
+      and current_scope.archived_at is null
+      and current_version.state = 'effective'
+  )`;
+  const hasEffectiveBaseline = sql`exists (
+    select 1
+    from ${commercialBaselineVersions} current_version
+    where current_version.project_id = ${commercialBasisLinks.projectId}
+      and current_version.state = 'effective'
+  )`;
+  const activeWork = sql`${workItems.archivedAt} is null
+    and ${workItems.status} not in ('done', 'canceled')`;
   return getDb()
     .select({
       workItemId: commercialBasisLinks.workItemId,
-      total: count(),
+      total: sql<number>`count(*) filter (
+        where
+          (${commercialBasisLinks.basisType} = 'baseline_scope_item' and ${currentBaselineBasis})
+          or
+          (${commercialBasisLinks.basisType} = 'commercial_decision'
+            and ${commercialDecisions.supersededAt} is null
+            and ${commercialDecisions.disposition} in ('covered', 'absorbed', 'swap', 'paid_change'))
+      )::int`,
+      historicalTotal: sql<number>`count(*)::int`,
+      staleTotal: sql<number>`count(*) filter (
+        where ${commercialBasisLinks.basisType} = 'baseline_scope_item'
+          and ${hasEffectiveBaseline}
+          and not (${currentBaselineBasis})
+          and ${activeWork}
+      )::int`,
     })
     .from(commercialBasisLinks)
+    .innerJoin(
+      workItems,
+      and(
+        eq(workItems.id, commercialBasisLinks.workItemId),
+        eq(workItems.projectId, commercialBasisLinks.projectId),
+      ),
+    )
     .leftJoin(
       commercialScopeItemRevisions,
       and(
@@ -2016,17 +2068,6 @@ async function listCommercialBasisCounts(
     .where(
       and(
         inArray(commercialBasisLinks.workItemId, workItemIds),
-        or(
-          and(
-            eq(commercialBasisLinks.basisType, "baseline_scope_item"),
-            isNull(commercialScopeItems.archivedAt),
-          ),
-          and(
-            eq(commercialBasisLinks.basisType, "commercial_decision"),
-            isNull(commercialDecisions.supersededAt),
-            sql`${commercialDecisions.disposition} in ('covered', 'absorbed', 'swap', 'paid_change')`,
-          ),
-        ),
         ...(projectId ? [eq(commercialBasisLinks.projectId, projectId)] : []),
       ),
     )

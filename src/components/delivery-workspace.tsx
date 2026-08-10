@@ -74,6 +74,9 @@ export type WorkItem = {
   priority: "none" | "low" | "medium" | "high" | "urgent";
   purpose: "unclassified" | "client_delivery" | "delivery_support" | "internal";
   commercialBasisCount: number;
+  commercialHistoricalBasisCount?: number;
+  commercialStaleBasisCount?: number;
+  archivedAt?: string | Date | null;
   assigneeUserId: string | null;
   assigneeName: string | null;
   estimatePoints: number | null;
@@ -1618,18 +1621,39 @@ function projectDirectoryHref(
 export function CommercialProvenanceBadge({
   item,
 }: Readonly<{
-  item: Pick<WorkItem, "purpose" | "commercialBasisCount">;
+  item: Pick<
+    WorkItem,
+    | "purpose"
+    | "status"
+    | "archivedAt"
+    | "commercialBasisCount"
+    | "commercialHistoricalBasisCount"
+    | "commercialStaleBasisCount"
+  >;
 }>) {
+  const historicalWork =
+    item.status === "done" ||
+    item.status === "canceled" ||
+    Boolean(item.archivedAt);
   const state =
     item.purpose === "unclassified"
       ? ["commercial-needs-classification", "Needs classification"]
-      : item.purpose === "client_delivery" && item.commercialBasisCount === 0
-        ? ["commercial-unlinked", "Commercially unlinked"]
-        : item.purpose === "client_delivery"
-          ? ["commercial-linked", "Baseline linked"]
-          : item.purpose === "delivery_support"
-            ? ["commercial-support", "Delivery support"]
-            : ["commercial-internal", "Internal"];
+      : item.purpose === "client_delivery" &&
+          historicalWork &&
+          (item.commercialHistoricalBasisCount ?? 0) > 0
+        ? ["commercial-historical", "Historically authorized"]
+        : item.purpose === "client_delivery" &&
+            item.commercialBasisCount === 0 &&
+            (item.commercialStaleBasisCount ?? 0) > 0
+          ? ["commercial-stale", "Stale commercial basis"]
+          : item.purpose === "client_delivery" &&
+              item.commercialBasisCount === 0
+            ? ["commercial-unlinked", "Commercially unlinked"]
+            : item.purpose === "client_delivery"
+              ? ["commercial-linked", "Baseline linked"]
+              : item.purpose === "delivery_support"
+                ? ["commercial-support", "Delivery support"]
+                : ["commercial-internal", "Internal"];
   return <span className={`commercial-badge ${state[0]}`}>{state[1]}</span>;
 }
 

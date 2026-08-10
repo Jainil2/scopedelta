@@ -6,6 +6,11 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { getDb, getPool } from "@/db";
 import { PlatformError } from "@/lib/platform-errors";
 import {
+  activateCommercialBaselineVersion,
+  createCommercialAmendment,
+  listCommercialHistory,
+} from "@/server/commercial-amendments";
+import {
   auditEvents,
   commercialBasisLinks,
   commercialDecisions,
@@ -43,8 +48,10 @@ import {
   createClient,
   createProject,
   createWorkItem,
+  getWorkItem,
   listMyWork,
   listWorkItems,
+  updateWorkItem,
 } from "@/server/delivery";
 import { createWorkspace } from "@/server/workspaces";
 
@@ -137,7 +144,11 @@ describe("commercial baseline domain boundary", () => {
       project.id,
       { sourceId: source.id },
     );
-    expect(baseline).toMatchObject({ versionNumber: 1, sourceId: source.id });
+    expect(baseline).toMatchObject({
+      versionNumber: null,
+      state: "draft",
+      sourceId: source.id,
+    });
     await expect(
       retryCommercialSource(owner, workspace.id, project.id, source.id),
     ).rejects.toMatchObject({ code: "source_in_use", status: 409 });
@@ -175,9 +186,6 @@ describe("commercial baseline domain boundary", () => {
       }),
     ).resolves.toMatchObject({ page: { total: 1 } });
 
-    await createCommercialBasisLink(owner, workspace.id, project.id, work.id, {
-      scopeItemRevisionId: item.revisionId,
-    });
     const revised = await updateCommercialScopeItem(
       owner,
       workspace.id,
@@ -199,6 +207,20 @@ describe("commercial baseline domain boundary", () => {
       },
     );
     expect(revised.revisionNumber).toBe(2);
+    const effectiveBaseline = await activateCommercialBaselineVersion(
+      owner,
+      workspace.id,
+      project.id,
+      baseline.versionId,
+      {},
+    );
+    expect(effectiveBaseline).toMatchObject({
+      versionNumber: 1,
+      state: "effective",
+    });
+    await createCommercialBasisLink(owner, workspace.id, project.id, work.id, {
+      scopeItemRevisionId: revised.revisionId,
+    });
     const provenance = await getWorkCommercialProvenance(
       owner,
       workspace.id,
@@ -211,9 +233,9 @@ describe("commercial baseline domain boundary", () => {
     });
     expect(provenance.links).toEqual([
       expect.objectContaining({
-        scopeItemRevisionId: item.revisionId,
-        revisionNumber: 1,
-        title: "Authenticated client portal",
+        scopeItemRevisionId: revised.revisionId,
+        revisionNumber: 2,
+        title: "Authenticated client portal with SSO",
       }),
     ]);
     expect(
@@ -256,100 +278,17 @@ describe("commercial baseline domain boundary", () => {
       data: [expect.objectContaining({ id: work.id, state: "linked" })],
     });
 
-    await setCommercialScopeItemArchived(
-      owner,
-      workspace.id,
-      project.id,
-      item.id,
-      true,
-    );
     await expect(
-      getWorkCommercialProvenance(owner, workspace.id, project.id, work.id),
-    ).resolves.toMatchObject({
-      purpose: "client_delivery",
-      state: "commercially_unlinked",
-      links: [
-        expect.objectContaining({
-          scopeItemRevisionId: item.revisionId,
-          archivedAt: expect.any(Date),
-        }),
-      ],
-    });
-    await expect(
-      listWorkItems(owner, workspace.id, project.id, {
-        page: 1,
-        pageSize: 50,
-      }),
-    ).resolves.toMatchObject({
-      items: [
-        expect.objectContaining({ id: work.id, commercialBasisCount: 0 }),
-      ],
-    });
-    await expect(
-      listMyWork(owner, workspace.id, { page: 1, pageSize: 50 }),
-    ).resolves.toMatchObject({
-      items: [
-        expect.objectContaining({ id: work.id, commercialBasisCount: 0 }),
-      ],
-    });
-    await expect(
-      listCommercialDrift(owner, workspace.id, project.id, {
-        page: 1,
-        pageSize: 50,
-        state: "commercially_unlinked",
-      }),
-    ).resolves.toMatchObject({
-      page: { total: 1 },
-      data: [
-        expect.objectContaining({
-          id: work.id,
-          state: "commercially_unlinked",
-          basisCount: 0,
-        }),
-      ],
-    });
-    await expect(
-      listCommercialDrift(owner, workspace.id, project.id, {
-        page: 1,
-        pageSize: 50,
-        state: "linked",
-      }),
-    ).resolves.toMatchObject({ page: { total: 0 }, data: [] });
-
-    await setCommercialScopeItemArchived(
-      owner,
-      workspace.id,
-      project.id,
-      item.id,
-      false,
-    );
-    await expect(
-      getWorkCommercialProvenance(owner, workspace.id, project.id, work.id),
-    ).resolves.toMatchObject({
-      state: "linked",
-      links: [
-        expect.objectContaining({
-          scopeItemRevisionId: item.revisionId,
-          archivedAt: null,
-        }),
-      ],
-    });
-    await expect(
-      listWorkItems(owner, workspace.id, project.id, {
-        page: 1,
-        pageSize: 50,
-      }),
-    ).resolves.toMatchObject({
-      items: [
-        expect.objectContaining({ id: work.id, commercialBasisCount: 1 }),
-      ],
-    });
-    await expect(
-      listMyWork(owner, workspace.id, { page: 1, pageSize: 50 }),
-    ).resolves.toMatchObject({
-      items: [
-        expect.objectContaining({ id: work.id, commercialBasisCount: 1 }),
-      ],
+      setCommercialScopeItemArchived(
+        owner,
+        workspace.id,
+        project.id,
+        item.id,
+        true,
+      ),
+    ).rejects.toMatchObject({
+      code: "baseline_version_immutable",
+      status: 409,
     });
 
     await updateWorkPurpose(owner, workspace.id, project.id, work.id, {
@@ -368,6 +307,505 @@ describe("commercial baseline domain boundary", () => {
       .from(auditEvents);
     expect(JSON.stringify(audits)).not.toContain(secret);
     expect(JSON.stringify(audits)).not.toContain("Authenticated client portal");
+  });
+
+  it("activates an amendment with explicit scope lineage and marks only active revised work stale", async () => {
+    const { owner, workspace, project, work } = await createFixture();
+    const firstText =
+      "Build portal. Keep audit export. Retain legacy dashboard support.";
+    const firstSource = await createCommercialSource(
+      owner,
+      workspace.id,
+      project.id,
+      {
+        idempotencyKey: randomUUID(),
+        kind: "pasted_text",
+        name: "Original SOW",
+        mediaType: "text/plain",
+        contentBase64: Buffer.from(firstText).toString("base64"),
+      },
+    );
+    const firstVersion = await createCommercialBaseline(
+      owner,
+      workspace.id,
+      project.id,
+      { sourceId: firstSource.id },
+    );
+    const createScope = (title: string) =>
+      createCommercialScopeItem(owner, workspace.id, project.id, {
+        idempotencyKey: randomUUID(),
+        revisionIdempotencyKey: randomUUID(),
+        baselineVersionId: firstVersion.versionId,
+        kind: "deliverable",
+        title,
+        details: null,
+        anchors: [
+          {
+            sourceId: firstSource.id,
+            startOffset: 0,
+            endOffset: firstText.length,
+            label: "Original scope",
+          },
+        ],
+      });
+    const [revisedBasis, carriedBasis, retiredBasis] = await Promise.all([
+      createScope("Client portal"),
+      createScope("Audit export"),
+      createScope("Legacy dashboard support"),
+    ]);
+    await activateCommercialBaselineVersion(
+      owner,
+      workspace.id,
+      project.id,
+      firstVersion.versionId,
+      {},
+    );
+    await updateWorkPurpose(owner, workspace.id, project.id, work.id, {
+      purpose: "client_delivery",
+    });
+    await createCommercialBasisLink(owner, workspace.id, project.id, work.id, {
+      scopeItemRevisionId: revisedBasis.revisionId,
+    });
+    const carriedWork = await createWorkItem(
+      owner,
+      workspace.id,
+      project.id,
+      workInput("Deliver audit export"),
+    );
+    await updateWorkPurpose(owner, workspace.id, project.id, carriedWork.id, {
+      purpose: "client_delivery",
+    });
+    await createCommercialBasisLink(
+      owner,
+      workspace.id,
+      project.id,
+      carriedWork.id,
+      { scopeItemRevisionId: carriedBasis.revisionId },
+    );
+    const completedWork = await createWorkItem(
+      owner,
+      workspace.id,
+      project.id,
+      workInput("Complete legacy dashboard support", owner.userId),
+    );
+    await updateWorkPurpose(owner, workspace.id, project.id, completedWork.id, {
+      purpose: "client_delivery",
+    });
+    await createCommercialBasisLink(
+      owner,
+      workspace.id,
+      project.id,
+      completedWork.id,
+      { scopeItemRevisionId: retiredBasis.revisionId },
+    );
+    await updateWorkItem(owner, workspace.id, project.id, completedWork.id, {
+      status: "done",
+    });
+    const canceledWork = await createWorkItem(
+      owner,
+      workspace.id,
+      project.id,
+      workInput("Cancel legacy dashboard support", owner.userId),
+    );
+    await updateWorkPurpose(owner, workspace.id, project.id, canceledWork.id, {
+      purpose: "client_delivery",
+    });
+    await createCommercialBasisLink(
+      owner,
+      workspace.id,
+      project.id,
+      canceledWork.id,
+      { scopeItemRevisionId: retiredBasis.revisionId },
+    );
+    await updateWorkItem(owner, workspace.id, project.id, canceledWork.id, {
+      status: "canceled",
+    });
+
+    const amendmentText =
+      "Portal includes SSO. Audit export is unchanged. Legacy dashboard support is retired. Add launch training.";
+    const amendmentSource = await createCommercialSource(
+      owner,
+      workspace.id,
+      project.id,
+      {
+        idempotencyKey: randomUUID(),
+        kind: "pasted_text",
+        name: "Signed amendment",
+        mediaType: "text/plain",
+        contentBase64: Buffer.from(amendmentText).toString("base64"),
+      },
+    );
+    const amendment = await createCommercialAmendment(
+      owner,
+      workspace.id,
+      project.id,
+      {
+        sourceId: amendmentSource.id,
+        label: "SSO and launch amendment",
+        decisionIds: [],
+      },
+    );
+    const draft = await listCommercialOverview(owner, workspace.id, project.id);
+    const revisedCopy = draft.scopeItems.find(
+      (item) => item.title === "Client portal",
+    )!;
+    const retiredCopy = draft.scopeItems.find(
+      (item) => item.title === "Legacy dashboard support",
+    )!;
+    const carriedCopy = draft.scopeItems.find(
+      (item) => item.title === "Audit export",
+    )!;
+    const revised = await updateCommercialScopeItem(
+      owner,
+      workspace.id,
+      project.id,
+      revisedCopy.id,
+      {
+        idempotencyKey: randomUUID(),
+        kind: "deliverable",
+        title: "Client portal with SSO",
+        details: null,
+        anchors: [
+          {
+            sourceId: amendmentSource.id,
+            startOffset: 0,
+            endOffset: "Portal includes SSO.".length,
+            label: "Revised deliverable",
+          },
+        ],
+      },
+    );
+    await setCommercialScopeItemArchived(
+      owner,
+      workspace.id,
+      project.id,
+      retiredCopy.id,
+      true,
+    );
+    await createCommercialScopeItem(owner, workspace.id, project.id, {
+      idempotencyKey: randomUUID(),
+      revisionIdempotencyKey: randomUUID(),
+      baselineVersionId: amendment.id,
+      kind: "deliverable",
+      title: "Launch training",
+      details: null,
+      anchors: [
+        {
+          sourceId: amendmentSource.id,
+          startOffset: amendmentText.indexOf("Add launch training"),
+          endOffset:
+            amendmentText.indexOf("Add launch training") +
+            "Add launch training".length,
+          label: "Added deliverable",
+        },
+      ],
+    });
+    await activateCommercialBaselineVersion(
+      owner,
+      workspace.id,
+      project.id,
+      amendment.id,
+      {},
+    );
+
+    await expect(
+      getWorkCommercialProvenance(owner, workspace.id, project.id, work.id),
+    ).resolves.toMatchObject({
+      state: "stale_basis",
+      links: [expect.objectContaining({ stale: true, effective: false })],
+    });
+    await expect(
+      getWorkCommercialProvenance(
+        owner,
+        workspace.id,
+        project.id,
+        carriedWork.id,
+      ),
+    ).resolves.toMatchObject({
+      state: "linked",
+      links: [expect.objectContaining({ stale: false, effective: true })],
+    });
+    await expect(
+      getWorkCommercialProvenance(
+        owner,
+        workspace.id,
+        project.id,
+        completedWork.id,
+      ),
+    ).resolves.toMatchObject({
+      links: [
+        expect.objectContaining({
+          title: "Legacy dashboard support",
+          stale: false,
+        }),
+      ],
+    });
+    await expect(
+      listCommercialDrift(owner, workspace.id, project.id, {
+        page: 1,
+        pageSize: 50,
+        state: "stale_basis",
+      }),
+    ).resolves.toMatchObject({
+      data: [expect.objectContaining({ id: work.id, staleBasisCount: 1 })],
+    });
+    await expect(
+      listWorkItems(owner, workspace.id, project.id, {
+        page: 1,
+        pageSize: 50,
+      }),
+    ).resolves.toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          id: work.id,
+          commercialStaleBasisCount: 1,
+        }),
+        expect.objectContaining({
+          id: completedWork.id,
+          commercialHistoricalBasisCount: 1,
+          commercialStaleBasisCount: 0,
+        }),
+        expect.objectContaining({
+          id: canceledWork.id,
+          commercialHistoricalBasisCount: 1,
+          commercialStaleBasisCount: 0,
+        }),
+      ]),
+    });
+    await expect(
+      listMyWork(owner, workspace.id, {
+        page: 1,
+        pageSize: 50,
+      }),
+    ).resolves.toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          id: work.id,
+          commercialStaleBasisCount: 1,
+        }),
+      ]),
+    });
+    await expect(
+      listMyWork(owner, workspace.id, {
+        page: 1,
+        pageSize: 50,
+        status: "done",
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({
+          id: completedWork.id,
+          commercialHistoricalBasisCount: 1,
+          commercialStaleBasisCount: 0,
+        }),
+      ],
+    });
+    await expect(
+      listMyWork(owner, workspace.id, {
+        page: 1,
+        pageSize: 50,
+        status: "canceled",
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({
+          id: canceledWork.id,
+          commercialHistoricalBasisCount: 1,
+          commercialStaleBasisCount: 0,
+        }),
+      ],
+    });
+    await expect(
+      getWorkItem(owner, workspace.id, project.id, completedWork.id),
+    ).resolves.toMatchObject({
+      commercialHistoricalBasisCount: 1,
+      commercialStaleBasisCount: 0,
+    });
+    await expect(
+      getWorkItem(owner, workspace.id, project.id, canceledWork.id),
+    ).resolves.toMatchObject({
+      commercialHistoricalBasisCount: 1,
+      commercialStaleBasisCount: 0,
+    });
+    await createCommercialBasisLink(owner, workspace.id, project.id, work.id, {
+      scopeItemRevisionId: revised.revisionId,
+    });
+    await expect(
+      getWorkCommercialProvenance(owner, workspace.id, project.id, work.id),
+    ).resolves.toMatchObject({ state: "linked" });
+
+    const history = await listCommercialHistory(
+      owner,
+      workspace.id,
+      project.id,
+      { page: 1, pageSize: 10 },
+    );
+    expect(history.data).toEqual([
+      expect.objectContaining({
+        versionNumber: 2,
+        state: "effective",
+        lineage: expect.objectContaining({
+          carried_forward: 1,
+          revised: 1,
+          retired: 1,
+          added: 1,
+        }),
+      }),
+      expect.objectContaining({ versionNumber: 1, state: "superseded" }),
+    ]);
+    expect(history.data[0]?.sources).toHaveLength(2);
+    expect(history.data[0]?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Client portal with SSO",
+          lineageKind: "revised",
+          workLinks: 1,
+        }),
+      ]),
+    );
+    expect(history.data[1]?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Legacy dashboard support",
+          workLinks: 2,
+        }),
+      ]),
+    );
+    expect(carriedCopy.lineageKind).toBe("carried_forward");
+  });
+
+  it("serializes competing activations and leaves the effective baseline intact after parser failure", async () => {
+    const { owner, workspace, project } = await createFixture();
+    const source = await createCommercialSource(
+      owner,
+      workspace.id,
+      project.id,
+      {
+        idempotencyKey: randomUUID(),
+        kind: "pasted_text",
+        name: "Initial terms",
+        mediaType: "text/plain",
+        contentBase64: Buffer.from("Initial deliverable").toString("base64"),
+      },
+    );
+    const initial = await createCommercialBaseline(
+      owner,
+      workspace.id,
+      project.id,
+      { sourceId: source.id },
+    );
+    await createCommercialScopeItem(owner, workspace.id, project.id, {
+      idempotencyKey: randomUUID(),
+      revisionIdempotencyKey: randomUUID(),
+      baselineVersionId: initial.versionId,
+      kind: "deliverable",
+      title: "Initial deliverable",
+      details: null,
+      anchors: [
+        { sourceId: source.id, startOffset: 0, endOffset: 19, label: null },
+      ],
+    });
+    await activateCommercialBaselineVersion(
+      owner,
+      workspace.id,
+      project.id,
+      initial.versionId,
+      {},
+    );
+    const failedSource = await createCommercialSource(
+      owner,
+      workspace.id,
+      project.id,
+      {
+        idempotencyKey: randomUUID(),
+        kind: "pdf",
+        name: "Unreadable amendment.pdf",
+        mediaType: "application/pdf",
+        contentBase64: Buffer.from("%PDF-not-a-document").toString("base64"),
+      },
+    );
+    expect(failedSource.parseState).toBe("failed");
+    await expect(
+      createCommercialAmendment(owner, workspace.id, project.id, {
+        sourceId: failedSource.id,
+        label: "Unreadable amendment",
+        decisionIds: [],
+      }),
+    ).rejects.toMatchObject({ code: "source_not_ready", status: 409 });
+    await expect(
+      listCommercialOverview(owner, workspace.id, project.id),
+    ).resolves.toMatchObject({
+      baseline: { versionNumber: 1, state: "effective" },
+    });
+
+    const amendmentSource = await createCommercialSource(
+      owner,
+      workspace.id,
+      project.id,
+      {
+        idempotencyKey: randomUUID(),
+        kind: "pasted_text",
+        name: "Readable amendment",
+        mediaType: "text/plain",
+        contentBase64: Buffer.from("No material change").toString("base64"),
+      },
+    );
+    const firstDraft = await createCommercialAmendment(
+      owner,
+      workspace.id,
+      project.id,
+      {
+        sourceId: amendmentSource.id,
+        label: "Concurrent activation amendment",
+        decisionIds: [],
+      },
+    );
+    await expect(
+      createCommercialAmendment(owner, workspace.id, project.id, {
+        sourceId: amendmentSource.id,
+        label: "Competing amendment",
+        decisionIds: [],
+      }),
+    ).rejects.toMatchObject({ code: "baseline_draft_exists", status: 409 });
+    await expect(
+      activateCommercialBaselineVersion(
+        owner,
+        workspace.id,
+        project.id,
+        firstDraft.id,
+        { effectiveAt: "2020-01-01T00:00:00.000Z" },
+      ),
+    ).rejects.toMatchObject({
+      code: "baseline_effective_time_order",
+      status: 409,
+    });
+    const results = await Promise.allSettled([
+      activateCommercialBaselineVersion(
+        owner,
+        workspace.id,
+        project.id,
+        firstDraft.id,
+        {},
+      ),
+      activateCommercialBaselineVersion(
+        owner,
+        workspace.id,
+        project.id,
+        firstDraft.id,
+        {},
+      ),
+    ]);
+    expect(results.every((result) => result.status === "fulfilled")).toBe(true);
+    const overview = await listCommercialOverview(
+      owner,
+      workspace.id,
+      project.id,
+    );
+    expect(
+      overview.baseline?.versions.filter(
+        (version) => version.state === "effective",
+      ),
+    ).toHaveLength(1);
   });
 
   it("keeps full commercial evidence manager-only and rejects cross-project graph references", async () => {
@@ -436,6 +874,32 @@ describe("commercial baseline domain boundary", () => {
         ],
       },
     );
+    await activateCommercialBaselineVersion(
+      owner,
+      workspace.id,
+      project.id,
+      baseline.versionId,
+      {},
+    );
+    const otherSource = await createCommercialSource(
+      owner,
+      workspace.id,
+      otherProject.id,
+      {
+        idempotencyKey: randomUUID(),
+        kind: "pasted_text",
+        name: "Other project amendment",
+        mediaType: "text/plain",
+        contentBase64: Buffer.from("Other project terms").toString("base64"),
+      },
+    );
+    await expect(
+      createCommercialAmendment(owner, workspace.id, project.id, {
+        sourceId: otherSource.id,
+        label: "Cross-project amendment",
+        decisionIds: [],
+      }),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
     const otherWork = await createWorkItem(
       owner,
       workspace.id,

@@ -32,6 +32,7 @@ type SourceDetail = Source & { extractedText: string | null };
 type ScopeItem = {
   id: string;
   baselineVersionId: string;
+  lineageKind: "carried_forward" | "revised" | "added" | "retired" | null;
   archivedAt: string | Date | null;
   revisionId: string;
   revisionNumber: number;
@@ -52,9 +53,26 @@ type Overview = {
   baseline: {
     id: string;
     versionId: string;
-    versionNumber: number;
+    previousVersionId: string | null;
+    versionNumber: number | null;
+    label: string;
+    state: "draft" | "effective" | "superseded";
     sourceId: string;
+    effectiveAt: string | Date | null;
+    supersededAt: string | Date | null;
     createdAt: string | Date;
+    versions: Array<{
+      id: string;
+      versionId: string;
+      previousVersionId: string | null;
+      versionNumber: number | null;
+      label: string;
+      state: "draft" | "effective" | "superseded";
+      sourceId: string;
+      effectiveAt: string | Date | null;
+      supersededAt: string | Date | null;
+      createdAt: string | Date;
+    }>;
   } | null;
   scopeItems: ScopeItem[];
 };
@@ -66,10 +84,12 @@ type DriftItem = {
   status: string;
   purpose: string;
   basisCount: number;
+  staleBasisCount: number;
   state:
     | "commercially_unlinked"
     | "needs_classification"
     | "linked"
+    | "stale_basis"
     | "support_internal";
 };
 
@@ -82,7 +102,55 @@ type DriftSummary = {
   commerciallyUnlinked: number;
   needsClassification: number;
   linked: number;
+  staleBasis: number;
   supportInternal: number;
+};
+
+type CommercialHistory = {
+  data: Array<{
+    id: string;
+    versionNumber: number | null;
+    label: string;
+    state: "draft" | "effective" | "superseded";
+    sourceName: string;
+    recordedAt: string | Date;
+    effectiveAt: string | Date | null;
+    supersededAt: string | Date | null;
+    createdByName: string;
+    scopeItems: number;
+    sources: Array<{ id: string; name: string }>;
+    items: Array<{
+      id: string;
+      scopeKind: string;
+      title: string;
+      archivedAt: string | Date | null;
+      lineageKind: "carried_forward" | "revised" | "added" | "retired" | null;
+      workLinks: number;
+    }>;
+    lineage: Partial<
+      Record<"carried_forward" | "revised" | "added" | "retired", number>
+    >;
+    changes: Array<{
+      currentScopeItemId: string;
+      previousScopeItemId: string | null;
+      kind: "carried_forward" | "revised" | "added" | "retired";
+      scopeKind: string;
+      title: string;
+    }>;
+    decisions: Array<{
+      decisionId: string;
+      disposition: string;
+      requestTitle: string;
+      confirmedAt: string | Date;
+    }>;
+  }>;
+  page: { number: number; size: number; total: number; pages: number };
+};
+
+type DecisionOption = {
+  id: string;
+  requestTitle: string;
+  disposition: string;
 };
 
 export function CommercialWorkspace({
@@ -92,6 +160,8 @@ export function CommercialWorkspace({
   initialOverview,
   drift,
   driftSummary,
+  history,
+  decisionOptions,
   changeControl,
 }: Readonly<{
   workspaceId: string;
@@ -100,6 +170,8 @@ export function CommercialWorkspace({
   initialOverview: Overview;
   drift: DriftPage;
   driftSummary: DriftSummary;
+  history: CommercialHistory;
+  decisionOptions: DecisionOption[];
   changeControl?: ReactNode;
 }>) {
   const router = useRouter();
@@ -114,11 +186,10 @@ export function CommercialWorkspace({
   const base = `/api/v1/workspaces/${workspaceId}/projects/${project.id}/commercial`;
 
   useEffect(() => {
-    if (overview.baseline && !source)
+    if (overview.baseline && source?.id !== overview.baseline.sourceId)
       void loadSource(overview.baseline.sourceId);
-    // The baseline source is immutable in SC-006A.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overview.baseline?.sourceId]);
+  }, [overview.baseline?.sourceId, source?.id]);
 
   function refresh(text: string) {
     setMessage(text);
@@ -205,6 +276,30 @@ export function CommercialWorkspace({
       sourceId: formData.get("sourceId"),
     });
     if (response.ok) refresh("Initial commercial baseline created.");
+    else setMessage(response.message);
+  }
+
+  async function createAmendment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const response = await apiRequest(`${base}/baseline/versions`, "POST", {
+      sourceId: formData.get("sourceId"),
+      label: formData.get("label"),
+      decisionIds: formData.getAll("decisionIds"),
+    });
+    if (response.ok)
+      refresh("Amendment draft prepared from the current baseline.");
+    else setMessage(response.message);
+  }
+
+  async function activateVersion() {
+    if (!overview.baseline) return;
+    const response = await apiRequest(
+      `${base}/baseline/versions/${overview.baseline.versionId}/activate`,
+      "POST",
+      {},
+    );
+    if (response.ok) refresh("Baseline version is now effective.");
     else setMessage(response.message);
   }
 
@@ -313,6 +408,10 @@ export function CommercialWorkspace({
         <div>
           <strong>{driftSummary.linked}</strong>
           <span>Baseline linked</span>
+        </div>
+        <div>
+          <strong>{driftSummary.staleBasis}</strong>
+          <span>Stale basis</span>
         </div>
         <div>
           <strong>{driftSummary.supportInternal}</strong>
@@ -435,12 +534,14 @@ export function CommercialWorkspace({
           <section className="commercial-section">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Immutable foundation</p>
-                <h2>Initial baseline</h2>
+                <p className="eyebrow">Immutable version lineage</p>
+                <h2>Baseline control</h2>
               </div>
               {overview.baseline ? (
                 <span className="baseline-version">
-                  Version {overview.baseline.versionNumber}
+                  {overview.baseline.state === "draft"
+                    ? "Draft"
+                    : `Version ${overview.baseline.versionNumber}`}
                 </span>
               ) : null}
             </div>
@@ -463,11 +564,67 @@ export function CommercialWorkspace({
                   Create baseline v1
                 </button>
               </form>
+            ) : overview.baseline.state === "effective" ? (
+              <form onSubmit={createAmendment} className="baseline-create-form">
+                <label>
+                  Amendment label
+                  <input
+                    name="label"
+                    required
+                    maxLength={160}
+                    placeholder="e.g. Phase 2 signed amendment"
+                  />
+                </label>
+                <label>
+                  Amendment source
+                  <select name="sourceId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose a parsed amendment
+                    </option>
+                    {readySources.map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {decisionOptions.length ? (
+                  <fieldset className="amendment-decisions">
+                    <legend>Formalize decisions (optional)</legend>
+                    {decisionOptions.map((decision) => (
+                      <label key={decision.id}>
+                        <input
+                          type="checkbox"
+                          name="decisionIds"
+                          value={decision.id}
+                        />
+                        {decision.requestTitle} ·{" "}
+                        {decision.disposition.replaceAll("_", " ")}
+                      </label>
+                    ))}
+                  </fieldset>
+                ) : null}
+                <button disabled={!readySources.length || pending}>
+                  Prepare amendment draft
+                </button>
+              </form>
             ) : (
-              <p className="baseline-note">
-                Version 1 is fixed to its preserved source. Later amendment
-                versions belong to SC-006C.
-              </p>
+              <div className="baseline-draft-control">
+                <p className="baseline-note">
+                  Editing <strong>{overview.baseline.label}</strong>. Carried
+                  items preserve their prior material basis until revised or
+                  retired.
+                </p>
+                <button
+                  onClick={activateVersion}
+                  disabled={
+                    pending ||
+                    !overview.scopeItems.some((item) => !item.archivedAt)
+                  }
+                >
+                  Make version effective
+                </button>
+              </div>
             )}
           </section>
 
@@ -481,7 +638,7 @@ export function CommercialWorkspace({
                 {overview.scopeItems.length} items
               </span>
             </div>
-            {overview.baseline ? (
+            {overview.baseline?.state === "draft" ? (
               <form onSubmit={saveScope} className="scope-item-form">
                 <div className="scope-form-row">
                   <label>
@@ -548,6 +705,11 @@ export function CommercialWorkspace({
                   ) : null}
                 </div>
               </form>
+            ) : overview.baseline ? (
+              <p className="empty-copy">
+                Effective baseline versions are immutable. Prepare an amendment
+                to change scope.
+              </p>
             ) : (
               <p className="empty-copy">
                 Create the initial baseline before curating scope.
@@ -565,7 +727,16 @@ export function CommercialWorkspace({
                     {item.kind}
                   </span>
                   <div>
-                    <strong>{item.title}</strong>
+                    <div className="scope-item-title">
+                      <strong>{item.title}</strong>
+                      {item.lineageKind ? (
+                        <span
+                          className={`lineage-kind lineage-${item.lineageKind}`}
+                        >
+                          {item.lineageKind.replaceAll("_", " ")}
+                        </span>
+                      ) : null}
+                    </div>
                     {item.details ? <p>{item.details}</p> : null}
                     <span className="metadata">
                       Revision {item.revisionNumber} · {item.anchors.length}{" "}
@@ -579,7 +750,8 @@ export function CommercialWorkspace({
                     >
                       Evidence
                     </button>
-                    {!item.archivedAt ? (
+                    {overview.baseline?.state === "draft" &&
+                    !item.archivedAt ? (
                       <button
                         className="text-button"
                         onClick={() => {
@@ -590,17 +762,21 @@ export function CommercialWorkspace({
                         Revise
                       </button>
                     ) : null}
-                    <button
-                      className="text-button"
-                      onClick={() => archiveScope(item)}
-                    >
-                      {item.archivedAt ? "Restore" : "Archive"}
-                    </button>
+                    {overview.baseline?.state === "draft" ? (
+                      <button
+                        className="text-button"
+                        onClick={() => archiveScope(item)}
+                      >
+                        {item.archivedAt ? "Restore" : "Retire"}
+                      </button>
+                    ) : null}
                   </div>
                 </article>
               ))}
             </div>
           </section>
+
+          <BaselineHistory history={history} />
 
           <DriftLedger
             drift={drift}
@@ -619,6 +795,142 @@ export function CommercialWorkspace({
       </div>
       {changeControl}
     </main>
+  );
+}
+
+function BaselineHistory({
+  history,
+}: Readonly<{ history: CommercialHistory }>) {
+  return (
+    <section className="commercial-section baseline-history-section">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Recorded and effective time</p>
+          <h2>Baseline history</h2>
+        </div>
+        <span className="metadata">{history.page.total} versions</span>
+      </div>
+      <div className="baseline-history">
+        {history.data.map((version) => (
+          <details key={version.id} open={version.state !== "superseded"}>
+            <summary>
+              <span className={`baseline-version version-${version.state}`}>
+                {version.state === "draft"
+                  ? "Draft"
+                  : `v${version.versionNumber}`}
+              </span>
+              <strong>{version.label}</strong>
+              <span>{version.sourceName}</span>
+            </summary>
+            <dl>
+              <div>
+                <dt>Recorded</dt>
+                <dd>
+                  {formatTimestamp(version.recordedAt)} by{" "}
+                  {version.createdByName}
+                </dd>
+              </div>
+              <div>
+                <dt>Effective</dt>
+                <dd>
+                  {version.effectiveAt
+                    ? formatTimestamp(version.effectiveAt)
+                    : "Not yet"}
+                </dd>
+              </div>
+              <div>
+                <dt>Scope</dt>
+                <dd>{version.scopeItems} items</dd>
+              </div>
+            </dl>
+            <p className="metadata">
+              Evidence:{" "}
+              {version.sources.map((source) => source.name).join(" · ")}
+            </p>
+            {Object.keys(version.lineage).length ? (
+              <div
+                className="lineage-summary"
+                aria-label="Scope lineage summary"
+              >
+                {(
+                  ["carried_forward", "revised", "added", "retired"] as const
+                ).map((kind) =>
+                  version.lineage[kind] ? (
+                    <span className={`lineage-kind lineage-${kind}`} key={kind}>
+                      {version.lineage[kind]} {kind.replaceAll("_", " ")}
+                    </span>
+                  ) : null,
+                )}
+              </div>
+            ) : (
+              <p className="metadata">Initial scope foundation</p>
+            )}
+            {version.changes.length ? (
+              <ul className="version-changes">
+                {version.changes.map((change) => (
+                  <li key={change.currentScopeItemId}>
+                    <span className={`lineage-kind lineage-${change.kind}`}>
+                      {change.kind.replaceAll("_", " ")}
+                    </span>
+                    <span>
+                      {change.scopeKind} · {change.title}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {version.items.length ? (
+              <details className="version-scope-detail">
+                <summary>Inspect scope and authorized work</summary>
+                <ul className="version-changes">
+                  {version.items.map((item) => (
+                    <li key={item.id}>
+                      <span className={`scope-kind scope-${item.scopeKind}`}>
+                        {item.scopeKind}
+                      </span>
+                      <span>{item.title}</span>
+                      <span className="metadata">
+                        {item.workLinks} linked work item
+                        {item.workLinks === 1 ? "" : "s"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+            {version.decisions.length ? (
+              <ul className="version-decisions">
+                {version.decisions.map((decision) => (
+                  <li key={decision.decisionId}>
+                    {decision.requestTitle} ·{" "}
+                    {decision.disposition.replaceAll("_", " ")}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </details>
+        ))}
+      </div>
+      {history.page.pages > 1 ? (
+        <nav className="pagination" aria-label="Baseline history pages">
+          {history.page.number > 1 ? (
+            <Link href={`?historyPage=${history.page.number - 1}`}>
+              Previous
+            </Link>
+          ) : (
+            <span>Previous</span>
+          )}
+          <span>
+            Page {history.page.number} of {history.page.pages}
+          </span>
+          {history.page.number < history.page.pages ? (
+            <Link href={`?historyPage=${history.page.number + 1}`}>Next</Link>
+          ) : (
+            <span>Next</span>
+          )}
+        </nav>
+      ) : null}
+    </section>
   );
 }
 
@@ -754,6 +1066,7 @@ type WorkProvenance = {
     | "commercially_unlinked"
     | "needs_classification"
     | "linked"
+    | "stale_basis"
     | "support_internal";
   links: Array<{
     id: string;
@@ -777,6 +1090,7 @@ type WorkProvenance = {
     decisionConfirmedAt: string | Date | null;
     decisionSupersededAt: string | Date | null;
     effective: boolean;
+    stale: boolean;
     contradiction: boolean;
   }>;
 };
@@ -997,6 +1311,13 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatTimestamp(value: string | Date) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
 function sourceKindLabel(kind: Source["kind"]) {
   return kind === "pasted_text" ? "Pasted text" : kind.toUpperCase();
 }
@@ -1015,6 +1336,7 @@ function driftLabel(state: DriftItem["state"]) {
     commercially_unlinked: "Unlinked",
     needs_classification: "Classify",
     linked: "Linked",
+    stale_basis: "Stale basis",
     support_internal: "No basis needed",
   }[state];
 }

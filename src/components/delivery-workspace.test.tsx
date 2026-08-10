@@ -11,6 +11,7 @@ vi.mock("next/navigation", () => ({
 import {
   BacklogWorkspace,
   ClientDirectory,
+  CommercialProvenanceBadge,
   ProjectDirectory,
 } from "./delivery-workspace";
 
@@ -132,6 +133,56 @@ describe("delivery workspace", () => {
     expect(
       screen.getByRole("button", { name: "Archive work item" }),
     ).toBeVisible();
+  });
+
+  it("renders preserved terminal basis as historical authorization", () => {
+    const historicalItem = {
+      purpose: "client_delivery" as const,
+      status: "done" as const,
+      archivedAt: null,
+      commercialBasisCount: 0,
+      commercialHistoricalBasisCount: 1,
+      commercialStaleBasisCount: 1,
+    };
+    const { rerender } = render(
+      <CommercialProvenanceBadge item={historicalItem} />,
+    );
+
+    expect(screen.getByText("Historically authorized")).toHaveClass(
+      "commercial-historical",
+    );
+    expect(
+      screen.queryByText("Stale commercial basis"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Commercially unlinked")).not.toBeInTheDocument();
+
+    rerender(
+      <CommercialProvenanceBadge
+        item={{ ...historicalItem, status: "canceled" }}
+      />,
+    );
+    expect(screen.getByText("Historically authorized")).toBeVisible();
+
+    rerender(
+      <CommercialProvenanceBadge
+        item={{ ...historicalItem, status: "ready", archivedAt: new Date() }}
+      />,
+    );
+    expect(screen.getByText("Historically authorized")).toBeVisible();
+
+    rerender(
+      <CommercialProvenanceBadge
+        item={{
+          ...historicalItem,
+          status: "in_progress",
+          commercialHistoricalBasisCount: 0,
+          commercialStaleBasisCount: 0,
+        }}
+      />,
+    );
+    expect(screen.getByText("Commercially unlinked")).toHaveClass(
+      "commercial-unlinked",
+    );
   });
 
   it("preserves active backlog filters in controls and page links", () => {

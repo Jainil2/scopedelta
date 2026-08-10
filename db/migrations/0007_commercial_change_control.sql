@@ -7,7 +7,7 @@ ALTER TABLE "commercial_basis_links" DROP CONSTRAINT "commercial_basis_links_tar
 ALTER TYPE "public"."commercial_basis_type" RENAME TO commercial_basis_type_previous;--> statement-breakpoint
 CREATE TYPE "public"."commercial_basis_type" AS ENUM('baseline_scope_item', 'commercial_decision');--> statement-breakpoint
 ALTER TABLE "commercial_basis_links" ALTER COLUMN "basis_type" TYPE "public"."commercial_basis_type" USING "basis_type"::text::"public"."commercial_basis_type";--> statement-breakpoint
-DROP TYPE "public".commercial_basis_type_previous;--> statement-breakpoint
+DROP TYPE public.commercial_basis_type_previous;--> statement-breakpoint
 CREATE TABLE "commercial_decision_anchors" (
 	"project_id" uuid NOT NULL,
 	"decision_id" uuid NOT NULL,

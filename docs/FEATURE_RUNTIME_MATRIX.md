@@ -2,18 +2,20 @@
 
 ## Status
 
-Planning baseline, updated 2026-08-09 after the Layer-2 Commercial Delivery Graph research checkpoint. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
+Planning baseline, updated 2026-08-10 after the Layer-3 Client Collaboration & Negotiation research checkpoint. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
 
 ## Current capability count
 
 - **Total planned capability units: 98**
-- **Local/LAN: 55**
-- **Hybrid/optional external: 30**
-- **External API/service: 5**
+- **Local/LAN: 63**
+- **Hybrid/optional external: 23**
+- **External API/service: 4**
 - **Managed-cloud only: 4**
 - **Desktop client: 4**
 
-The Layer-2 review does not add a mandatory cloud/AI dependency. Required commercial baseline, deterministic document parsing, request/decision, graph-link and drift behavior remains Local/LAN. Optional OCR remains Hybrid and is explicitly excluded from the first production slice.
+The Layer-3 review reclassifies the core client portal/request/approval capabilities from Hybrid to Local/LAN. Client identity, project-safe projection, request intake, commercial packet publication/actions and delivery acceptance are all server-authoritative ScopeDelta behavior and do not inherently require ScopeDelta Cloud or another SaaS provider. Outbound email is Hybrid/optional external: ScopeDelta Cloud may manage it while self-host customers can supply SMTP/local mail infrastructure or distribute invitation/action links manually.
+
+Layer 3 therefore introduces **no mandatory paid external service dependency**.
 
 ### Runtime meaning
 
@@ -85,11 +87,9 @@ Layer 1 has **no mandatory external API or paid service dependency**.
 
 ## Layer 2 — Commercial Delivery Graph
 
-Layer-2 research is complete. SC-006A and SC-006B are implemented; SC-006C is
-the remaining baseline-amendment slice. See
-`docs/research/LAYER2_COMMERCIAL_DELIVERY_GRAPH_RESEARCH_2026-08.md`.
+Layer 2 is complete through SC-006A → SC-006B → SC-006C. See `docs/research/LAYER2_COMMERCIAL_DELIVERY_GRAPH_RESEARCH_2026-08.md`.
 
-| Capability | Runtime class | Planned slice |
+| Capability | Runtime class | Delivered slice |
 |---|---|---|
 | Commercial evidence ingestion: paste + text-PDF + DOCX | Local/LAN | SC-006A |
 | Deterministic text extraction + evidence anchors | Local/LAN | SC-006A |
@@ -106,27 +106,40 @@ the remaining baseline-amendment slice. See
 
 Layer-2 runtime rules:
 
-- Required Layer-2 product behavior must run on the same customer-controlled server-authoritative core; there is no mandatory ScopeDelta Cloud call.
+- Required Layer-2 product behavior runs on the same customer-controlled server-authoritative core; there is no mandatory ScopeDelta Cloud call.
 - No mandatory AI/model API, hosted document parser, OCR provider, e-signature service, CRM or billing provider.
-- Private source storage must have both a customer-controlled persistent path and a managed-cloud-compatible persistent path; exact storage implementation remains engineering-owned.
-- PDF/DOCX parsing in SC-006A is deterministic infrastructure, not semantic AI extraction. Human users curate scope items and evidence anchors.
-- Scanned/image OCR is intentionally deferred until customer evidence justifies the runtime/operational dependency.
+- Private source storage has both a customer-controlled persistent path and a managed-cloud-compatible persistent path.
+- PDF/DOCX parsing is deterministic infrastructure, not semantic AI extraction. Human users curate scope items and evidence anchors.
+- Scanned/image OCR remains deferred until customer evidence justifies the runtime/operational dependency.
 - Customer commercial documents and request bodies must not be copied into ordinary logs/audit metadata.
 
 ## Layer 3 — Client Collaboration & Negotiation
 
-| Capability | Runtime class |
-|---|---|
-| External client users/invites | Hybrid/optional external |
-| Client-safe project portal | Hybrid/optional external |
-| Client request intake | Hybrid/optional external |
-| Client-safe discussion | Hybrid/optional external |
-| Negotiation/change proposal packet | Hybrid/optional external |
-| Approve/reject/clarify | Hybrid/optional external |
-| Milestone/deliverable acceptance | Hybrid/optional external |
-| Immutable shared versions | Local/LAN |
-| Email notifications | External API/service |
-| Public secure links | Hybrid/optional external |
+Layer-3 research is complete. See `docs/research/LAYER3_CLIENT_COLLABORATION_RESEARCH_2026-08.md`.
+
+The validated architecture is **one commercial truth, two projections**: internal delivery users operate the authoritative project/Commercial Delivery Graph, while external clients receive a deliberately smaller project/request/decision/acceptance projection from the same server-side records.
+
+| Capability | Runtime class | Planned slice |
+|---|---|---|
+| External client users/invites | Local/LAN | SC-007A |
+| Client-safe project portal | Local/LAN | SC-007A |
+| Client request intake | Local/LAN | SC-007A |
+| Client-safe discussion | Local/LAN | SC-007B + SC-007C |
+| Negotiation/change proposal packet | Local/LAN | SC-007B |
+| Approve/reject/clarify | Local/LAN | SC-007B |
+| Milestone/deliverable acceptance | Local/LAN | SC-007C |
+| Immutable shared versions | Local/LAN | SC-007B + SC-007C |
+| Outbound email notifications | Hybrid/optional external | SC-007C; optional provider/SMTP |
+| Public/action links | Local/LAN | Token generation local; broad unauthenticated portal deferred |
+
+Layer-3 runtime rules:
+
+- Ongoing client access uses project-scoped authenticated external participants on the same ScopeDelta server.
+- Invitation/action token generation is local server behavior. Self-host deployments without outbound mail can expose copyable invitation/action URLs to authorized internal users.
+- ScopeDelta Cloud may provide managed outbound email; self-host deployments can configure SMTP/local mail infrastructure.
+- Email delivery failure never invalidates or rolls back authoritative request, publication, approval or acceptance state.
+- Client participants are not normal internal employee seats; exact hosted pricing/limits remain a later SC-010/founder decision.
+- No mandatory e-signature, CRM, billing, document-hosting or other paid provider is introduced by Layer 3.
 
 ## Layer 4 — Engineering & QA Delivery Loop
 
@@ -214,13 +227,13 @@ Layer-2 runtime rules:
 The initial plan should minimize mandatory paid external dependencies. The unavoidable provider-dependent areas are:
 
 - payment/subscription rails for ScopeDelta Cloud;
-- public email delivery unless the customer supplies SMTP/local mail infrastructure;
+- outbound email delivery when ScopeDelta Cloud or a customer chooses an external mail provider, while self-host may use local SMTP/manual link delivery;
 - GitHub.com/GitLab.com integration when the customer uses those hosted systems;
 - hosted AI when the customer chooses managed inference instead of BYO/local AI;
 - optional SSO/directory providers for organizations using external identity systems;
 - managed observability/backups/storage for ScopeDelta Cloud.
 
-Commercial document parsing and Commercial Delivery Graph logic are deliberately **not** added to this unavoidable-external list. They must work on customer-controlled infrastructure.
+Commercial document parsing, the Commercial Delivery Graph, and Layer-3 client project/request/approval/acceptance state are deliberately **not** added to this unavoidable-external list. They must work on customer-controlled infrastructure.
 
 ## Cost principle
 

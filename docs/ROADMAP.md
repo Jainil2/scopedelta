@@ -14,10 +14,29 @@ Complete:
 - CI, lint/typecheck/test/build gates;
 - public landing page and production Netlify deployment;
 - Layer 0 production platform kernel: authentication/recovery, workspaces/memberships, PostgreSQL persistence/migrations, authorization, audit/events, shared service/API boundary, self-host/LAN-compatible operation and deployment/backup documentation;
-- Layer 1 client-project delivery core through SC-005A/B/C;
-- Layer 2 Commercial Delivery Graph through SC-006A/B/C.
+- Layer 1 client-project delivery core;
+- Layer 2 Commercial Delivery Graph.
 
 SC-004 / #8, SC-005 / #9 and SC-006 / #10 are complete.
+
+## Delivery-speed rule
+
+Default to **one business task/product outcome = one engineering issue and one primary implementation PR**.
+
+Do not automatically create A/B/C issues merely because an implementation has phases. Keep phases inside the issue/PR unless a split has a concrete benefit.
+
+Split only when at least one of these is true:
+
+- the combined change is too large to review/reason about safely;
+- a real dependency blocks part of the work;
+- separate migration/deployment/rollback boundaries materially reduce production risk;
+- an authorization/security boundary should be independently reviewed;
+- a useful customer outcome can ship materially earlier;
+- parallel execution would reduce elapsed time more than the integration/CI/review overhead it creates.
+
+Testing follows the same efficiency principle: focused tests during iteration, focused E2E while building a journey, and the complete migration/lint/typecheck/unit/integration/E2E/build/container gate when the PR is genuinely ready plus final pre-merge validation after completed review fixes. Quality is not reduced; redundant full-suite cycles are.
+
+`AGENTS.md` is the executable engineering policy for this rule.
 
 ## Layer 1 — Delivery Core — COMPLETE
 
@@ -38,11 +57,7 @@ Default workflow:
 
 `Canceled` is a terminal non-completed outcome.
 
-Delivered through:
-
-1. SC-005A / #23 — client-project backlog foundation — PR #26.
-2. SC-005B / #24 — planning and daily execution — PR #27.
-3. SC-005C / #25 — collaboration and project context — PR #29.
+Delivered through SC-005A/B/C and completed with PR #29.
 
 Layer-1 research: `docs/research/LAYER1_DELIVERY_CORE_RESEARCH_2026-08.md`.
 
@@ -117,11 +132,7 @@ Minimum work-purpose classification:
 
 Document ingestion supports pasted text, text-based PDF and DOCX with deterministic extraction/evidence anchors. AI semantic extraction and OCR remain later/optional.
 
-### Delivered sequence
-
-1. **SC-006A / #30 — commercial baseline, work provenance and advisory drift** — complete through PR #33.
-2. **SC-006B / #31 — client request and commercial decision ledger** — complete through PR #34.
-3. **SC-006C / #32 — baseline amendments, lineage and drift reconstruction** — complete through PR #35, merge `8daa8360799f870d3280c3146565c873c2f9f552`.
+Layer 2 was implemented through SC-006A/B/C (#30/#31/#32) and completed with PR #35 / merge `8daa8360799f870d3280c3146565c873c2f9f552`.
 
 Required Layer-2 behavior is Local/LAN with no mandatory AI/OCR/document SaaS/paid provider.
 
@@ -134,7 +145,7 @@ Clients participate in the same authoritative commercial/delivery lifecycle with
 
 Durable research: `docs/research/LAYER3_CLIENT_COLLABORATION_RESEARCH_2026-08.md`.
 
-Competitor/workflow research found that generic client seats, guest permissions, branded portals, request intake and approval buttons are already common across Teamwork, Productive, ClickUp, Bonsai, Jira Service Management and agency-focused portal products. A generic portal is therefore table stakes, not the ScopeDelta wedge.
+Competitor/workflow research found that generic client seats, guest permissions, branded portals, request intake and approval buttons are already common. A generic portal is table stakes, not the ScopeDelta wedge.
 
 ### Validated Layer-3 USP
 
@@ -142,7 +153,7 @@ Competitor/workflow research found that generic client seats, guest permissions,
 
 Core relationship:
 
-`Client request → internal commercial treatment → immutable client-visible packet → client action/evidence → delivery commercial basis → later delivery acceptance/history`
+`Client request → internal commercial treatment → immutable client-visible packet → client action/evidence → delivery commercial basis → delivery acceptance/history`
 
 ### External participant model
 
@@ -150,7 +161,7 @@ Ongoing client access is authenticated and project-scoped. External participants
 
 Initial roles/capabilities:
 
-- **Client collaborator** — client-safe project visibility, request/clarification participation and external-safe discussion where enabled.
+- **Client collaborator** — client-safe project visibility, request/clarification participation and external-safe discussion.
 - **Client approver** — collaborator capabilities plus commercial and delivery-acceptance actions.
 
 No generic guest-permission builder in Layer 3.
@@ -163,7 +174,7 @@ The client home prioritizes:
 - selected milestone/deliverable status;
 - client requests and client-safe lifecycle;
 - published commercial packet versions/actions;
-- later delivery acceptance targets/actions.
+- delivery acceptance targets/actions.
 
 The internal board, work-item details, estimates, private comments/notes, commercial drift, internal commercial rationale, unconfirmed impacts, workspace directory, private source documents, AI metadata and later Git/QA detail remain hidden by default.
 
@@ -190,53 +201,40 @@ Layer 3 introduces **no mandatory paid external provider**.
 
 External client participants should not consume normal paid internal employee seats; exact hosted pricing/limits remain SC-010/founder scope.
 
-### SC-007A / #36 — External client boundary, client-safe project home and request intake — READY FOR CODEX
+### SC-007 / #11 — consolidated Layer-3 implementation — READY FOR CODEX
 
-Outcome: an agency can invite a client contact into exactly the intended project; the client receives a deliberately small project surface and can submit/track requests in the existing SC-006B commercial request lifecycle.
+SC-007 is intentionally one engineering issue and one primary PR. The previously proposed SC-007A/B/C issues #36/#37/#38 are closed as superseded. Their boundaries remain useful internal implementation phases only:
 
-Scope:
-
-- project-scoped external participant model;
+**Phase 1 — external boundary/project home/request intake**
+- project-scoped external participants;
 - collaborator/approver capability foundation;
 - invite/accept/revoke lifecycle;
 - strict external authorization;
-- client-safe project home and `Needs your attention` foundation;
-- selected milestone/deliverable projection;
-- client-native request/clarification intake;
-- private/no-index/rate/idempotency protections;
-- Cloud + self-host/LAN behavior without mandatory email provider.
+- client-safe project home and selected milestone/deliverable projection;
+- client-native request/clarification intake into SC-006B.
 
-### SC-007B / #37 — Immutable commercial publication and client decision actions — BLOCKED BY #36
-
-Outcome: internal PM can publish a versioned client-safe commercial response/change packet and an authorized client approver can act on the exact version.
-
-Scope:
-
+**Phase 2 — commercial publication/client actions**
 - immutable packet versions and successor/supersession behavior;
 - selected confirmed money/schedule/deliverable projection;
 - paid-change/swap approve/reject/clarify;
 - informational covered/absorbed/deferred/rejected projection;
-- actor/time/version action evidence;
+- actor/time/version evidence;
 - stale-version/idempotent/concurrent action safety;
-- client-visible discussion on external-safe records.
+- external-safe discussion.
 
-### SC-007C / #38 — Delivery acceptance and client-collaboration hardening — BLOCKED BY #37
-
-Outcome: client can accept/request changes on a versioned milestone/deliverable target and the full Layer-3 collaboration loop is hardened for production.
-
-Scope:
-
+**Phase 3 — delivery acceptance/hardening**
 - versioned milestone/deliverable acceptance;
 - client-visible history/discussion hardening;
 - durable external notification/inbox behavior;
-- optional outbound email/retry;
-- invitation/action recovery;
+- optional outbound email/recovery;
 - multiple contacts/approvers;
 - cross-client/project security, scale and complete browser journey.
 
+Codex should keep these phases in one coherent implementation unless it discovers a concrete technical reason that satisfies the delivery-speed split rule above.
+
 ### Layer-3 exit criteria
 
-SC-007A/B/C are complete and product-reviewed. A client can securely access only their intended project projection, submit requests, act on immutable commercial packet versions, and accept/request changes on delivered outcomes. Internal commercial treatment, client acceptance and delivery history remain distinguishable and reconstructable. Required behavior runs on ScopeDelta Cloud and self-host/LAN without mandatory paid external services.
+SC-007 is complete and product-reviewed. A client can securely access only their intended project projection, submit requests, act on immutable commercial packet versions, and accept/request changes on delivered outcomes. Internal commercial treatment, client acceptance and delivery history remain distinguishable and reconstructable. Required behavior runs on ScopeDelta Cloud and self-host/LAN without mandatory paid external services.
 
 ## Layer 4 — Engineering & QA Delivery Loop
 
@@ -356,16 +354,16 @@ GitHub issues are the executable source of truth. **Exactly one highest-priority
 Current sequence:
 
 1. SC-004 / #8 — Layer 0 Platform Kernel — **DONE**.
-2. SC-005A/B/C — Layer 1 Delivery Core — **DONE**.
-3. SC-006A/B/C — Layer 2 Commercial Delivery Graph — **DONE**.
-4. SC-007A / #36 — external client boundary, client-safe project home and request intake — **READY FOR CODEX**.
-5. SC-007B / #37 — immutable commercial publication and client decision actions — **BLOCKED BY #36**.
-6. SC-007C / #38 — delivery acceptance and collaboration hardening — **BLOCKED BY #37**.
-7. SC-008 / #12 — Layer 4 engineering/QA evidence — blocked until Layer 3 completion + research.
-8. SC-009 / #17 — Layer 5 AI-native delivery intelligence.
-9. SC-010 / #13 — Layer 6 subscription/cloud economics/source distribution.
-10. SC-011 / #14 — Layer 7 portfolio/operations/self-service scale.
-11. SC-012 / #15 — Layer 8 enterprise/GA hardening.
+2. SC-005 / #9 — Layer 1 Delivery Core — **DONE**.
+3. SC-006 / #10 — Layer 2 Commercial Delivery Graph — **DONE**.
+4. SC-007 / #11 — Layer 3 client collaboration/negotiation/acceptance — **READY FOR CODEX** as one consolidated task/primary PR.
+5. SC-008 / #12 — Layer 4 engineering/QA evidence — blocked until Layer 3 completion + research.
+6. SC-009 / #17 — Layer 5 AI-native delivery intelligence.
+7. SC-010 / #13 — Layer 6 subscription/cloud economics/source distribution.
+8. SC-011 / #14 — Layer 7 portfolio/operations/self-service scale.
+9. SC-012 / #15 — Layer 8 enterprise/GA hardening.
+
+Superseded planning issues #36/#37/#38 are closed and should not be implemented separately.
 
 Cross-cutting:
 
@@ -374,5 +372,3 @@ Cross-cutting:
 - ARCH-001 maintains runtime topology.
 - RS-002 maintains feature/runtime/cost classification.
 - LIC-001 is the founder/legal gate before public core-source release.
-
-The layers are product boundaries, not permission for giant PRs. Layer 1, Layer 2 and now Layer 3 use research-driven production-usable vertical slices to reduce risk and reach differentiated customer value faster.

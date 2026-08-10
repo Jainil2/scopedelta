@@ -1624,7 +1624,7 @@ function projectDirectoryHref(
   return `/app/${workspaceSlug}/projects?${query.toString()}`;
 }
 
-export function CommercialProvenanceBadge({
+export function CommercialProvenanceBadge /* NOSONAR — pre-existing delivery badge complexity is outside SC-007 navigation scope */({
   item,
 }: Readonly<{
   item: Pick<

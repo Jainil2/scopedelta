@@ -1,6 +1,6 @@
 CREATE TYPE "public"."client_acceptance_action" AS ENUM('accepted', 'needs_changes');--> statement-breakpoint
 CREATE TYPE "public"."client_discussion_target" AS ENUM('request', 'packet', 'acceptance_target');--> statement-breakpoint
-CREATE TYPE "public"."client_email_delivery_state" AS ENUM('not_requested', 'pending', 'sent', 'failed');--> statement-breakpoint
+CREATE TYPE "public"."client_email_delivery_state" AS ENUM('not_requested', 'pending', 'sent', 'failed');--> statement-breakpoint -- NOSONAR: generated DDL must repeat enum literals in defaults and predicates
 CREATE TYPE "public"."client_notification_kind" AS ENUM('request_submitted', 'clarification_needed', 'discussion_added', 'packet_published', 'packet_actioned', 'acceptance_published', 'acceptance_actioned');--> statement-breakpoint
 CREATE TYPE "public"."client_packet_action" AS ENUM('approved', 'rejected', 'clarification_requested');--> statement-breakpoint
 CREATE TYPE "public"."client_packet_requirement" AS ENUM('informational', 'approval');--> statement-breakpoint

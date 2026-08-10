@@ -1724,6 +1724,42 @@ export async function retryClientNotificationEmail(
   return rows[0];
 }
 
+function deriveClientAttention(
+  requests: ClientProjectProjection["requests"],
+  packets: ClientProjectProjection["packets"],
+  acceptanceTargets: ClientProjectProjection["acceptanceTargets"],
+) {
+  const attention: ClientProjectProjection["attention"] = [];
+  for (const request of requests) {
+    if (request.needsReply) {
+      attention.push({
+        kind: "clarification",
+        targetId: request.id,
+        label: `Reply to ${request.title}`,
+      });
+    }
+  }
+  for (const packet of packets) {
+    if (packet.actionable && packet.requirement === "approval") {
+      attention.push({
+        kind: "packet",
+        targetId: packet.id,
+        label: `Review ${packet.title}`,
+      });
+    }
+  }
+  for (const target of acceptanceTargets) {
+    if (target.actionable) {
+      attention.push({
+        kind: "acceptance",
+        targetId: target.id,
+        label: `Accept ${target.title}`,
+      });
+    }
+  }
+  return attention;
+}
+
 async function buildClientProjection(
   projectId: string,
   participant: { id: string; role: ClientParticipantRole } | null,
@@ -2008,34 +2044,7 @@ async function buildClientProjection(
     body: message.body,
     createdAt: message.createdAt.toISOString(),
   }));
-  const attention: ClientProjectProjection["attention"] = [];
-  for (const request of requests) {
-    if (request.needsReply) {
-      attention.push({
-        kind: "clarification",
-        targetId: request.id,
-        label: `Reply to ${request.title}`,
-      });
-    }
-  }
-  for (const packet of packets) {
-    if (packet.actionable && packet.requirement === "approval") {
-      attention.push({
-        kind: "packet",
-        targetId: packet.id,
-        label: `Review ${packet.title}`,
-      });
-    }
-  }
-  for (const target of acceptanceTargets) {
-    if (target.actionable) {
-      attention.push({
-        kind: "acceptance",
-        targetId: target.id,
-        label: `Accept ${target.title}`,
-      });
-    }
-  }
+  const attention = deriveClientAttention(requests, packets, acceptanceTargets);
   return {
     project: { id: project.id, name: project.name, summary: project.summary },
     participant,

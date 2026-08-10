@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ProjectOverview } from "@/components/delivery-workspace";
@@ -19,15 +20,23 @@ export default async function ProjectPage({
   const { workspaceSlug, projectKey } = await params;
   const data = await loadProject(actor, workspaceSlug, projectKey);
   return (
-    <ProjectOverview
-      workspaceId={data.workspace.id}
-      workspaceSlug={workspaceSlug}
-      project={data.project}
-      milestones={data.milestones}
-      projectMembers={data.projectDirectory.members}
-      workspaceMembers={data.workspaceDirectory.members}
-      canManage={data.projectDirectory.canManage}
-    />
+    <>
+      <Link
+        className="button button-light"
+        href={`/app/${workspaceSlug}/projects/${data.project.key}/client`}
+      >
+        Client view
+      </Link>
+      <ProjectOverview
+        workspaceId={data.workspace.id}
+        workspaceSlug={workspaceSlug}
+        project={data.project}
+        milestones={data.milestones}
+        projectMembers={data.projectDirectory.members}
+        workspaceMembers={data.workspaceDirectory.members}
+        canManage={data.projectDirectory.canManage}
+      />
+    </>
   );
 }
 

@@ -26,6 +26,11 @@ async function apiRequest(url: string, method: string, body: unknown) {
     throw new Error(result.error?.message ?? "The request failed.");
 }
 
+function formString(data: FormData, name: string) {
+  const value = data.get(name);
+  return typeof value === "string" ? value : "";
+}
+
 export function ClientProjectWorkspace({
   projects,
   projection,
@@ -118,7 +123,7 @@ export function ClientProjectWorkspace({
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    const target = String(data.get("target"));
+    const target = formString(data, "target");
     const [targetType, targetId] = target.split(":");
     const scope = `discussion:${target}`;
     try {
@@ -267,11 +272,11 @@ export function ClientProjectWorkspace({
           </p>
           <form className="client-form" onSubmit={submitRequest}>
             <label>
-              Short title
+              <span>Short title</span>
               <input name="title" required maxLength={240} />
             </label>
             <label>
-              What would you like to change?
+              <span>What would you like to change?</span>
               <textarea
                 name="requestText"
                 required
@@ -279,7 +284,11 @@ export function ClientProjectWorkspace({
                 rows={5}
               />
             </label>
-            <button className="client-button primary" disabled={pending}>
+            <button
+              type="submit"
+              className="client-button primary"
+              disabled={pending}
+            >
               Send request
             </button>
           </form>
@@ -329,17 +338,20 @@ export function ClientProjectWorkspace({
                 <p className="client-recorded">
                   Recorded: {packet.action.action.replace("_", " ")}
                 </p>
-              ) : packet.actionable ? (
+              ) : null}
+              {!packet.action && packet.actionable ? (
                 <div className="client-actions">
                   {packet.requirement === "approval" &&
                   projection.participant?.role === "approver" ? (
                     <>
                       <button
+                        type="button"
                         onClick={() => void actOnPacket(packet.id, "approved")}
                       >
                         Approve
                       </button>
                       <button
+                        type="button"
                         onClick={() => void actOnPacket(packet.id, "rejected")}
                       >
                         Reject
@@ -347,6 +359,7 @@ export function ClientProjectWorkspace({
                     </>
                   ) : null}
                   <button
+                    type="button"
                     onClick={() =>
                       void actOnPacket(packet.id, "clarification_requested")
                     }
@@ -385,14 +398,17 @@ export function ClientProjectWorkspace({
                 <p className="client-recorded">
                   Recorded: {target.action.action.replace("_", " ")}
                 </p>
-              ) : target.actionable ? (
+              ) : null}
+              {!target.action && target.actionable ? (
                 <div className="client-actions">
                   <button
+                    type="button"
                     onClick={() => void actOnAcceptance(target.id, "accepted")}
                   >
                     Accept this version
                   </button>
                   <button
+                    type="button"
                     onClick={() =>
                       void actOnAcceptance(target.id, "needs_changes")
                     }
@@ -419,7 +435,7 @@ export function ClientProjectWorkspace({
           {discussionTargets.length ? (
             <form className="client-form" onSubmit={submitDiscussion}>
               <label>
-                Discuss
+                <span>Discuss</span>
                 <select name="target" required>
                   {discussionTargets.map((target) => (
                     <option value={target.value} key={target.value}>
@@ -429,10 +445,14 @@ export function ClientProjectWorkspace({
                 </select>
               </label>
               <label>
-                Message
+                <span>Message</span>
                 <textarea name="body" required maxLength={5_000} rows={4} />
               </label>
-              <button className="client-button primary" disabled={pending}>
+              <button
+                type="submit"
+                className="client-button primary"
+                disabled={pending}
+              >
                 Add message
               </button>
             </form>

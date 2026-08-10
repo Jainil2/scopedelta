@@ -1,10 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useRef, useState, useTransition } from "react";
 
 import type { ClientProjectProjection } from "@/lib/client-project-projection";
-import { ProjectTabs } from "@/components/planning-workspace";
 
 type Participant = {
   id: string;
@@ -53,6 +53,11 @@ async function request<T>(url: string, method: string, body?: unknown) {
     throw new Error(result.error?.message ?? "The request failed.");
   }
   return result.data;
+}
+
+function formString(data: FormData, name: string) {
+  const value = data.get(name);
+  return typeof value === "string" ? value : "";
 }
 
 export function ClientCollaborationWorkspace({
@@ -182,7 +187,7 @@ export function ClientCollaborationWorkspace({
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    const scope = `item:${String(data.get("milestoneId"))}`;
+    const scope = `item:${formString(data, "milestoneId")}`;
     try {
       await request(`${base}/items`, "POST", {
         idempotencyKey: keyFor(scope),
@@ -204,9 +209,9 @@ export function ClientCollaborationWorkspace({
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    const requestId = String(data.get("requestId"));
+    const requestId = formString(data, "requestId");
     const scope = `packet:${requestId}`;
-    const impactId = String(data.get("impactAssessmentId") || "");
+    const impactId = formString(data, "impactAssessmentId");
     try {
       await request(`${base}/requests/${requestId}/packets`, "POST", {
         idempotencyKey: keyFor(scope),
@@ -234,7 +239,7 @@ export function ClientCollaborationWorkspace({
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    const itemId = String(data.get("projectItemId"));
+    const itemId = formString(data, "projectItemId");
     const scope = `acceptance:${itemId}`;
     try {
       await request(`${base}/acceptance-targets`, "POST", {
@@ -266,11 +271,35 @@ export function ClientCollaborationWorkspace({
           </p>
         </div>
       </header>
-      <ProjectTabs
-        workspaceSlug={workspaceSlug}
-        projectKey={project.key}
-        current="client"
-      />
+      <nav className="project-tabs" aria-label="Project">
+        <Link href={`/app/${workspaceSlug}/projects/${project.key}`}>
+          Overview
+        </Link>
+        <Link href={`/app/${workspaceSlug}/projects/${project.key}/backlog`}>
+          Backlog
+        </Link>
+        <Link href={`/app/${workspaceSlug}/projects/${project.key}/board`}>
+          Board
+        </Link>
+        <Link href={`/app/${workspaceSlug}/projects/${project.key}/cycles`}>
+          Cycles
+        </Link>
+        <Link href={`/app/${workspaceSlug}/projects/${project.key}/brief`}>
+          Brief
+        </Link>
+        <Link href={`/app/${workspaceSlug}/projects/${project.key}/commercial`}>
+          Commercial
+        </Link>
+        <Link
+          aria-current="page"
+          href={`/app/${workspaceSlug}/projects/${project.key}/client`}
+        >
+          Client view
+        </Link>
+        <Link href={`/app/${workspaceSlug}/projects/${project.key}/activity`}>
+          Activity
+        </Link>
+      </nav>
       {message ? (
         <p role="status" className="client-alert">
           {pending ? "Refreshing…" : message}
@@ -283,7 +312,7 @@ export function ClientCollaborationWorkspace({
           <h2>What clients see first</h2>
           <form className="delivery-form" onSubmit={saveProfile}>
             <label>
-              Client summary
+              <span>Client summary</span>
               <textarea
                 name="summary"
                 required
@@ -292,7 +321,9 @@ export function ClientCollaborationWorkspace({
                 defaultValue={preview.project.summary ?? ""}
               />
             </label>
-            <button disabled={pending}>Save client summary</button>
+            <button type="submit" disabled={pending}>
+              Save client summary
+            </button>
           </form>
         </div>
         <div className="management-panel">
@@ -300,17 +331,19 @@ export function ClientCollaborationWorkspace({
           <h2>Invite a participant</h2>
           <form className="delivery-form" onSubmit={invite}>
             <label>
-              Email
+              <span>Email</span>
               <input name="email" type="email" required maxLength={320} />
             </label>
             <label>
-              Role
+              <span>Role</span>
               <select name="role">
                 <option value="collaborator">Collaborator</option>
                 <option value="approver">Approver</option>
               </select>
             </label>
-            <button disabled={pending}>Create invitation</button>
+            <button type="submit" disabled={pending}>
+              Create invitation
+            </button>
           </form>
           {inviteUrl ? (
             <div className="copy-link-row">
@@ -319,7 +352,9 @@ export function ClientCollaborationWorkspace({
                 readOnly
                 value={inviteUrl}
               />
-              <button onClick={() => void copyInvite()}>Copy</button>
+              <button type="button" onClick={() => void copyInvite()}>
+                Copy
+              </button>
             </div>
           ) : null}
         </div>
@@ -354,6 +389,7 @@ export function ClientCollaborationWorkspace({
                   <option value="approver">Approver</option>
                 </select>
                 <button
+                  type="button"
                   className="app-text-button danger-button"
                   onClick={() =>
                     void changeParticipant(participant.id, "DELETE")
@@ -377,6 +413,7 @@ export function ClientCollaborationWorkspace({
                 </span>
               </div>
               <button
+                type="button"
                 className="app-text-button"
                 onClick={() => void reissue(invitation.id)}
               >
@@ -392,7 +429,7 @@ export function ClientCollaborationWorkspace({
           <h2>Share a milestone</h2>
           <form className="delivery-form" onSubmit={addMilestone}>
             <label>
-              Milestone
+              <span>Milestone</span>
               <select name="milestoneId" required>
                 <option value="">Choose milestone</option>
                 {milestones.map((milestone) => (
@@ -403,7 +440,7 @@ export function ClientCollaborationWorkspace({
               </select>
             </label>
             <label>
-              Client-safe summary
+              <span>Client-safe summary</span>
               <textarea
                 name="clientSummary"
                 required
@@ -411,7 +448,9 @@ export function ClientCollaborationWorkspace({
                 rows={4}
               />
             </label>
-            <button disabled={pending}>Add to client view</button>
+            <button type="submit" disabled={pending}>
+              Add to client view
+            </button>
           </form>
         </div>
         <div className="management-panel preview-panel">
@@ -457,7 +496,7 @@ export function ClientCollaborationWorkspace({
                   </span>
                   <h3>{item.title}</h3>
                   <label>
-                    Client title
+                    <span>Client title</span>
                     <input
                       name="title"
                       required
@@ -466,7 +505,7 @@ export function ClientCollaborationWorkspace({
                     />
                   </label>
                   <label>
-                    Safe request summary
+                    <span>Safe request summary</span>
                     <textarea
                       name="requestSummary"
                       required
@@ -475,7 +514,7 @@ export function ClientCollaborationWorkspace({
                     />
                   </label>
                   <label>
-                    Safe treatment summary
+                    <span>Safe treatment summary</span>
                     <textarea
                       name="treatmentSummary"
                       required
@@ -484,7 +523,7 @@ export function ClientCollaborationWorkspace({
                     />
                   </label>
                   <label>
-                    Confirmed values
+                    <span>Confirmed values</span>
                     <select name="impactAssessmentId">
                       <option value="">Do not publish values</option>
                       {confirmed.map((impact) => (
@@ -496,7 +535,9 @@ export function ClientCollaborationWorkspace({
                       ))}
                     </select>
                   </label>
-                  <button disabled={pending}>Publish successor packet</button>
+                  <button type="submit" disabled={pending}>
+                    Publish successor packet
+                  </button>
                 </form>
               );
             })}
@@ -517,7 +558,7 @@ export function ClientCollaborationWorkspace({
               <span className="client-chip">{item.target}</span>
               <h3>{item.title}</h3>
               <label>
-                Acceptance title
+                <span>Acceptance title</span>
                 <input
                   name="snapshotTitle"
                   required
@@ -526,7 +567,7 @@ export function ClientCollaborationWorkspace({
                 />
               </label>
               <label>
-                What is being accepted?
+                <span>What is being accepted?</span>
                 <textarea
                   name="snapshotSummary"
                   required
@@ -535,7 +576,9 @@ export function ClientCollaborationWorkspace({
                   maxLength={5_000}
                 />
               </label>
-              <button disabled={pending}>Publish successor target</button>
+              <button type="submit" disabled={pending}>
+                Publish successor target
+              </button>
             </form>
           ))}
         </div>

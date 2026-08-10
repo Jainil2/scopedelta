@@ -850,7 +850,6 @@ export function ProjectTabs({
     | "cycles"
     | "brief"
     | "commercial"
-    | "client"
     | "activity";
 }>) {
   const tabs = [
@@ -867,11 +866,6 @@ export function ProjectTabs({
       "commercial",
       "Commercial",
       `/app/${workspaceSlug}/projects/${projectKey}/commercial`,
-    ],
-    [
-      "client",
-      "Client view",
-      `/app/${workspaceSlug}/projects/${projectKey}/client`,
     ],
     [
       "activity",

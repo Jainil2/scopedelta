@@ -202,7 +202,7 @@ export function ClientProjectWorkspace({
 
       {message ? (
         <p className="client-alert" role="status" aria-live="polite">
-          {pending ? "Refreshing…" : message}
+          {message}
         </p>
       ) : null}
 

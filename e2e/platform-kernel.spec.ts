@@ -421,7 +421,15 @@ test("commercial baseline, decision authorization and contradictions stay tracea
   await scopeItemForm
     .getByLabel("Evidence label")
     .fill("Deliverable paragraph");
-  await scopeItemForm.getByRole("button", { name: "Add scope item" }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().endsWith("/commercial/scope-items") &&
+        response.ok(),
+    ),
+    scopeItemForm.getByRole("button", { name: "Add scope item" }).click(),
+  ]);
   await expect(page.getByRole("status")).toHaveText(
     "Scope item added to the baseline.",
   );
@@ -980,7 +988,15 @@ test("client collaboration keeps one commercial truth across internal and extern
   await page.getByRole("button", { name: "Add to client view" }).click();
   await page.getByLabel("Email").fill(approverEmail);
   await page.getByLabel("Role").selectOption("approver");
-  await page.getByRole("button", { name: "Create invitation" }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().endsWith("/client/participants") &&
+        response.ok(),
+    ),
+    page.getByRole("button", { name: "Create invitation" }).click(),
+  ]);
   const invitationUrl = await page
     .getByLabel("Copyable client invitation")
     .inputValue();
@@ -1147,7 +1163,15 @@ test("client collaboration keeps one commercial truth across internal and extern
   await expect(
     clientPage.getByRole("heading", { name: "Needs your attention" }),
   ).toBeVisible();
-  await clientPage.getByRole("button", { name: "Accept this version" }).click();
+  await Promise.all([
+    clientPage.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        /\/acceptance-targets\/[^/]+\/actions$/.test(response.url()) &&
+        response.ok(),
+    ),
+    clientPage.getByRole("button", { name: "Accept this version" }).click(),
+  ]);
   await expect(clientPage.getByRole("status")).toContainText(
     "response was recorded",
   );
@@ -1173,7 +1197,15 @@ test("client collaboration keeps one commercial truth across internal and extern
     });
   }
 
-  await page.getByRole("button", { name: "Revoke" }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "DELETE" &&
+        /\/client\/participants\/[^/]+$/.test(response.url()) &&
+        response.ok(),
+    ),
+    page.getByRole("button", { name: "Revoke" }).click(),
+  ]);
   const revokedApi = await clientPage.request.get(
     `/api/v1/client/projects/${seeded.projectId}`,
   );

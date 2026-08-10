@@ -300,11 +300,7 @@ export function ClientCollaborationWorkspace({
           Activity
         </Link>
       </nav>
-      {message ? (
-        <output className="client-alert">
-          {pending ? "Refreshing…" : message}
-        </output>
-      ) : null}
+      {message ? <output className="client-alert">{message}</output> : null}
 
       <section className="management-grid">
         <div className="management-panel">

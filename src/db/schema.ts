@@ -9,6 +9,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -198,8 +199,38 @@ export const commercialScopeKind = pgEnum("commercial_scope_kind", [
   "constraint",
 ]);
 
+export const commercialRequestState = pgEnum("commercial_request_state", [
+  "open",
+  "needs_clarification",
+  "resolved",
+  "withdrawn",
+]);
+
+export const commercialDecisionDisposition = pgEnum(
+  "commercial_decision_disposition",
+  ["covered", "absorbed", "swap", "paid_change", "deferred", "rejected"],
+);
+
+export const commercialCoverageBasis = pgEnum("commercial_coverage_basis", [
+  "baseline",
+  "defect_or_warranty",
+  "revision_allowance",
+  "other_existing_obligation",
+]);
+
+export const commercialDecisionScopeRole = pgEnum(
+  "commercial_decision_scope_role",
+  ["affected", "swap_offset"],
+);
+
+export const commercialImpactConfidence = pgEnum(
+  "commercial_impact_confidence",
+  ["estimate", "confirmed"],
+);
+
 export const commercialBasisType = pgEnum("commercial_basis_type", [
   "baseline_scope_item",
+  "commercial_decision",
 ]);
 
 export const workItemSubscriptionState = pgEnum(
@@ -880,6 +911,339 @@ export const commercialScopeRevisionAnchors = pgTable(
   ],
 );
 
+export const commercialRequests = pgTable(
+  "commercial_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    state: commercialRequestState("state").default("open").notNull(),
+    title: text("title").notNull(),
+    requestText: text("request_text").notNull(),
+    externalRequester: text("external_requester"),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("commercial_requests_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    uniqueIndex("commercial_requests_project_idempotency_uidx").on(
+      table.projectId,
+      table.idempotencyKey,
+    ),
+    index("commercial_requests_project_state_received_idx").on(
+      table.projectId,
+      table.state,
+      table.receivedAt,
+      table.id,
+    ),
+    check(
+      "commercial_requests_title_length",
+      sql`char_length(btrim(${table.title})) between 1 and 240`,
+    ),
+    check(
+      "commercial_requests_text_length",
+      sql`char_length(btrim(${table.requestText})) between 1 and 10000`,
+    ),
+    check(
+      "commercial_requests_external_requester_length",
+      sql`${table.externalRequester} is null or char_length(btrim(${table.externalRequester})) between 1 and 160`,
+    ),
+  ],
+);
+
+export const commercialRequestAnchors = pgTable(
+  "commercial_request_anchors",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
+    evidenceAnchorId: uuid("evidence_anchor_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.requestId, table.evidenceAnchorId] }),
+    foreignKey({
+      columns: [table.requestId, table.projectId],
+      foreignColumns: [commercialRequests.id, commercialRequests.projectId],
+      name: "commercial_request_anchors_request_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.evidenceAnchorId, table.projectId],
+      foreignColumns: [
+        commercialEvidenceAnchors.id,
+        commercialEvidenceAnchors.projectId,
+      ],
+      name: "commercial_request_anchors_anchor_project_fk",
+    }).onDelete("restrict"),
+  ],
+);
+
+export const commercialRequestScopeItems = pgTable(
+  "commercial_request_scope_items",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
+    scopeItemId: uuid("scope_item_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.requestId, table.scopeItemId] }),
+    foreignKey({
+      columns: [table.requestId, table.projectId],
+      foreignColumns: [commercialRequests.id, commercialRequests.projectId],
+      name: "commercial_request_scope_items_request_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.scopeItemId, table.projectId],
+      foreignColumns: [commercialScopeItems.id, commercialScopeItems.projectId],
+      name: "commercial_request_scope_items_scope_project_fk",
+    }).onDelete("restrict"),
+  ],
+);
+
+export const commercialDecisions = pgTable(
+  "commercial_decisions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    disposition: commercialDecisionDisposition("disposition").notNull(),
+    coverageBasis: commercialCoverageBasis("coverage_basis"),
+    rationale: text("rationale"),
+    supersedesDecisionId: uuid("supersedes_decision_id"),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }).notNull(),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("commercial_decisions_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.supersedesDecisionId, table.projectId],
+      foreignColumns: [table.id, table.projectId],
+      name: "commercial_decisions_supersedes_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.requestId, table.projectId],
+      foreignColumns: [commercialRequests.id, commercialRequests.projectId],
+      name: "commercial_decisions_request_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("commercial_decisions_request_idempotency_uidx").on(
+      table.requestId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("commercial_decisions_supersedes_uidx").on(
+      table.supersedesDecisionId,
+    ),
+    uniqueIndex("commercial_decisions_current_request_uidx")
+      .on(table.requestId)
+      .where(sql`${table.supersededAt} is null`),
+    index("commercial_decisions_project_confirmed_idx").on(
+      table.projectId,
+      table.confirmedAt,
+      table.id,
+    ),
+    check(
+      "commercial_decisions_coverage_basis",
+      sql`${table.disposition} = 'covered' or ${table.coverageBasis} is null`,
+    ),
+    check(
+      "commercial_decisions_rationale_length",
+      sql`${table.rationale} is null or char_length(${table.rationale}) <= 10000`,
+    ),
+    check(
+      "commercial_decisions_superseded_time",
+      sql`${table.supersededAt} is null or ${table.supersededAt} >= ${table.confirmedAt}`,
+    ),
+  ],
+);
+
+export const commercialDecisionAnchors = pgTable(
+  "commercial_decision_anchors",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    decisionId: uuid("decision_id").notNull(),
+    evidenceAnchorId: uuid("evidence_anchor_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.decisionId, table.evidenceAnchorId] }),
+    foreignKey({
+      columns: [table.decisionId, table.projectId],
+      foreignColumns: [commercialDecisions.id, commercialDecisions.projectId],
+      name: "commercial_decision_anchors_decision_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.evidenceAnchorId, table.projectId],
+      foreignColumns: [
+        commercialEvidenceAnchors.id,
+        commercialEvidenceAnchors.projectId,
+      ],
+      name: "commercial_decision_anchors_anchor_project_fk",
+    }).onDelete("restrict"),
+  ],
+);
+
+export const commercialDecisionScopeItems = pgTable(
+  "commercial_decision_scope_items",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    decisionId: uuid("decision_id").notNull(),
+    scopeItemId: uuid("scope_item_id").notNull(),
+    role: commercialDecisionScopeRole("role").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.decisionId, table.scopeItemId, table.role] }),
+    foreignKey({
+      columns: [table.decisionId, table.projectId],
+      foreignColumns: [commercialDecisions.id, commercialDecisions.projectId],
+      name: "commercial_decision_scope_items_decision_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.scopeItemId, table.projectId],
+      foreignColumns: [commercialScopeItems.id, commercialScopeItems.projectId],
+      name: "commercial_decision_scope_items_scope_project_fk",
+    }).onDelete("restrict"),
+  ],
+);
+
+export const commercialImpactAssessments = pgTable(
+  "commercial_impact_assessments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
+    decisionId: uuid("decision_id"),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    confidence: commercialImpactConfidence("confidence").notNull(),
+    effortMinutes: integer("effort_minutes"),
+    scheduleDeltaDays: integer("schedule_delta_days"),
+    targetDate: date("target_date"),
+    monetaryAmount: numeric("monetary_amount", {
+      precision: 18,
+      scale: 2,
+    }),
+    currencyCode: text("currency_code"),
+    notes: text("notes"),
+    supersedesImpactAssessmentId: uuid("supersedes_impact_assessment_id"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("commercial_impacts_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.supersedesImpactAssessmentId, table.projectId],
+      foreignColumns: [table.id, table.projectId],
+      name: "commercial_impacts_supersedes_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.requestId, table.projectId],
+      foreignColumns: [commercialRequests.id, commercialRequests.projectId],
+      name: "commercial_impacts_request_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.decisionId, table.projectId],
+      foreignColumns: [commercialDecisions.id, commercialDecisions.projectId],
+      name: "commercial_impacts_decision_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("commercial_impacts_request_idempotency_uidx").on(
+      table.requestId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("commercial_impacts_supersedes_uidx").on(
+      table.supersedesImpactAssessmentId,
+    ),
+    index("commercial_impacts_request_created_idx").on(
+      table.requestId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      "commercial_impacts_has_value",
+      sql`${table.effortMinutes} is not null or ${table.scheduleDeltaDays} is not null or ${table.targetDate} is not null or ${table.monetaryAmount} is not null`,
+    ),
+    check(
+      "commercial_impacts_effort_range",
+      sql`${table.effortMinutes} is null or ${table.effortMinutes} between 0 and 100000000`,
+    ),
+    check(
+      "commercial_impacts_schedule_range",
+      sql`${table.scheduleDeltaDays} is null or ${table.scheduleDeltaDays} between -3650 and 3650`,
+    ),
+    check(
+      "commercial_impacts_money_pair",
+      sql`(${table.monetaryAmount} is null and ${table.currencyCode} is null) or (${table.monetaryAmount} is not null and ${table.currencyCode} ~ '^[A-Z]{3}$')`,
+    ),
+    check(
+      "commercial_impacts_notes_length",
+      sql`${table.notes} is null or char_length(${table.notes}) <= 5000`,
+    ),
+  ],
+);
+
+export const commercialImpactAssessmentAnchors = pgTable(
+  "commercial_impact_assessment_anchors",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    impactAssessmentId: uuid("impact_assessment_id").notNull(),
+    evidenceAnchorId: uuid("evidence_anchor_id").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.impactAssessmentId, table.evidenceAnchorId],
+    }),
+    foreignKey({
+      columns: [table.impactAssessmentId, table.projectId],
+      foreignColumns: [
+        commercialImpactAssessments.id,
+        commercialImpactAssessments.projectId,
+      ],
+      name: "commercial_impact_anchors_impact_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.evidenceAnchorId, table.projectId],
+      foreignColumns: [
+        commercialEvidenceAnchors.id,
+        commercialEvidenceAnchors.projectId,
+      ],
+      name: "commercial_impact_anchors_anchor_project_fk",
+    }).onDelete("restrict"),
+  ],
+);
+
 export const commercialBasisLinks = pgTable(
   "commercial_basis_links",
   {
@@ -890,6 +1254,7 @@ export const commercialBasisLinks = pgTable(
     workItemId: uuid("work_item_id").notNull(),
     basisType: commercialBasisType("basis_type").notNull(),
     scopeItemRevisionId: uuid("scope_item_revision_id"),
+    decisionId: uuid("decision_id"),
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -911,9 +1276,18 @@ export const commercialBasisLinks = pgTable(
       ],
       name: "commercial_basis_links_scope_revision_project_fk",
     }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.decisionId, table.projectId],
+      foreignColumns: [commercialDecisions.id, commercialDecisions.projectId],
+      name: "commercial_basis_links_decision_project_fk",
+    }).onDelete("restrict"),
     uniqueIndex("commercial_basis_links_work_scope_uidx").on(
       table.workItemId,
       table.scopeItemRevisionId,
+    ),
+    uniqueIndex("commercial_basis_links_work_decision_uidx").on(
+      table.workItemId,
+      table.decisionId,
     ),
     index("commercial_basis_links_project_work_idx").on(
       table.projectId,
@@ -921,7 +1295,7 @@ export const commercialBasisLinks = pgTable(
     ),
     check(
       "commercial_basis_links_target",
-      sql`${table.basisType} = 'baseline_scope_item' and ${table.scopeItemRevisionId} is not null`,
+      sql`(${table.basisType} = 'baseline_scope_item' and ${table.scopeItemRevisionId} is not null and ${table.decisionId} is null) or (${table.basisType} = 'commercial_decision' and ${table.scopeItemRevisionId} is null and ${table.decisionId} is not null)`,
     ),
   ],
 );
@@ -1285,6 +1659,16 @@ export type CommercialParseState =
   (typeof commercialParseState.enumValues)[number];
 export type CommercialScopeKind =
   (typeof commercialScopeKind.enumValues)[number];
+export type CommercialRequestState =
+  (typeof commercialRequestState.enumValues)[number];
+export type CommercialDecisionDisposition =
+  (typeof commercialDecisionDisposition.enumValues)[number];
+export type CommercialCoverageBasis =
+  (typeof commercialCoverageBasis.enumValues)[number];
+export type CommercialDecisionScopeRole =
+  (typeof commercialDecisionScopeRole.enumValues)[number];
+export type CommercialImpactConfidence =
+  (typeof commercialImpactConfidence.enumValues)[number];
 export type CommercialBasisType =
   (typeof commercialBasisType.enumValues)[number];
 export type WorkItemSubscriptionState =

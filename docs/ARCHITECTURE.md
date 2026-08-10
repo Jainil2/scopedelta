@@ -2,12 +2,13 @@
 
 ## Status
 
-Implemented through SC-006A. The SC-004 production platform kernel now supports
+Implemented through SC-006B. The SC-004 production platform kernel now supports
 the client-project delivery foundation plus production board, optional cycle
 planning, authorized cross-project daily execution, and internal project
 collaboration. SC-006A adds the first evidence-backed commercial baseline and
-advisory work provenance; amendment ingestion, impact analysis, and change-order
-workflows remain in SC-006B/SC-006C.
+advisory work provenance. SC-006B adds atomic client requests, explicit
+commercial decisions and impact history, plus decision-backed work provenance;
+baseline amendment lineage remains in SC-006C.
 
 ## System decision
 
@@ -248,6 +249,41 @@ implementation deliberately uses relational constraints and aggregate queries;
 no graph database, queue, object store, or managed document service is required
 for managed or Local/LAN deployment.
 
+## Commercial request and decision change control
+
+Migration `0007_commercial_change_control.sql` extends the project-scoped graph
+with atomic client requests, append-only decision history, evidence-backed
+effort/schedule/money assessments, and decision-backed work basis links. Request
+state is separate from commercial outcome: `open` and `needs_clarification` are
+unresolved, an effective decision resolves the request, and `withdrawn` implies
+no approval or rejection.
+
+Every request has at most one current decision. A correction explicitly names
+and supersedes that decision inside the same transaction; the former row and
+its work links remain intact for historical interpretation. Only a current
+`covered`, `absorbed`, `swap`, or `paid_change` decision counts as effective
+commercial basis. `deferred` and `rejected` cannot create a work basis. If a
+linked authorizing decision is superseded while work remains active, the link
+becomes ineffective and the ledger surfaces a contradiction without changing
+delivery status. Completed work retains the historical link without a current
+work warning.
+
+A `swap` decision requires at least one distinct, active baseline scope item as
+its offsetting side. `covered` may optionally classify its existing-obligation
+basis. Impact assessments store effort in integer minutes, schedule delta in
+integer days and/or an ISO date, and money as PostgreSQL `numeric(18,2)` paired
+with a three-letter currency code. Estimate and confirmed confidence are
+explicit. Later assessments identify the assessment they supersede rather than
+rewriting it.
+
+Workspace owners/admins and the project lead manage the request ledger. Request
+bodies, rationale, impact notes, source text, and monetary values are excluded
+from audit metadata; events contain identifiers, enums, and changed-field names.
+Composite project foreign keys plus server authorization reject cross-project
+request, decision, evidence, impact, scope, and work links. The implementation
+uses only PostgreSQL and the shared server core, so it has no AI, OCR SaaS,
+e-signature, CRM, billing, or managed-cloud dependency.
+
 ## Invitations
 
 An invitation stores a normalized email, role, expiry, and SHA-256 hash of a
@@ -285,8 +321,9 @@ workspaces, settings, memberships, invitations, fragment-token staging,
 acceptance, clients, projects, project memberships, milestones, cycles, labels,
 work items, My work, dependencies, lifecycle actions, and reorder actions.
 Project routes also expose commercial sources/downloads/retries, the initial
-baseline, scope revisions and archive lifecycle, work purpose/basis links, and
-paginated advisory drift.
+baseline, scope revisions and archive lifecycle, atomic commercial requests,
+request state, decision confirmation/supersession, impact assessments, work
+purpose/basis links, and paginated advisory drift.
 Successful payloads are `{ data: ... }`; paginated lists include page metadata
 inside `data`. Page size defaults to 50 and is capped at 100. Errors are
 `{ error: { code, message, fieldErrors? } }`. Route handlers parse bounded JSON,
@@ -308,10 +345,12 @@ authorization from drifting.
 
 Unit/component tests run in jsdom. PostgreSQL integration tests validate
 migrations, persistence, tenancy, roles, last-owner protection, concurrent work
-numbering, subtask/dependency rules, commercial revision/link history, parser
-failure isolation, cross-project graph rejection, pagination, and safe audit metadata.
-Playwright verifies identity and workspace journeys plus client-project backlog
-creation/editing and the evidence-to-work commercial path on desktop and mobile.
+numbering, subtask/dependency rules, commercial revision/link history, request
+and decision idempotency, all six commercial outcomes, impact supersession,
+current-work contradictions, parser failure isolation, cross-project graph
+rejection, pagination, and safe audit metadata. Playwright verifies identity and
+workspace journeys plus client-project backlog creation/editing and the
+evidence-to-work commercial path on desktop and mobile.
 CI runs the full suite plus production and container builds.
 
 ## Deployment and privacy boundaries

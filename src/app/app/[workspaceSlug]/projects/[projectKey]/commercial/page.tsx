@@ -1,13 +1,18 @@
 import { notFound } from "next/navigation";
 
+import { CommercialChangeControl } from "@/components/commercial-change-control";
 import { CommercialWorkspace } from "@/components/commercial-workspace";
-import { commercialDriftFiltersSchema } from "@/lib/commercial-validation";
+import {
+  commercialDriftFiltersSchema,
+  commercialRequestFiltersSchema,
+} from "@/lib/commercial-validation";
 import { parseInput } from "@/lib/platform-validation";
 import { requireSession } from "@/lib/session";
 import {
   listCommercialDrift,
   listCommercialOverview,
 } from "@/server/commercial";
+import { listCommercialRequests } from "@/server/commercial-change-control";
 import { getProjectByKey } from "@/server/delivery";
 import { getWorkspaceBySlug } from "@/server/workspaces";
 
@@ -29,7 +34,7 @@ export default async function CommercialPage({
   );
   return (
     <CommercialWorkspace
-      key={data.drift.page.number}
+      key={`${data.drift.page.number}:${data.requests.page.number}`}
       workspaceId={data.workspace.id}
       workspaceSlug={workspaceSlug}
       project={data.project}
@@ -41,6 +46,17 @@ export default async function CommercialPage({
         linked: data.linked.page.total,
         supportInternal: data.support.page.total,
       }}
+      changeControl={
+        <CommercialChangeControl
+          workspaceId={data.workspace.id}
+          workspaceSlug={workspaceSlug}
+          projectId={data.project.id}
+          projectKey={data.project.key}
+          sources={data.overview.sources}
+          scopeItems={data.overview.scopeItems}
+          ledger={data.requests}
+        />
+      }
     />
   );
 }
@@ -57,13 +73,20 @@ async function loadCommercial(
         typeof searchParams.page === "string" ? searchParams.page : undefined,
       pageSize: 50,
     });
+    const requestFilters = parseInput(commercialRequestFiltersSchema, {
+      page:
+        typeof searchParams.requestPage === "string"
+          ? searchParams.requestPage
+          : undefined,
+      pageSize: 25,
+    });
     const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
     const project = await getProjectByKey(
       actor,
       workspace.id,
       projectKey.toUpperCase(),
     );
-    const [overview, drift, unlinked, unclassified, linked, support] =
+    const [overview, drift, unlinked, unclassified, linked, support, requests] =
       await Promise.all([
         listCommercialOverview(actor, workspace.id, project.id),
         listCommercialDrift(actor, workspace.id, project.id, filters),
@@ -87,6 +110,7 @@ async function loadCommercial(
           pageSize: 1,
           state: "support_internal",
         }),
+        listCommercialRequests(actor, workspace.id, project.id, requestFilters),
       ]);
     return {
       workspace,
@@ -97,6 +121,7 @@ async function loadCommercial(
       unclassified,
       linked,
       support,
+      requests,
     };
   } catch {
     notFound();

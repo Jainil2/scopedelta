@@ -353,7 +353,7 @@ test("client project, milestone, and backlog work through the production UI", as
   ).toBeAttached();
 });
 
-test("commercial baseline evidence and advisory work provenance stay linked", async ({
+test("commercial baseline, decision authorization and contradictions stay traceable", async ({
   page,
   request,
 }) => {
@@ -412,9 +412,18 @@ test("commercial baseline evidence and advisory work provenance stay linked", as
   await expect(page.locator(".selected-evidence blockquote")).toHaveText(
     commercialText,
   );
-  await page.getByLabel("Scope item").fill("Authenticated client portal");
-  await page.getByLabel("Evidence label").fill("Deliverable paragraph");
-  await page.getByRole("button", { name: "Add scope item" }).click();
+  const scopeItemForm = page.locator("form.scope-item-form");
+  await scopeItemForm
+    .getByLabel("Scope item")
+    .fill("Authenticated client portal");
+  await scopeItemForm
+    .getByLabel("Evidence label")
+    .fill("Deliverable paragraph");
+  await scopeItemForm.getByRole("button", { name: "Add scope item" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Scope item added to the baseline.",
+  );
+  await page.reload({ waitUntil: "networkidle" });
   await expect(
     page.getByText("Authenticated client portal", { exact: true }),
   ).toBeVisible();
@@ -434,7 +443,7 @@ test("commercial baseline evidence and advisory work provenance stay linked", as
   await page.getByLabel("Work purpose").selectOption("client_delivery");
   await page.getByRole("button", { name: "Update classification" }).click();
   await expect(page.getByRole("heading", { name: "Unlinked" })).toBeVisible();
-  await page.getByLabel("Baseline scope").selectOption({
+  await page.getByLabel("Commercial basis").selectOption({
     label: "deliverable · Authenticated client portal",
   });
   await page.getByRole("button", { name: "Link commercial basis" }).click();
@@ -460,7 +469,151 @@ test("commercial baseline evidence and advisory work provenance stay linked", as
       path: "docs/screenshots/sc-006a-commercial-mobile.png",
       fullPage: true,
     });
+    await page.setViewportSize({ width: 1440, height: 1000 });
   }
+
+  await page.getByText("Record a client request").click();
+  const requestForm = page.locator("form.commercial-change-form").filter({
+    has: page.getByRole("button", { name: "Record request" }),
+  });
+  await requestForm.getByLabel("Request title").fill("Add production export");
+  await requestForm
+    .getByLabel("Original language or concise description")
+    .fill("Client asked us to add a production export workflow.");
+  await requestForm
+    .getByLabel("Client/requester label (optional)")
+    .fill("Product sponsor");
+  await requestForm
+    .getByRole("group", { name: "Potentially affected baseline scope" })
+    .getByLabel(/Authenticated client portal/)
+    .check();
+  await requestForm.getByLabel("Source").selectOption({
+    label: "Signed SOW extract",
+  });
+  await requestForm.getByLabel("Start offset").fill("0");
+  await requestForm
+    .getByLabel("End offset")
+    .fill(String(commercialText.length));
+  await requestForm.getByLabel("Exact amount").fill("1250.50");
+  await requestForm.getByLabel("Currency").fill("USD");
+  await requestForm.getByRole("button", { name: "Record request" }).click();
+  await expect(page.getByRole("status")).toHaveText("Client request recorded.");
+
+  let requestCard = page.locator("article.commercial-request-card").filter({
+    hasText: "Add production export",
+  });
+  await expect(requestCard).toContainText("open");
+  await requestCard
+    .locator("summary")
+    .filter({ hasText: "Confirm decision" })
+    .click();
+  let decisionForm = requestCard.locator("form.commercial-change-form").filter({
+    has: page.getByRole("button", { name: "Confirm decision" }),
+  });
+  await decisionForm.getByLabel("Disposition").selectOption("paid_change");
+  await decisionForm
+    .getByLabel("Decision rationale")
+    .fill("Client authorized the incremental delivery work.");
+  await decisionForm
+    .getByRole("group", { name: "Affected baseline scope" })
+    .getByLabel(/Authenticated client portal/)
+    .check();
+  await decisionForm.getByLabel("Confidence").selectOption("confirmed");
+  await decisionForm.getByLabel("Effort hours").fill("12");
+  await decisionForm.getByLabel("Exact amount").fill("1200.00");
+  await decisionForm.getByLabel("Currency").fill("USD");
+  await decisionForm.getByRole("button", { name: "Confirm decision" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Commercial decision confirmed.",
+  );
+  requestCard = page.locator("article.commercial-request-card").filter({
+    hasText: "Add production export",
+  });
+  await expect(requestCard).toContainText("paid change");
+  await expect(requestCard).toContainText("confirmed: 12.00h · USD 1200.00");
+
+  await page.goto(`/app/${workspaceSlug}/projects/SCOPE/backlog`);
+  await page
+    .getByRole("button", { name: /Build authenticated portal/ })
+    .click();
+  await page
+    .getByRole("link", { name: "Open discussion and activity" })
+    .click();
+  await page.waitForURL(/\/work\//);
+  const workUrl = page.url();
+  await page.getByLabel("Commercial basis").selectOption({
+    label: "paid change · Add production export",
+  });
+  await page.getByRole("button", { name: "Link commercial basis" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Commercial provenance linked.",
+  );
+  await expect(
+    page.getByText("Add production export", { exact: true }),
+  ).toBeVisible();
+  const baselineLink = page.locator(".work-commercial-links > div").filter({
+    hasText: "Authenticated client portal",
+  });
+  await baselineLink.getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Commercial basis removed.",
+  );
+  await expect(baselineLink).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Linked" })).toBeVisible();
+
+  await page.goto(`/app/${workspaceSlug}/projects/SCOPE/commercial`);
+  requestCard = page.locator("article.commercial-request-card").filter({
+    hasText: "Add production export",
+  });
+  await requestCard
+    .locator("summary")
+    .filter({ hasText: "Correct/supersede decision" })
+    .click();
+  decisionForm = requestCard.locator("form.commercial-change-form").filter({
+    has: page.getByRole("button", { name: "Supersede decision" }),
+  });
+  await decisionForm.getByLabel("Disposition").selectOption("rejected");
+  await decisionForm
+    .getByLabel("Decision rationale")
+    .fill("Client withdrew authorization after delivery started.");
+  await decisionForm
+    .getByRole("button", { name: "Supersede decision" })
+    .click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Commercial decision superseded. Linked active work may require review.",
+  );
+  requestCard = page.locator("article.commercial-request-card").filter({
+    hasText: "Add production export",
+  });
+  await expect(requestCard).toContainText("1 work contradiction");
+  await expect(requestCard).toContainText("Build authenticated portal");
+  await expect(requestCard.getByLabel("Disposition")).toHaveValue("rejected");
+  await requestCard.getByText("Prior decisions (1)").click();
+  await expect(
+    requestCard
+      .locator(".commercial-decision-history")
+      .getByText("paid change"),
+  ).toBeVisible();
+
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-006b-commercial-decision-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-006b-commercial-decision-mobile.png",
+      fullPage: true,
+    });
+  }
+
+  const refreshedWorkUrl = new URL(workUrl);
+  refreshedWorkUrl.searchParams.set("commercialRevision", String(Date.now()));
+  await page.goto(refreshedWorkUrl.toString(), { waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { name: "Unlinked" })).toBeVisible();
+  await expect(page.getByText(/superseded · review required/)).toBeVisible();
 });
 
 test("project brief, work discussion, activity, and inbox are accessible and bounded", async ({

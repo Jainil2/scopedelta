@@ -22,6 +22,7 @@ import {
   auditEvents,
   clients,
   commercialBasisLinks,
+  commercialDecisions,
   commercialScopeItemRevisions,
   commercialScopeItems,
   cycles,
@@ -1405,70 +1406,16 @@ export async function updateWorkItem(
       )
       .limit(1);
     if (!current[0]) throw notFound();
-    if (
-      current[0].status === "canceled" &&
-      input.status &&
-      input.status !== "canceled"
-    ) {
-      throw conflict("terminal_status", "Canceled work cannot be reopened.");
-    }
-    if (input.parentId === workItemId) {
-      throw conflict("invalid_parent", "Work cannot be its own parent.");
-    }
-    if (input.parentId && input.parentId !== current[0].parentId) {
-      const children = await transaction
-        .select({ total: count() })
-        .from(workItems)
-        .where(eq(workItems.parentId, workItemId));
-      if ((children[0]?.total ?? 0) > 0) {
-        throw conflict(
-          "invalid_parent",
-          "A parent with subtasks cannot become a subtask.",
-        );
-      }
-    }
-    await validateWorkReferences(transaction, projectId, {
-      ...(input.assigneeUserId !== undefined &&
-      input.assigneeUserId !== current[0].assigneeUserId
-        ? { assigneeUserId: input.assigneeUserId }
-        : {}),
-      ...(input.milestoneId !== undefined &&
-      input.milestoneId !== current[0].milestoneId
-        ? { milestoneId: input.milestoneId }
-        : {}),
-      ...(input.cycleId !== undefined && input.cycleId !== current[0].cycleId
-        ? { cycleId: input.cycleId }
-        : {}),
-      ...(input.parentId !== undefined && input.parentId !== current[0].parentId
-        ? { parentId: input.parentId }
-        : {}),
-    });
-    if (input.archived && !current[0].archivedAt) {
-      const childRows = await transaction
-        .select({ total: count() })
-        .from(workItems)
-        .where(
-          and(eq(workItems.parentId, workItemId), isNull(workItems.archivedAt)),
-        );
-      if ((childRows[0]?.total ?? 0) > 0) {
-        throw conflict(
-          "active_subtasks",
-          "Archive active subtasks before archiving their parent.",
-        );
-      }
-    }
-    if (input.archived === false && current[0].parentId) {
-      const parent = await transaction
-        .select({ archivedAt: workItems.archivedAt })
-        .from(workItems)
-        .where(eq(workItems.id, current[0].parentId))
-        .limit(1);
-      if (parent[0]?.archivedAt) {
-        throw conflict("parent_archived", "Restore the parent first.");
-      }
-    }
+    await validateWorkItemUpdate(
+      transaction,
+      projectId,
+      workItemId,
+      current[0],
+      input,
+    );
     const { labelIds, archived, ...values } = input;
-    const statusChanged = values.status && values.status !== current[0].status;
+    const statusChanged =
+      values.status !== undefined && values.status !== current[0].status;
     const sortOrder = statusChanged
       ? await nextWorkOrder(transaction, projectId, values.status!)
       : undefined;
@@ -1485,70 +1432,13 @@ export async function updateWorkItem(
       .where(eq(workItems.id, workItemId));
     if (labelIds)
       await replaceLabels(transaction, projectId, workItemId, labelIds);
-    const events: Array<Parameters<typeof insertAudit>[3]> = [];
-    if (statusChanged) {
-      events.push({
-        eventType: "work_item.status.updated.v1",
-        targetType: "work_item",
-        targetId: workItemId,
-        metadata: { previousStatus: current[0].status, status: values.status! },
-      });
-    }
-    if (
-      values.assigneeUserId !== undefined &&
-      values.assigneeUserId !== current[0].assigneeUserId
-    ) {
-      events.push({
-        eventType: "work_item.assignee.updated.v1",
-        targetType: "work_item",
-        targetId: workItemId,
-        metadata: {
-          previousAssigneeUserId: current[0].assigneeUserId ?? "",
-          assigneeUserId: values.assigneeUserId ?? "",
-        },
-      });
-    }
-    if (
-      values.milestoneId !== undefined &&
-      values.milestoneId !== current[0].milestoneId
-    ) {
-      events.push({
-        eventType: "work_item.milestone.updated.v1",
-        targetType: "work_item",
-        targetId: workItemId,
-        metadata: {
-          previousMilestoneId: current[0].milestoneId ?? "",
-          milestoneId: values.milestoneId ?? "",
-        },
-      });
-    }
-    if (values.cycleId !== undefined && values.cycleId !== current[0].cycleId) {
-      events.push({
-        eventType: "work_item.cycle.updated.v1",
-        targetType: "work_item",
-        targetId: workItemId,
-        metadata: {
-          previousCycleId: current[0].cycleId ?? "",
-          cycleId: values.cycleId ?? "",
-        },
-      });
-    }
-    if (archived !== undefined && Boolean(current[0].archivedAt) !== archived) {
-      events.push({
-        eventType: archived ? "work_item.archived.v1" : "work_item.restored.v1",
-        targetType: "work_item",
-        targetId: workItemId,
-        metadata: {},
-      });
-    }
-    if (!events.length) {
-      events.push({
-        eventType: "work_item.updated.v1",
-        targetType: "work_item",
-        targetId: workItemId,
-        metadata: { changedFields: Object.keys(input) },
-      });
-    }
+    const events = workItemUpdateEvents(
+      current[0],
+      values,
+      archived,
+      workItemId,
+      input,
+    );
     await insertWorkItemAudits(transaction, actor, workspaceId, projectId, {
       workItemId,
       assigneeUserId: values.assigneeUserId,
@@ -1556,6 +1446,182 @@ export async function updateWorkItem(
     });
   });
   return getWorkItem(actor, workspaceId, projectId, workItemId);
+}
+
+type StoredWorkItem = typeof workItems.$inferSelect;
+type WorkItemUpdateValues = Omit<UpdateWorkItemInput, "labelIds" | "archived">;
+type WorkItemAuditEvent = Parameters<typeof insertAudit>[3];
+
+async function validateWorkItemUpdate(
+  transaction: Transaction,
+  projectId: string,
+  workItemId: string,
+  current: StoredWorkItem,
+  input: UpdateWorkItemInput,
+) {
+  if (
+    current.status === "canceled" &&
+    input.status &&
+    input.status !== "canceled"
+  ) {
+    throw conflict("terminal_status", "Canceled work cannot be reopened.");
+  }
+  await assertParentUpdateAllowed(transaction, workItemId, current, input);
+  await validateWorkReferences(
+    transaction,
+    projectId,
+    changedWorkReferences(current, input),
+  );
+  await assertArchiveUpdateAllowed(transaction, workItemId, current, input);
+}
+
+async function assertParentUpdateAllowed(
+  transaction: Transaction,
+  workItemId: string,
+  current: StoredWorkItem,
+  input: UpdateWorkItemInput,
+) {
+  if (input.parentId === workItemId) {
+    throw conflict("invalid_parent", "Work cannot be its own parent.");
+  }
+  if (!input.parentId || input.parentId === current.parentId) return;
+  const children = await transaction
+    .select({ total: count() })
+    .from(workItems)
+    .where(eq(workItems.parentId, workItemId));
+  if ((children[0]?.total ?? 0) > 0) {
+    throw conflict(
+      "invalid_parent",
+      "A parent with subtasks cannot become a subtask.",
+    );
+  }
+}
+
+function changedWorkReferences(
+  current: StoredWorkItem,
+  input: UpdateWorkItemInput,
+) {
+  const changed: UpdateWorkItemInput = {};
+  if (
+    input.assigneeUserId !== undefined &&
+    input.assigneeUserId !== current.assigneeUserId
+  )
+    changed.assigneeUserId = input.assigneeUserId;
+  if (
+    input.milestoneId !== undefined &&
+    input.milestoneId !== current.milestoneId
+  )
+    changed.milestoneId = input.milestoneId;
+  if (input.cycleId !== undefined && input.cycleId !== current.cycleId)
+    changed.cycleId = input.cycleId;
+  if (input.parentId !== undefined && input.parentId !== current.parentId)
+    changed.parentId = input.parentId;
+  return changed;
+}
+
+async function assertArchiveUpdateAllowed(
+  transaction: Transaction,
+  workItemId: string,
+  current: StoredWorkItem,
+  input: UpdateWorkItemInput,
+) {
+  if (input.archived && !current.archivedAt) {
+    const children = await transaction
+      .select({ total: count() })
+      .from(workItems)
+      .where(
+        and(eq(workItems.parentId, workItemId), isNull(workItems.archivedAt)),
+      );
+    if ((children[0]?.total ?? 0) > 0) {
+      throw conflict(
+        "active_subtasks",
+        "Archive active subtasks before archiving their parent.",
+      );
+    }
+  }
+  if (input.archived !== false || !current.parentId) return;
+  const parent = await transaction
+    .select({ archivedAt: workItems.archivedAt })
+    .from(workItems)
+    .where(eq(workItems.id, current.parentId))
+    .limit(1);
+  if (parent[0]?.archivedAt) {
+    throw conflict("parent_archived", "Restore the parent first.");
+  }
+}
+
+function workItemUpdateEvents(
+  current: StoredWorkItem,
+  values: WorkItemUpdateValues,
+  archived: boolean | undefined,
+  workItemId: string,
+  input: UpdateWorkItemInput,
+) {
+  const events: WorkItemAuditEvent[] = [];
+  if (values.status !== undefined && values.status !== current.status) {
+    events.push({
+      eventType: "work_item.status.updated.v1",
+      targetType: "work_item",
+      targetId: workItemId,
+      metadata: { previousStatus: current.status, status: values.status },
+    });
+  }
+  if (
+    values.assigneeUserId !== undefined &&
+    values.assigneeUserId !== current.assigneeUserId
+  ) {
+    events.push({
+      eventType: "work_item.assignee.updated.v1",
+      targetType: "work_item",
+      targetId: workItemId,
+      metadata: {
+        previousAssigneeUserId: current.assigneeUserId ?? "",
+        assigneeUserId: values.assigneeUserId ?? "",
+      },
+    });
+  }
+  if (
+    values.milestoneId !== undefined &&
+    values.milestoneId !== current.milestoneId
+  ) {
+    events.push({
+      eventType: "work_item.milestone.updated.v1",
+      targetType: "work_item",
+      targetId: workItemId,
+      metadata: {
+        previousMilestoneId: current.milestoneId ?? "",
+        milestoneId: values.milestoneId ?? "",
+      },
+    });
+  }
+  if (values.cycleId !== undefined && values.cycleId !== current.cycleId) {
+    events.push({
+      eventType: "work_item.cycle.updated.v1",
+      targetType: "work_item",
+      targetId: workItemId,
+      metadata: {
+        previousCycleId: current.cycleId ?? "",
+        cycleId: values.cycleId ?? "",
+      },
+    });
+  }
+  if (archived !== undefined && Boolean(current.archivedAt) !== archived) {
+    events.push({
+      eventType: archived ? "work_item.archived.v1" : "work_item.restored.v1",
+      targetType: "work_item",
+      targetId: workItemId,
+      metadata: {},
+    });
+  }
+  if (!events.length) {
+    events.push({
+      eventType: "work_item.updated.v1",
+      targetType: "work_item",
+      targetId: workItemId,
+      metadata: { changedFields: Object.keys(input) },
+    });
+  }
+  return events;
 }
 
 export async function reorderWorkItem(
@@ -1920,7 +1986,7 @@ async function listCommercialBasisCounts(
       total: count(),
     })
     .from(commercialBasisLinks)
-    .innerJoin(
+    .leftJoin(
       commercialScopeItemRevisions,
       and(
         eq(
@@ -1933,17 +1999,34 @@ async function listCommercialBasisCounts(
         ),
       ),
     )
-    .innerJoin(
+    .leftJoin(
       commercialScopeItems,
       and(
         eq(commercialScopeItems.id, commercialScopeItemRevisions.scopeItemId),
         eq(commercialScopeItems.projectId, commercialBasisLinks.projectId),
       ),
     )
+    .leftJoin(
+      commercialDecisions,
+      and(
+        eq(commercialDecisions.id, commercialBasisLinks.decisionId),
+        eq(commercialDecisions.projectId, commercialBasisLinks.projectId),
+      ),
+    )
     .where(
       and(
         inArray(commercialBasisLinks.workItemId, workItemIds),
-        isNull(commercialScopeItems.archivedAt),
+        or(
+          and(
+            eq(commercialBasisLinks.basisType, "baseline_scope_item"),
+            isNull(commercialScopeItems.archivedAt),
+          ),
+          and(
+            eq(commercialBasisLinks.basisType, "commercial_decision"),
+            isNull(commercialDecisions.supersededAt),
+            sql`${commercialDecisions.disposition} in ('covered', 'absorbed', 'swap', 'paid_change')`,
+          ),
+        ),
         ...(projectId ? [eq(commercialBasisLinks.projectId, projectId)] : []),
       ),
     )

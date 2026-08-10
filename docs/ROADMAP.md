@@ -346,9 +346,9 @@ Current intended sequence:
 
 1. SC-004 / #8 — Layer 0 Platform Kernel — **DONE**.
 2. SC-005A/B/C — Layer 1 Delivery Core — **DONE**.
-3. SC-006A / #30 — baseline, work provenance and advisory drift — **next executable Layer-2 slice after readiness control update**.
-4. SC-006B / #31 — request and commercial decision ledger — blocked by #30.
-5. SC-006C / #32 — amendments, lineage and reconstruction — blocked by #31.
+3. SC-006A / #30 — baseline, work provenance and advisory drift — **DONE**.
+4. SC-006B / #31 — request and commercial decision ledger — **DONE**.
+5. SC-006C / #32 — amendments, lineage and reconstruction — next Layer-2 slice after readiness control update.
 6. SC-007 / #11 — Layer 3 client collaboration/negotiation.
 7. SC-008 / #12 — Layer 4 engineering/QA evidence.
 8. SC-009 / #17 — Layer 5 AI-native delivery intelligence.

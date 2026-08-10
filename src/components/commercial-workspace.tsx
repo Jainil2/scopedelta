@@ -8,6 +8,7 @@ import {
   useState,
   useTransition,
   type FormEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 
@@ -91,6 +92,7 @@ export function CommercialWorkspace({
   initialOverview,
   drift,
   driftSummary,
+  changeControl,
 }: Readonly<{
   workspaceId: string;
   workspaceSlug: string;
@@ -98,6 +100,7 @@ export function CommercialWorkspace({
   initialOverview: Overview;
   drift: DriftPage;
   driftSummary: DriftSummary;
+  changeControl?: ReactNode;
 }>) {
   const router = useRouter();
   const overview = initialOverview;
@@ -614,6 +617,7 @@ export function CommercialWorkspace({
           onSelectionChange={setSelection}
         />
       </div>
+      {changeControl}
     </main>
   );
 }
@@ -753,20 +757,53 @@ type WorkProvenance = {
     | "support_internal";
   links: Array<{
     id: string;
-    scopeItemRevisionId: string;
-    revisionNumber: number;
-    kind: string;
-    title: string;
+    basisType: "baseline_scope_item" | "commercial_decision";
+    scopeItemRevisionId: string | null;
+    revisionNumber: number | null;
+    kind: string | null;
+    title: string | null;
     archivedAt: string | Date | null;
+    decisionId: string | null;
+    requestTitle: string | null;
+    disposition:
+      | "covered"
+      | "absorbed"
+      | "swap"
+      | "paid_change"
+      | "deferred"
+      | "rejected"
+      | null;
+    coverageBasis: string | null;
+    decisionConfirmedAt: string | Date | null;
+    decisionSupersededAt: string | Date | null;
+    effective: boolean;
+    contradiction: boolean;
   }>;
 };
 
-type BasisOption = {
-  scopeItemRevisionId: string;
-  revisionNumber: number;
-  kind: string;
-  title: string;
-};
+type BasisOption =
+  | {
+      basisType: "baseline_scope_item";
+      scopeItemRevisionId: string;
+      revisionNumber: number;
+      kind: string;
+      title: string;
+    }
+  | {
+      basisType: "commercial_decision";
+      decisionId: string;
+      requestId: string;
+      requestTitle: string;
+      disposition:
+        | "covered"
+        | "absorbed"
+        | "swap"
+        | "paid_change"
+        | "deferred"
+        | "rejected";
+      coverageBasis: string | null;
+      confirmedAt: string | Date;
+    };
 
 export function WorkCommercialPanel({
   workspaceId,
@@ -804,10 +841,18 @@ export function WorkCommercialPanel({
   async function link(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const [basisType, targetId] = String(formData.get("basis") || "").split(
+      ":",
+      2,
+    );
+    if (!targetId) return setMessage("Choose a commercial basis.");
     const result = await apiRequest(`${base}/links`, "POST", {
-      scopeItemRevisionId: formData.get("scopeItemRevisionId"),
+      basisType,
+      ...(basisType === "commercial_decision"
+        ? { decisionId: targetId }
+        : { scopeItemRevisionId: targetId }),
     });
-    if (result.ok) refresh("Baseline provenance linked.");
+    if (result.ok) refresh("Commercial provenance linked.");
     else setMessage(result.message);
   }
 
@@ -850,26 +895,38 @@ export function WorkCommercialPanel({
                 <option value="internal">Internal</option>
               </select>
             </label>
-            <button disabled={pending}>Update classification</button>
+            <button type="submit" disabled={pending}>
+              Update classification
+            </button>
           </form>
           <form onSubmit={link}>
             <label>
-              Baseline scope
-              <select name="scopeItemRevisionId" required defaultValue="">
+              Commercial basis
+              <select name="basis" required defaultValue="">
                 <option value="" disabled>
-                  Choose current scope
+                  Choose scope or decision
                 </option>
                 {options.map((option) => (
                   <option
-                    value={option.scopeItemRevisionId}
-                    key={option.scopeItemRevisionId}
+                    value={
+                      option.basisType === "commercial_decision"
+                        ? `commercial_decision:${option.decisionId}`
+                        : `baseline_scope_item:${option.scopeItemRevisionId}`
+                    }
+                    key={
+                      option.basisType === "commercial_decision"
+                        ? option.decisionId
+                        : option.scopeItemRevisionId
+                    }
                   >
-                    {option.kind} · {option.title}
+                    {option.basisType === "commercial_decision"
+                      ? `${option.disposition.replaceAll("_", " ")} · ${option.requestTitle}`
+                      : `${option.kind} · ${option.title}`}
                   </option>
                 ))}
               </select>
             </label>
-            <button disabled={pending || !options.length}>
+            <button type="submit" disabled={pending || !options.length}>
               Link commercial basis
             </button>
           </form>
@@ -878,16 +935,40 @@ export function WorkCommercialPanel({
       <div className="work-commercial-links">
         {provenance.links.map((link) => (
           <div key={link.id}>
-            <span className={`scope-kind scope-${link.kind}`}>{link.kind}</span>
+            <span
+              className={`scope-kind ${link.kind ? `scope-${link.kind}` : "scope-decision"}`}
+            >
+              {link.basisType === "commercial_decision"
+                ? link.disposition?.replaceAll("_", " ")
+                : link.kind}
+            </span>
             <div>
-              <strong>{link.title}</strong>
-              <span>
-                Baseline revision {link.revisionNumber}
-                {link.archivedAt ? " · archived historically" : ""}
-              </span>
+              <strong>
+                {link.basisType === "commercial_decision"
+                  ? link.requestTitle || "Confirmed commercial decision"
+                  : link.title}
+              </strong>
+              {link.basisType === "commercial_decision" ? (
+                <span>
+                  {link.coverageBasis
+                    ? `Coverage: ${link.coverageBasis.replaceAll("_", " ")}`
+                    : "Decision-backed work"}
+                  {link.decisionSupersededAt ? " · superseded" : ""}
+                  {link.contradiction ? " · review required" : ""}
+                </span>
+              ) : (
+                <span>
+                  Baseline revision {link.revisionNumber}
+                  {link.archivedAt ? " · archived historically" : ""}
+                </span>
+              )}
             </div>
             {canManage ? (
-              <button className="text-button" onClick={() => unlink(link.id)}>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => unlink(link.id)}
+              >
                 Remove
               </button>
             ) : null}

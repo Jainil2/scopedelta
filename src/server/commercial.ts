@@ -18,8 +18,10 @@ import {
   commercialBaselineVersions,
   commercialBaselines,
   commercialBasisLinks,
+  commercialDecisions,
   commercialEvidenceAnchors,
   commercialEvidenceSources,
+  commercialRequests,
   commercialScopeItemRevisions,
   commercialScopeItems,
   commercialScopeRevisionAnchors,
@@ -716,18 +718,32 @@ export async function getWorkCommercialProvenance(
       kind: commercialScopeItemRevisions.kind,
       title: commercialScopeItemRevisions.title,
       archivedAt: commercialScopeItems.archivedAt,
+      decisionId: commercialDecisions.id,
+      requestTitle: commercialRequests.title,
+      disposition: commercialDecisions.disposition,
+      coverageBasis: commercialDecisions.coverageBasis,
+      decisionConfirmedAt: commercialDecisions.confirmedAt,
+      decisionSupersededAt: commercialDecisions.supersededAt,
     })
     .from(commercialBasisLinks)
-    .innerJoin(
+    .leftJoin(
       commercialScopeItemRevisions,
       eq(
         commercialScopeItemRevisions.id,
         commercialBasisLinks.scopeItemRevisionId,
       ),
     )
-    .innerJoin(
+    .leftJoin(
       commercialScopeItems,
       eq(commercialScopeItems.id, commercialScopeItemRevisions.scopeItemId),
+    )
+    .leftJoin(
+      commercialDecisions,
+      eq(commercialDecisions.id, commercialBasisLinks.decisionId),
+    )
+    .leftJoin(
+      commercialRequests,
+      eq(commercialRequests.id, commercialDecisions.requestId),
     )
     .where(
       and(
@@ -735,17 +751,30 @@ export async function getWorkCommercialProvenance(
         eq(commercialBasisLinks.workItemId, workItemId),
       ),
     )
-    .orderBy(
-      asc(commercialScopeItemRevisions.kind),
-      asc(commercialScopeItemRevisions.title),
-    );
+    .orderBy(asc(commercialBasisLinks.basisType), asc(commercialBasisLinks.id));
+  const projectedLinks = links.map((link) => ({
+    ...link,
+    effective:
+      link.basisType === "baseline_scope_item"
+        ? link.archivedAt === null
+        : link.decisionSupersededAt === null &&
+          isAuthorizingDecision(link.disposition),
+    contradiction:
+      link.basisType === "commercial_decision" &&
+      work[0].archivedAt === null &&
+      work[0].status !== "done" &&
+      work[0].status !== "canceled" &&
+      (link.decisionSupersededAt !== null ||
+        link.disposition === "deferred" ||
+        link.disposition === "rejected"),
+  }));
   return {
     ...work[0],
     state: commercialState(
       work[0].purpose,
-      links.filter((link) => link.archivedAt === null).length,
+      projectedLinks.filter((link) => link.effective).length,
     ),
-    links,
+    links: projectedLinks,
   };
 }
 
@@ -766,34 +795,75 @@ export async function listCommercialBasisOptions(
     .where(eq(commercialScopeItemRevisions.projectId, projectId))
     .groupBy(commercialScopeItemRevisions.scopeItemId)
     .as("latest_basis_options");
-  return getDb()
-    .select({
-      scopeItemId: commercialScopeItems.id,
-      scopeItemRevisionId: commercialScopeItemRevisions.id,
-      revisionNumber: commercialScopeItemRevisions.revisionNumber,
-      kind: commercialScopeItemRevisions.kind,
-      title: commercialScopeItemRevisions.title,
-    })
-    .from(commercialScopeItems)
-    .innerJoin(latest, eq(latest.scopeItemId, commercialScopeItems.id))
-    .innerJoin(
-      commercialScopeItemRevisions,
-      and(
-        eq(commercialScopeItemRevisions.scopeItemId, commercialScopeItems.id),
-        eq(commercialScopeItemRevisions.revisionNumber, latest.revisionNumber),
-      ),
-    )
-    .where(
-      and(
-        eq(commercialScopeItems.projectId, projectId),
-        isNull(commercialScopeItems.archivedAt),
-      ),
-    )
-    .orderBy(
-      asc(commercialScopeItemRevisions.kind),
-      asc(commercialScopeItemRevisions.title),
-    )
-    .limit(MAX_SCOPE_ITEMS_PER_BASELINE);
+  const [scopeOptions, decisionOptions] = await Promise.all([
+    getDb()
+      .select({
+        scopeItemId: commercialScopeItems.id,
+        scopeItemRevisionId: commercialScopeItemRevisions.id,
+        revisionNumber: commercialScopeItemRevisions.revisionNumber,
+        kind: commercialScopeItemRevisions.kind,
+        title: commercialScopeItemRevisions.title,
+      })
+      .from(commercialScopeItems)
+      .innerJoin(latest, eq(latest.scopeItemId, commercialScopeItems.id))
+      .innerJoin(
+        commercialScopeItemRevisions,
+        and(
+          eq(commercialScopeItemRevisions.scopeItemId, commercialScopeItems.id),
+          eq(
+            commercialScopeItemRevisions.revisionNumber,
+            latest.revisionNumber,
+          ),
+        ),
+      )
+      .where(
+        and(
+          eq(commercialScopeItems.projectId, projectId),
+          isNull(commercialScopeItems.archivedAt),
+        ),
+      )
+      .orderBy(
+        asc(commercialScopeItemRevisions.kind),
+        asc(commercialScopeItemRevisions.title),
+      )
+      .limit(MAX_SCOPE_ITEMS_PER_BASELINE),
+    getDb()
+      .select({
+        decisionId: commercialDecisions.id,
+        requestId: commercialRequests.id,
+        requestTitle: commercialRequests.title,
+        disposition: commercialDecisions.disposition,
+        coverageBasis: commercialDecisions.coverageBasis,
+        confirmedAt: commercialDecisions.confirmedAt,
+      })
+      .from(commercialDecisions)
+      .innerJoin(
+        commercialRequests,
+        eq(commercialRequests.id, commercialDecisions.requestId),
+      )
+      .where(
+        and(
+          eq(commercialDecisions.projectId, projectId),
+          isNull(commercialDecisions.supersededAt),
+          sql`${commercialDecisions.disposition} in ('covered', 'absorbed', 'swap', 'paid_change')`,
+        ),
+      )
+      .orderBy(
+        desc(commercialDecisions.confirmedAt),
+        desc(commercialDecisions.id),
+      )
+      .limit(500),
+  ]);
+  return [
+    ...scopeOptions.map((option) => ({
+      basisType: "baseline_scope_item" as const,
+      ...option,
+    })),
+    ...decisionOptions.map((option) => ({
+      basisType: "commercial_decision" as const,
+      ...option,
+    })),
+  ];
 }
 
 export async function updateWorkPurpose(
@@ -863,41 +933,78 @@ export async function createCommercialBasisLink(
       )
       .limit(1);
     if (!work[0]) throw notFound();
-    const revision = await transaction
-      .select({
-        itemId: commercialScopeItems.id,
-        archivedAt: commercialScopeItems.archivedAt,
-        revisionNumber: commercialScopeItemRevisions.revisionNumber,
-      })
-      .from(commercialScopeItemRevisions)
-      .innerJoin(
-        commercialScopeItems,
-        eq(commercialScopeItems.id, commercialScopeItemRevisions.scopeItemId),
-      )
-      .where(
-        and(
-          eq(commercialScopeItemRevisions.id, input.scopeItemRevisionId),
-          eq(commercialScopeItemRevisions.projectId, projectId),
-        ),
-      )
-      .for("update")
-      .limit(1);
-    if (!revision[0]) throw notFound();
-    if (revision[0].archivedAt) {
-      throw conflict(
-        "scope_item_archived",
-        "Archived scope cannot authorize new work links.",
-      );
-    }
-    const latest = await transaction
-      .select({ number: max(commercialScopeItemRevisions.revisionNumber) })
-      .from(commercialScopeItemRevisions)
-      .where(eq(commercialScopeItemRevisions.scopeItemId, revision[0].itemId));
-    if (latest[0]?.number !== revision[0].revisionNumber) {
-      throw conflict(
-        "scope_revision_superseded",
-        "Link work to the current scope-item revision.",
-      );
+    const basisType =
+      "basisType" in input ? input.basisType : "baseline_scope_item";
+    let scopeItemRevisionId: string | null = null;
+    let decisionId: string | null = null;
+    if (!("basisType" in input) || input.basisType === "baseline_scope_item") {
+      const selectedRevisionId = input.scopeItemRevisionId;
+      scopeItemRevisionId = selectedRevisionId;
+      const revision = await transaction
+        .select({
+          itemId: commercialScopeItems.id,
+          archivedAt: commercialScopeItems.archivedAt,
+          revisionNumber: commercialScopeItemRevisions.revisionNumber,
+        })
+        .from(commercialScopeItemRevisions)
+        .innerJoin(
+          commercialScopeItems,
+          eq(commercialScopeItems.id, commercialScopeItemRevisions.scopeItemId),
+        )
+        .where(
+          and(
+            eq(commercialScopeItemRevisions.id, selectedRevisionId),
+            eq(commercialScopeItemRevisions.projectId, projectId),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!revision[0]) throw notFound();
+      if (revision[0].archivedAt) {
+        throw conflict(
+          "scope_item_archived",
+          "Archived scope cannot authorize new work links.",
+        );
+      }
+      const latest = await transaction
+        .select({ number: max(commercialScopeItemRevisions.revisionNumber) })
+        .from(commercialScopeItemRevisions)
+        .where(
+          eq(commercialScopeItemRevisions.scopeItemId, revision[0].itemId),
+        );
+      if (latest[0]?.number !== revision[0].revisionNumber) {
+        throw conflict(
+          "scope_revision_superseded",
+          "Link work to the current scope-item revision.",
+        );
+      }
+    } else {
+      const selectedDecisionId = input.decisionId;
+      decisionId = selectedDecisionId;
+      const decision = await transaction
+        .select({
+          disposition: commercialDecisions.disposition,
+          supersededAt: commercialDecisions.supersededAt,
+        })
+        .from(commercialDecisions)
+        .where(
+          and(
+            eq(commercialDecisions.id, selectedDecisionId),
+            eq(commercialDecisions.projectId, projectId),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!decision[0]) throw notFound();
+      if (
+        decision[0].supersededAt ||
+        !isAuthorizingDecision(decision[0].disposition)
+      ) {
+        throw conflict(
+          "decision_not_authorizing",
+          "Only a current covered, absorbed, swap, or paid-change decision can authorize work.",
+        );
+      }
     }
     const inserted = await transaction
       .insert(commercialBasisLinks)
@@ -905,8 +1012,9 @@ export async function createCommercialBasisLink(
         id: randomUUID(),
         projectId,
         workItemId,
-        basisType: "baseline_scope_item",
-        scopeItemRevisionId: input.scopeItemRevisionId,
+        basisType,
+        scopeItemRevisionId,
+        decisionId,
         createdByUserId: actor.userId,
       })
       .onConflictDoNothing()
@@ -918,8 +1026,9 @@ export async function createCommercialBasisLink(
         targetId: workItemId,
         metadata: {
           projectId,
-          basisType: "baseline_scope_item",
-          scopeItemRevisionId: input.scopeItemRevisionId,
+          basisType,
+          scopeItemRevisionId: scopeItemRevisionId ?? "",
+          decisionId: decisionId ?? "",
         },
       });
     }
@@ -954,7 +1063,9 @@ export async function removeCommercialBasisLink(
       )
       .returning({
         id: commercialBasisLinks.id,
+        basisType: commercialBasisLinks.basisType,
         scopeItemRevisionId: commercialBasisLinks.scopeItemRevisionId,
+        decisionId: commercialBasisLinks.decisionId,
       });
     if (!removed[0]) throw notFound();
     await insertAudit(transaction, actor, workspaceId, {
@@ -963,8 +1074,9 @@ export async function removeCommercialBasisLink(
       targetId: workItemId,
       metadata: {
         projectId,
-        basisType: "baseline_scope_item",
+        basisType: removed[0].basisType,
         scopeItemRevisionId: removed[0].scopeItemRevisionId ?? "",
+        decisionId: removed[0].decisionId ?? "",
       },
     });
   });
@@ -981,15 +1093,24 @@ export async function listCommercialDrift(
   const effectiveBasisCount = sql<number>`(
     select count(*)::int
     from ${commercialBasisLinks}
-    inner join ${commercialScopeItemRevisions}
+    left join ${commercialScopeItemRevisions}
       on ${commercialScopeItemRevisions.id} = ${commercialBasisLinks.scopeItemRevisionId}
       and ${commercialScopeItemRevisions.projectId} = ${commercialBasisLinks.projectId}
-    inner join ${commercialScopeItems}
+    left join ${commercialScopeItems}
       on ${commercialScopeItems.id} = ${commercialScopeItemRevisions.scopeItemId}
       and ${commercialScopeItems.projectId} = ${commercialBasisLinks.projectId}
+    left join ${commercialDecisions}
+      on ${commercialDecisions.id} = ${commercialBasisLinks.decisionId}
+      and ${commercialDecisions.projectId} = ${commercialBasisLinks.projectId}
     where ${commercialBasisLinks.workItemId} = ${workItems.id}
       and ${commercialBasisLinks.projectId} = ${projectId}
-      and ${commercialScopeItems.archivedAt} is null
+      and (
+        (${commercialBasisLinks.basisType} = 'baseline_scope_item' and ${commercialScopeItems.archivedAt} is null)
+        or
+        (${commercialBasisLinks.basisType} = 'commercial_decision'
+          and ${commercialDecisions.supersededAt} is null
+          and ${commercialDecisions.disposition} in ('covered', 'absorbed', 'swap', 'paid_change'))
+      )
   )`;
   const conditions = [
     eq(workItems.projectId, projectId),
@@ -1018,7 +1139,14 @@ export async function listCommercialDrift(
         title: workItems.title,
         status: workItems.status,
         purpose: workItems.purpose,
-        basisCount: count(commercialScopeItems.id),
+        basisCount: sql<number>`count(${commercialBasisLinks.id}) filter (
+          where
+            (${commercialBasisLinks.basisType} = 'baseline_scope_item' and ${commercialScopeItems.archivedAt} is null)
+            or
+            (${commercialBasisLinks.basisType} = 'commercial_decision'
+              and ${commercialDecisions.supersededAt} is null
+              and ${commercialDecisions.disposition} in ('covered', 'absorbed', 'swap', 'paid_change'))
+        )::int`,
         updatedAt: workItems.updatedAt,
       })
       .from(workItems)
@@ -1044,7 +1172,13 @@ export async function listCommercialDrift(
         and(
           eq(commercialScopeItems.id, commercialScopeItemRevisions.scopeItemId),
           eq(commercialScopeItems.projectId, projectId),
-          isNull(commercialScopeItems.archivedAt),
+        ),
+      )
+      .leftJoin(
+        commercialDecisions,
+        and(
+          eq(commercialDecisions.id, commercialBasisLinks.decisionId),
+          eq(commercialDecisions.projectId, projectId),
         ),
       )
       .where(where)
@@ -1254,6 +1388,15 @@ function commercialState(
       ? ("linked" as const)
       : ("commercially_unlinked" as const);
   return "support_internal" as const;
+}
+
+function isAuthorizingDecision(disposition: string | null) {
+  return (
+    disposition === "covered" ||
+    disposition === "absorbed" ||
+    disposition === "swap" ||
+    disposition === "paid_change"
+  );
 }
 
 function conflict(code: string, message: string) {

@@ -8,7 +8,9 @@ import { PlatformError } from "@/lib/platform-errors";
 import {
   auditEvents,
   commercialBasisLinks,
+  commercialDecisions,
   commercialEvidenceSources,
+  commercialImpactAssessments,
   commercialScopeItemRevisions,
   memberships,
   projectMemberships,
@@ -877,6 +879,26 @@ describe("commercial baseline domain boundary", () => {
       request.id,
       decisionInput("paid_change"),
     );
+    const impacted = await createCommercialImpactAssessment(
+      owner,
+      workspace.id,
+      project.id,
+      request.id,
+      {
+        idempotencyKey: randomUUID(),
+        decisionId: decided.currentDecision!.id,
+        supersedesImpactAssessmentId: null,
+        confidence: "estimate",
+        effortMinutes: 60,
+        scheduleDeltaDays: null,
+        targetDate: null,
+        monetaryAmount: null,
+        currencyCode: null,
+        notes: null,
+        anchors: [],
+      },
+    );
+    const projectImpact = impacted.impacts.at(-1)!;
     await expect(
       getCommercialRequest(stranger, workspace.id, project.id, request.id),
     ).rejects.toMatchObject({ code: "not_found", status: 404 });
@@ -900,6 +922,21 @@ describe("commercial baseline domain boundary", () => {
       workspace.id,
       otherProject.id,
       workInput("Other project work"),
+    );
+    const otherRequest = await createCommercialRequest(
+      owner,
+      workspace.id,
+      otherProject.id,
+      {
+        idempotencyKey: randomUUID(),
+        title: "Other project request",
+        requestText: "This request belongs only to BOUND.",
+        externalRequester: null,
+        receivedAt: "2026-08-09T10:35:00.000Z",
+        scopeItemIds: [],
+        anchors: [],
+        impact: null,
+      },
     );
     await expect(
       getCommercialRequest(owner, workspace.id, otherProject.id, request.id),
@@ -937,6 +974,47 @@ describe("commercial baseline domain boundary", () => {
         },
       ),
     ).rejects.toMatchObject({ code: "not_found", status: 404 });
+
+    await expect(
+      db.insert(commercialDecisions).values({
+        projectId: otherProject.id,
+        requestId: otherRequest.id,
+        idempotencyKey: randomUUID(),
+        disposition: "paid_change",
+        coverageBasis: null,
+        rationale: null,
+        supersedesDecisionId: decided.currentDecision!.id,
+        confirmedAt: new Date("2026-08-09T10:40:00.000Z"),
+        createdByUserId: owner.userId,
+      }),
+    ).rejects.toMatchObject({
+      cause: {
+        code: "23503",
+        constraint: "commercial_decisions_supersedes_project_fk",
+      },
+    });
+    await expect(
+      db.insert(commercialImpactAssessments).values({
+        projectId: otherProject.id,
+        requestId: otherRequest.id,
+        decisionId: null,
+        idempotencyKey: randomUUID(),
+        confidence: "estimate",
+        effortMinutes: 30,
+        scheduleDeltaDays: null,
+        targetDate: null,
+        monetaryAmount: null,
+        currencyCode: null,
+        notes: null,
+        supersedesImpactAssessmentId: projectImpact.id,
+        createdByUserId: owner.userId,
+      }),
+    ).rejects.toMatchObject({
+      cause: {
+        code: "23503",
+        constraint: "commercial_impacts_supersedes_project_fk",
+      },
+    });
   });
 
   it("persists recoverable parser failure without allowing a trusted baseline", async () => {

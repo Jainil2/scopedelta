@@ -4,10 +4,10 @@ CREATE TYPE "public"."commercial_decision_scope_role" AS ENUM('affected', 'swap_
 CREATE TYPE "public"."commercial_impact_confidence" AS ENUM('estimate', 'confirmed');--> statement-breakpoint
 CREATE TYPE "public"."commercial_request_state" AS ENUM('open', 'needs_clarification', 'resolved', 'withdrawn');--> statement-breakpoint
 ALTER TABLE "commercial_basis_links" DROP CONSTRAINT "commercial_basis_links_target";--> statement-breakpoint
-ALTER TYPE "public"."commercial_basis_type" RENAME TO "commercial_basis_type_previous";--> statement-breakpoint
+ALTER TYPE "public"."commercial_basis_type" RENAME TO commercial_basis_type_previous;--> statement-breakpoint
 CREATE TYPE "public"."commercial_basis_type" AS ENUM('baseline_scope_item', 'commercial_decision');--> statement-breakpoint
 ALTER TABLE "commercial_basis_links" ALTER COLUMN "basis_type" TYPE "public"."commercial_basis_type" USING "basis_type"::text::"public"."commercial_basis_type";--> statement-breakpoint
-DROP TYPE "public"."commercial_basis_type_previous";--> statement-breakpoint
+DROP TYPE "public".commercial_basis_type_previous;--> statement-breakpoint
 CREATE TABLE "commercial_decision_anchors" (
 	"project_id" uuid NOT NULL,
 	"decision_id" uuid NOT NULL,
@@ -113,14 +113,14 @@ ALTER TABLE "commercial_decision_scope_items" ADD CONSTRAINT "commercial_decisio
 ALTER TABLE "commercial_decision_scope_items" ADD CONSTRAINT "commercial_decision_scope_items_decision_project_fk" FOREIGN KEY ("decision_id","project_id") REFERENCES "public"."commercial_decisions"("id","project_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "commercial_decision_scope_items" ADD CONSTRAINT "commercial_decision_scope_items_scope_project_fk" FOREIGN KEY ("scope_item_id","project_id") REFERENCES "public"."commercial_scope_items"("id","project_id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "commercial_decisions" ADD CONSTRAINT "commercial_decisions_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "commercial_decisions" ADD CONSTRAINT "commercial_decisions_supersedes_decision_id_commercial_decisions_id_fk" FOREIGN KEY ("supersedes_decision_id") REFERENCES "public"."commercial_decisions"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "commercial_decisions" ADD CONSTRAINT "commercial_decisions_supersedes_project_fk" FOREIGN KEY ("supersedes_decision_id","project_id") REFERENCES "public"."commercial_decisions"("id","project_id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "commercial_decisions" ADD CONSTRAINT "commercial_decisions_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "commercial_decisions" ADD CONSTRAINT "commercial_decisions_request_project_fk" FOREIGN KEY ("request_id","project_id") REFERENCES "public"."commercial_requests"("id","project_id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "commercial_impact_assessment_anchors" ADD CONSTRAINT "commercial_impact_assessment_anchors_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "commercial_impact_assessment_anchors" ADD CONSTRAINT "commercial_impact_anchors_impact_project_fk" FOREIGN KEY ("impact_assessment_id","project_id") REFERENCES "public"."commercial_impact_assessments"("id","project_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "commercial_impact_assessment_anchors" ADD CONSTRAINT "commercial_impact_anchors_anchor_project_fk" FOREIGN KEY ("evidence_anchor_id","project_id") REFERENCES "public"."commercial_evidence_anchors"("id","project_id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "commercial_impact_assessments" ADD CONSTRAINT "commercial_impact_assessments_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "commercial_impact_assessments" ADD CONSTRAINT "commercial_impact_assessments_supersedes_impact_assessment_id_commercial_impact_assessments_id_fk" FOREIGN KEY ("supersedes_impact_assessment_id") REFERENCES "public"."commercial_impact_assessments"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "commercial_impact_assessments" ADD CONSTRAINT "commercial_impacts_supersedes_project_fk" FOREIGN KEY ("supersedes_impact_assessment_id","project_id") REFERENCES "public"."commercial_impact_assessments"("id","project_id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "commercial_impact_assessments" ADD CONSTRAINT "commercial_impact_assessments_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "commercial_impact_assessments" ADD CONSTRAINT "commercial_impacts_request_project_fk" FOREIGN KEY ("request_id","project_id") REFERENCES "public"."commercial_requests"("id","project_id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "commercial_impact_assessments" ADD CONSTRAINT "commercial_impacts_decision_project_fk" FOREIGN KEY ("decision_id","project_id") REFERENCES "public"."commercial_decisions"("id","project_id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint

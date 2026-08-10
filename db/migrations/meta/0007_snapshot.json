@@ -1192,12 +1192,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "commercial_decisions_supersedes_decision_id_commercial_decisions_id_fk": {
-          "name": "commercial_decisions_supersedes_decision_id_commercial_decisions_id_fk",
+        "commercial_decisions_supersedes_project_fk": {
+          "name": "commercial_decisions_supersedes_project_fk",
           "tableFrom": "commercial_decisions",
           "tableTo": "commercial_decisions",
-          "columnsFrom": ["supersedes_decision_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": ["supersedes_decision_id", "project_id"],
+          "columnsTo": ["id", "project_id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1815,12 +1815,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "commercial_impact_assessments_supersedes_impact_assessment_id_commercial_impact_assessments_id_fk": {
-          "name": "commercial_impact_assessments_supersedes_impact_assessment_id_commercial_impact_assessments_id_fk",
+        "commercial_impacts_supersedes_project_fk": {
+          "name": "commercial_impacts_supersedes_project_fk",
           "tableFrom": "commercial_impact_assessments",
           "tableTo": "commercial_impact_assessments",
-          "columnsFrom": ["supersedes_impact_assessment_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": ["supersedes_impact_assessment_id", "project_id"],
+          "columnsTo": ["id", "project_id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },

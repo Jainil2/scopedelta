@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import {
-  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -1023,10 +1022,7 @@ export const commercialDecisions = pgTable(
     disposition: commercialDecisionDisposition("disposition").notNull(),
     coverageBasis: commercialCoverageBasis("coverage_basis"),
     rationale: text("rationale"),
-    supersedesDecisionId: uuid("supersedes_decision_id").references(
-      (): AnyPgColumn => commercialDecisions.id,
-      { onDelete: "restrict" },
-    ),
+    supersedesDecisionId: uuid("supersedes_decision_id"),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }).notNull(),
     supersededAt: timestamp("superseded_at", { withTimezone: true }),
     createdByUserId: uuid("created_by_user_id")
@@ -1041,6 +1037,11 @@ export const commercialDecisions = pgTable(
       table.id,
       table.projectId,
     ),
+    foreignKey({
+      columns: [table.supersedesDecisionId, table.projectId],
+      foreignColumns: [table.id, table.projectId],
+      name: "commercial_decisions_supersedes_project_fk",
+    }).onDelete("restrict"),
     foreignKey({
       columns: [table.requestId, table.projectId],
       foreignColumns: [commercialRequests.id, commercialRequests.projectId],
@@ -1148,11 +1149,7 @@ export const commercialImpactAssessments = pgTable(
     }),
     currencyCode: text("currency_code"),
     notes: text("notes"),
-    supersedesImpactAssessmentId: uuid(
-      "supersedes_impact_assessment_id",
-    ).references((): AnyPgColumn => commercialImpactAssessments.id, {
-      onDelete: "restrict",
-    }),
+    supersedesImpactAssessmentId: uuid("supersedes_impact_assessment_id"),
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -1165,6 +1162,11 @@ export const commercialImpactAssessments = pgTable(
       table.id,
       table.projectId,
     ),
+    foreignKey({
+      columns: [table.supersedesImpactAssessmentId, table.projectId],
+      foreignColumns: [table.id, table.projectId],
+      name: "commercial_impacts_supersedes_project_fk",
+    }).onDelete("restrict"),
     foreignKey({
       columns: [table.requestId, table.projectId],
       foreignColumns: [commercialRequests.id, commercialRequests.projectId],

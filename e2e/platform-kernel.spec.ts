@@ -420,6 +420,10 @@ test("commercial baseline, decision authorization and contradictions stay tracea
     .getByLabel("Evidence label")
     .fill("Deliverable paragraph");
   await scopeItemForm.getByRole("button", { name: "Add scope item" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Scope item added to the baseline.",
+  );
+  await page.reload({ waitUntil: "networkidle" });
   await expect(
     page.getByText("Authenticated client portal", { exact: true }),
   ).toBeVisible();
@@ -598,7 +602,9 @@ test("commercial baseline, decision authorization and contradictions stay tracea
     });
   }
 
-  await page.goto(workUrl);
+  const refreshedWorkUrl = new URL(workUrl);
+  refreshedWorkUrl.searchParams.set("commercialRevision", String(Date.now()));
+  await page.goto(refreshedWorkUrl.toString(), { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "Unlinked" })).toBeVisible();
   await expect(page.getByText(/superseded · review required/)).toBeVisible();
 });

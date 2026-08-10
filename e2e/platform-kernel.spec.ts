@@ -963,7 +963,12 @@ test("client collaboration keeps one commercial truth across internal and extern
     .fill("Private milestone implementation detail");
   await milestoneForm.getByRole("button", { name: "Create milestone" }).click();
 
-  await page.getByRole("link", { name: "Client view" }).click();
+  await Promise.all([
+    page.waitForURL(/\/app\/[^/]+\/projects\/[^/]+\/client$/),
+    page.getByRole("link", { name: "Client view" }).click(),
+  ]);
+  const clientManagementUrl = page.url();
+  const workspaceSlug = new URL(clientManagementUrl).pathname.split("/")[2]!;
   await page
     .getByLabel("Client summary")
     .fill("A focused view of launch delivery and commercial decisions.");
@@ -1000,6 +1005,10 @@ test("client collaboration keeps one commercial truth across internal and extern
     clientPage.getByRole("heading", { name: "Northstar Portal" }),
   ).toBeVisible();
   await expect(
+    clientPage.getByRole("link", { name: "Team workspace" }),
+  ).toHaveCount(0);
+  await expect(clientPage.getByRole("link", { name: "Inbox" })).toBeVisible();
+  await expect(
     clientPage.getByText(
       "A focused view of launch delivery and commercial decisions.",
     ),
@@ -1020,6 +1029,16 @@ test("client collaboration keeps one commercial truth across internal and extern
     .fill("Please add SAML sign-in for launch.");
   await clientPage.getByRole("button", { name: "Send request" }).click();
   await expect(clientPage.getByRole("status")).toContainText("Request sent");
+
+  await page.goto(`/app/${workspaceSlug}/inbox`);
+  await expect(
+    page.getByRole("heading", { name: "Needs your attention" }),
+  ).toBeVisible();
+  await expect(page.getByText(/submitted a client request in/)).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open Northstar Portal" }),
+  ).toBeVisible();
+  await page.goto(clientManagementUrl);
 
   const seeded = await withTestDatabase(async (pool) => {
     const requestRow = await pool.query<{ id: string; project_id: string }>(
@@ -1088,7 +1107,15 @@ test("client collaboration keeps one commercial truth across internal and extern
     "packet version was published",
   );
 
-  await clientPage.reload();
+  await clientPage.goto("/client/notifications");
+  await expect(
+    clientPage.getByRole("heading", { name: "Notifications" }),
+  ).toBeVisible();
+  await expect(clientPage.getByText("packet published")).toBeVisible();
+  await expect(
+    clientPage.getByRole("link", { name: "Team workspace" }),
+  ).toHaveCount(0);
+  await clientPage.getByRole("link", { name: "Open project" }).first().click();
   await expect(clientPage.getByText("USD 1200.00")).toBeVisible();
   await expect(clientPage.getByText("Private margin rationale")).toHaveCount(0);
   await expect(clientPage.getByText("Private estimate note")).toHaveCount(0);

@@ -34,9 +34,11 @@ function formString(data: FormData, name: string) {
 export function ClientProjectWorkspace({
   projects,
   projection,
+  hasInternalAccess,
 }: Readonly<{
   projects: ProjectOption[];
   projection: ClientProjectProjection;
+  hasInternalAccess: boolean;
 }>) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -179,7 +181,8 @@ export function ClientProjectWorkspace({
               {project.name}
             </Link>
           ))}
-          <Link href="/app">Team workspace</Link>
+          <Link href="/client/notifications">Inbox</Link>
+          {hasInternalAccess ? <Link href="/app">Team workspace</Link> : null}
         </nav>
       </header>
 

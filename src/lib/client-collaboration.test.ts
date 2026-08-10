@@ -8,6 +8,7 @@ import {
   createClientDiscussionSchema,
   createClientInvitationSchema,
   publishClientPacketSchema,
+  updateClientRequestStateSchema,
 } from "@/lib/client-collaboration-validation";
 import {
   CLIENT_PROJECT_PROJECTION_KEYS,
@@ -52,6 +53,12 @@ describe("client collaboration boundary", () => {
       actOnClientPacketSchema.safeParse({
         idempotencyKey: "retry-one",
         action: "approved",
+      }).success,
+    ).toBe(false);
+    expect(
+      updateClientRequestStateSchema.safeParse({
+        idempotencyKey: randomUUID(),
+        state: "resolved",
       }).success,
     ).toBe(false);
   });

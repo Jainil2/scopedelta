@@ -87,7 +87,7 @@ export const updateClientRequestStateSchema = z.discriminatedUnion("state", [
   }),
   z.object({
     idempotencyKey,
-    state: z.enum(["open", "resolved", "withdrawn"]),
+    state: z.enum(["open", "withdrawn"]),
   }),
 ]);
 

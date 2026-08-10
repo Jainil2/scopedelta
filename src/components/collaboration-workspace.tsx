@@ -61,6 +61,22 @@ type Notification = {
   readAt: string | Date | null;
   createdAt: string | Date;
 };
+type ClientCollaborationNotification = {
+  id: string;
+  kind:
+    | "request_submitted"
+    | "clarification_needed"
+    | "discussion_added"
+    | "packet_published"
+    | "packet_actioned"
+    | "acceptance_published"
+    | "acceptance_actioned";
+  actorName: string | null;
+  projectKey: string;
+  projectName: string;
+  readAt: string | Date | null;
+  createdAt: string | Date;
+};
 
 async function mutate<T>(
   url: string,
@@ -1040,16 +1056,20 @@ export function InboxWorkspace({
   workspaceId,
   workspaceSlug,
   initialNotifications,
+  initialClientNotifications,
   page,
 }: Readonly<{
   workspaceId: string;
   workspaceSlug: string;
   initialNotifications: Notification[];
+  initialClientNotifications: ClientCollaborationNotification[];
   page: PageInfo;
 }>) {
   const [items, setItems] = useState(initialNotifications);
+  const [clientItems, setClientItems] = useState(initialClientNotifications);
   const [pending, startTransition] = useTransition();
   const unread = items.filter((item) => !item.readAt).length;
+  const clientUnread = clientItems.filter((item) => !item.readAt).length;
   const mark = (ids: string[], read: boolean) =>
     startTransition(async () => {
       await mutate(`/api/v1/workspaces/${workspaceId}/notifications`, "PATCH", {
@@ -1061,6 +1081,18 @@ export function InboxWorkspace({
           ids.includes(item.id)
             ? { ...item, readAt: read ? new Date().toISOString() : null }
             : item,
+        ),
+      );
+    });
+  const markClient = (id: string) =>
+    startTransition(async () => {
+      await mutate(
+        `/api/v1/workspaces/${workspaceId}/client-notifications/${id}`,
+        "PATCH",
+      );
+      setClientItems((current) =>
+        current.map((item) =>
+          item.id === id ? { ...item, readAt: new Date().toISOString() } : item,
         ),
       );
     });
@@ -1145,6 +1177,63 @@ export function InboxWorkspace({
           })
         )}
       </div>
+      <header className="directory-header notification-subheader">
+        <div>
+          <p className="eyebrow">Client collaboration</p>
+          <h2>Needs your attention</h2>
+          <p>
+            Durable client requests, discussions, packet responses, and
+            acceptance events. Email is optional.
+          </p>
+        </div>
+        {clientUnread ? <span>{clientUnread} unread</span> : null}
+      </header>
+      <div className="notification-list">
+        {clientItems.length === 0 ? (
+          <p className="empty-copy">No client collaboration updates.</p>
+        ) : (
+          clientItems.map((item) => (
+            <article
+              key={item.id}
+              className={
+                item.readAt ? "notification-row" : "notification-row is-unread"
+              }
+            >
+              <span className="notification-dot" aria-hidden="true" />
+              <div>
+                <p>
+                  <strong>{item.actorName ?? "Client collaborator"}</strong>{" "}
+                  {clientNotificationLabel(item.kind)}{" "}
+                  <span className="project-key">{item.projectKey}</span>
+                </p>
+                <time dateTime={new Date(item.createdAt).toISOString()}>
+                  {formatDate(item.createdAt)}
+                </time>
+              </div>
+              <div className="notification-actions">
+                <Link
+                  href={`/app/${workspaceSlug}/projects/${item.projectKey}/client`}
+                  onClick={() => {
+                    if (!item.readAt) markClient(item.id);
+                  }}
+                >
+                  Open {item.projectName}
+                </Link>
+                {!item.readAt ? (
+                  <button
+                    type="button"
+                    className="text-button"
+                    disabled={pending}
+                    onClick={() => markClient(item.id)}
+                  >
+                    Mark read
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          ))
+        )}
+      </div>
       <p className="metadata">
         Showing {items.length} of {page.total} accessible notifications.
       </p>
@@ -1171,6 +1260,21 @@ export function InboxWorkspace({
       ) : null}
     </section>
   );
+}
+
+function clientNotificationLabel(
+  kind: ClientCollaborationNotification["kind"],
+) {
+  const labels = {
+    request_submitted: "submitted a client request in",
+    clarification_needed: "needs clarification in",
+    discussion_added: "added a client discussion message in",
+    packet_published: "published a commercial packet in",
+    packet_actioned: "responded to a commercial packet in",
+    acceptance_published: "published an acceptance target in",
+    acceptance_actioned: "responded to delivery acceptance in",
+  } satisfies Record<ClientCollaborationNotification["kind"], string>;
+  return labels[kind];
 }
 
 function notificationLabel(kind: Notification["kind"]) {

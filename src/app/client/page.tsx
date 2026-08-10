@@ -3,15 +3,20 @@ import { redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/session";
 import { listClientProjects } from "@/server/client-collaboration";
+import { listWorkspaces } from "@/server/workspaces";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClientHomePage() {
   const session = await requireSession();
-  const projects = await listClientProjects({
+  const actor = {
     userId: session.user.id,
     email: session.user.email,
-  });
+  };
+  const [projects, workspaces] = await Promise.all([
+    listClientProjects(actor),
+    listWorkspaces(actor),
+  ]);
   if (projects.length === 1) redirect(`/client/projects/${projects[0]!.id}`);
   return (
     <main className="client-shell client-index">
@@ -19,7 +24,10 @@ export default async function ClientHomePage() {
         <span className="client-wordmark">
           ScopeDelta <span>client</span>
         </span>
-        <Link href="/app">Team workspace</Link>
+        <nav aria-label="Client navigation">
+          <Link href="/client/notifications">Inbox</Link>
+          {workspaces.length ? <Link href="/app">Team workspace</Link> : null}
+        </nav>
       </header>
       <section className="client-hero">
         <p className="client-kicker">Your shared work</p>

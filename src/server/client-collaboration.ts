@@ -45,6 +45,11 @@ import {
 import { forbidden, notFound, PlatformError } from "@/lib/platform-errors";
 import { consumeActionLimit } from "@/server/action-rate-limit";
 import {
+  assertCommercialRequestCapacity,
+  lockCommercialRequestProject,
+  transitionCommercialRequestState,
+} from "@/server/commercial-change-control";
+import {
   assertProjectManager,
   assertWritableProject,
   getProjectAccess,
@@ -105,6 +110,41 @@ export async function getClientAccess(
     )
     .limit(1);
   if (!rows[0]) throw notFound();
+  return rows[0];
+}
+
+async function getClientWriteAccess(
+  transaction: Transaction,
+  actor: UserActor,
+  projectId: string,
+): Promise<ClientAccess> {
+  const rows = await transaction
+    .select({
+      participantId: clientProjectParticipants.id,
+      projectId: clientProjectParticipants.projectId,
+      workspaceId: projects.workspaceId,
+      role: clientProjectParticipants.role,
+      lifecycle: projects.lifecycle,
+    })
+    .from(clientProjectParticipants)
+    .innerJoin(projects, eq(projects.id, clientProjectParticipants.projectId))
+    .where(
+      and(
+        eq(clientProjectParticipants.projectId, projectId),
+        eq(clientProjectParticipants.userId, actor.userId),
+        isNull(clientProjectParticipants.revokedAt),
+      ),
+    )
+    .for("update")
+    .limit(1);
+  if (!rows[0]) throw notFound();
+  if (rows[0].lifecycle !== "active") {
+    throw new PlatformError(
+      "project_read_only",
+      409,
+      "This project is read-only and no longer accepts client changes.",
+    );
+  }
   return rows[0];
 }
 
@@ -457,25 +497,65 @@ export async function reissueClientInvitation(
   input: { idempotencyKey: string; sendEmail: boolean },
 ) {
   await assertClientManager(getDb(), actor, workspaceId, projectId);
-  const rows = await getDb()
+  const sourceRows = await getDb()
     .select({
+      id: clientProjectInvitations.id,
       email: clientProjectInvitations.email,
       role: clientProjectInvitations.role,
+      state: clientProjectInvitations.state,
     })
     .from(clientProjectInvitations)
     .where(
       and(
         eq(clientProjectInvitations.id, invitationId),
         eq(clientProjectInvitations.projectId, projectId),
-        eq(clientProjectInvitations.state, "pending"),
       ),
     )
     .limit(1);
-  if (!rows[0]) throw notFound();
+  const source = sourceRows[0];
+  if (!source) throw notFound();
+  const replacementRows = await getDb()
+    .select({
+      id: clientProjectInvitations.id,
+      email: clientProjectInvitations.email,
+      role: clientProjectInvitations.role,
+      state: clientProjectInvitations.state,
+    })
+    .from(clientProjectInvitations)
+    .where(
+      and(
+        eq(clientProjectInvitations.projectId, projectId),
+        eq(clientProjectInvitations.idempotencyKey, input.idempotencyKey),
+      ),
+    )
+    .limit(1);
+  const replacement = replacementRows[0];
+  if (replacement) {
+    if (
+      replacement.id === source.id ||
+      replacement.email !== source.email ||
+      replacement.role !== source.role
+    ) {
+      throw new PlatformError(
+        "idempotency_conflict",
+        409,
+        "This idempotency key belongs to a different invitation operation.",
+      );
+    }
+    if (replacement.state !== "pending") {
+      throw new PlatformError(
+        "client_invitation_not_pending",
+        409,
+        "The replacement invitation is no longer pending.",
+      );
+    }
+  } else if (source.state !== "pending") {
+    throw notFound();
+  }
   return inviteClientParticipant(actor, workspaceId, projectId, {
     idempotencyKey: input.idempotencyKey,
-    email: rows[0].email,
-    role: rows[0].role,
+    email: source.email,
+    role: source.role,
     sendEmail: input.sendEmail,
   });
 }
@@ -510,6 +590,7 @@ export async function acceptClientInvitation(actor: UserActor, token: string) {
         email: clientProjectInvitations.email,
         role: clientProjectInvitations.role,
         workspaceId: projects.workspaceId,
+        lifecycle: projects.lifecycle,
       })
       .from(clientProjectInvitations)
       .innerJoin(projects, eq(projects.id, clientProjectInvitations.projectId))
@@ -520,6 +601,7 @@ export async function acceptClientInvitation(actor: UserActor, token: string) {
           sql`${clientProjectInvitations.expiresAt} > now()`,
         ),
       )
+      .for("update")
       .limit(1);
     const invitation = rows[0];
     if (!invitation) {
@@ -536,9 +618,13 @@ export async function acceptClientInvitation(actor: UserActor, token: string) {
         "Sign in with the email address that received this invitation.",
       );
     }
-    await transaction.execute(
-      sql`select id from ${clientProjectInvitations} where id = ${invitation.id} for update`,
-    );
+    if (invitation.lifecycle !== "active") {
+      throw new PlatformError(
+        "project_read_only",
+        409,
+        "This project is read-only and cannot accept new client access.",
+      );
+    }
     const existing = await transaction
       .select({ id: clientProjectParticipants.id })
       .from(clientProjectParticipants)
@@ -766,7 +852,12 @@ export async function createClientRequest(
     60 * 60,
   );
   const requestId = await getDb().transaction(async (transaction) => {
-    await getClientAccess(transaction, actor, projectId);
+    const liveAccess = await getClientWriteAccess(
+      transaction,
+      actor,
+      projectId,
+    );
+    await lockCommercialRequestProject(transaction, projectId);
     const existing = await transaction
       .select({ id: commercialRequests.id })
       .from(commercialRequests)
@@ -778,6 +869,7 @@ export async function createClientRequest(
       )
       .limit(1);
     if (existing[0]) return existing[0].id;
+    await assertCommercialRequestCapacity(transaction, projectId);
     const id = randomUUID();
     await transaction.insert(commercialRequests).values({
       id,
@@ -787,22 +879,22 @@ export async function createClientRequest(
       title: input.title,
       requestText: input.requestText,
       externalRequester: actor.email,
-      submittedByClientParticipantId: access.participantId,
+      submittedByClientParticipantId: liveAccess.participantId,
       receivedAt: new Date(),
       createdByUserId: actor.userId,
     });
     await notifyInternalManagers(transaction, {
-      workspaceId: access.workspaceId,
+      workspaceId: liveAccess.workspaceId,
       projectId,
       actorUserId: actor.userId,
-      actorParticipantId: access.participantId,
+      actorParticipantId: liveAccess.participantId,
       kind: "request_submitted",
       requestId: id,
       dedupeKey: `client-request:${id}`,
     });
     await auditClientEvent(
       transaction,
-      access.workspaceId,
+      liveAccess.workspaceId,
       actor.userId,
       "client.request.submitted.v1",
       "commercial_request",
@@ -823,30 +915,53 @@ export async function updateClientRequestState(
     | { idempotencyKey: string; state: "needs_clarification"; prompt: string }
     | {
         idempotencyKey: string;
-        state: "open" | "resolved" | "withdrawn";
+        state: "open" | "withdrawn";
       },
 ) {
   await assertClientManager(getDb(), actor, workspaceId, projectId);
   return getDb().transaction(async (transaction) => {
     await assertClientManager(transaction, actor, workspaceId, projectId);
-    const request = await transaction
-      .select({ id: commercialRequests.id })
-      .from(commercialRequests)
-      .where(
-        and(
-          eq(commercialRequests.id, requestId),
-          eq(commercialRequests.projectId, projectId),
-        ),
-      )
-      .limit(1);
-    if (!request[0]) throw notFound();
-    await transaction.execute(
-      sql`select id from ${commercialRequests} where id = ${requestId} for update`,
+    if (input.state === "needs_clarification") {
+      const retry = await transaction
+        .select({
+          id: clientDiscussionMessages.id,
+          projectId: clientDiscussionMessages.projectId,
+          requestId: clientDiscussionMessages.requestId,
+          target: clientDiscussionMessages.target,
+          body: clientDiscussionMessages.body,
+        })
+        .from(clientDiscussionMessages)
+        .where(
+          and(
+            eq(clientDiscussionMessages.authorUserId, actor.userId),
+            eq(clientDiscussionMessages.idempotencyKey, input.idempotencyKey),
+          ),
+        )
+        .limit(1);
+      if (retry[0]) {
+        if (
+          retry[0].projectId !== projectId ||
+          retry[0].requestId !== requestId ||
+          retry[0].target !== "request" ||
+          retry[0].body !== input.prompt
+        ) {
+          throw new PlatformError(
+            "idempotency_conflict",
+            409,
+            "This idempotency key was already used for another client message.",
+          );
+        }
+        return { id: requestId, state: input.state };
+      }
+    }
+    await transitionCommercialRequestState(
+      transaction,
+      actor,
+      workspaceId,
+      projectId,
+      requestId,
+      input.state,
     );
-    await transaction
-      .update(commercialRequests)
-      .set({ state: input.state, updatedAt: new Date() })
-      .where(eq(commercialRequests.id, requestId));
     if (input.state === "needs_clarification") {
       const messageId = randomUUID();
       await transaction
@@ -939,7 +1054,11 @@ export async function createClientDiscussionMessage(
     60 * 60,
   );
   return getDb().transaction(async (transaction) => {
-    await getClientAccess(transaction, actor, projectId);
+    const liveAccess = await getClientWriteAccess(
+      transaction,
+      actor,
+      projectId,
+    );
     await assertDiscussionTarget(transaction, projectId, input);
     const existing = await transaction
       .select({ id: clientDiscussionMessages.id })
@@ -959,15 +1078,15 @@ export async function createClientDiscussionMessage(
       target: input.target,
       ...discussionTargetColumns(input),
       authorUserId: actor.userId,
-      authorParticipantId: access.participantId,
+      authorParticipantId: liveAccess.participantId,
       idempotencyKey: input.idempotencyKey,
       body: input.body,
     });
     await notifyInternalManagers(transaction, {
-      workspaceId: access.workspaceId,
+      workspaceId: liveAccess.workspaceId,
       projectId,
       actorUserId: actor.userId,
-      actorParticipantId: access.participantId,
+      actorParticipantId: liveAccess.participantId,
       kind: "discussion_added",
       ...discussionTargetColumns(input),
       dedupeKey: `client-discussion:${id}`,
@@ -1251,7 +1370,25 @@ export async function actOnClientCommercialPacket(
     60 * 60,
   );
   return getDb().transaction(async (transaction) => {
-    const liveAccess = await getClientAccess(transaction, actor, projectId);
+    const liveAccess = await getClientWriteAccess(
+      transaction,
+      actor,
+      projectId,
+    );
+    const packetSource = await transaction
+      .select({ requestId: clientCommercialPackets.requestId })
+      .from(clientCommercialPackets)
+      .where(
+        and(
+          eq(clientCommercialPackets.id, packetId),
+          eq(clientCommercialPackets.projectId, projectId),
+        ),
+      )
+      .limit(1);
+    if (!packetSource[0]) throw notFound();
+    await transaction.execute(
+      sql`select id from ${commercialRequests} where id = ${packetSource[0].requestId} and project_id = ${projectId} for update`,
+    );
     await transaction.execute(
       sql`select id from ${clientCommercialPackets} where id = ${packetId} and project_id = ${projectId} for update`,
     );
@@ -1311,6 +1448,7 @@ export async function actOnClientCommercialPacket(
           isNull(commercialDecisions.supersededAt),
         ),
       )
+      .for("update")
       .limit(1);
     if (packet.supersededAt || current[0]?.id !== packetId || !decision[0]) {
       throw staleVersion("client_packet_stale", current[0]?.id);
@@ -1529,8 +1667,38 @@ export async function actOnClientAcceptanceTarget(
     60 * 60,
   );
   return getDb().transaction(async (transaction) => {
-    const liveAccess = await getClientAccess(transaction, actor, projectId);
+    const liveAccess = await getClientWriteAccess(
+      transaction,
+      actor,
+      projectId,
+    );
     if (liveAccess.role !== "approver") throw forbidden();
+    const targetSource = await transaction
+      .select({
+        projectItemId: clientAcceptanceTargets.projectItemId,
+        milestoneId: clientProjectItems.milestoneId,
+      })
+      .from(clientAcceptanceTargets)
+      .innerJoin(
+        clientProjectItems,
+        eq(clientProjectItems.id, clientAcceptanceTargets.projectItemId),
+      )
+      .where(
+        and(
+          eq(clientAcceptanceTargets.id, targetId),
+          eq(clientAcceptanceTargets.projectId, projectId),
+        ),
+      )
+      .limit(1);
+    if (!targetSource[0]) throw notFound();
+    await transaction.execute(
+      sql`select id from ${clientProjectItems} where id = ${targetSource[0].projectItemId} and project_id = ${projectId} for update`,
+    );
+    if (targetSource[0].milestoneId) {
+      await transaction.execute(
+        sql`select id from ${milestones} where id = ${targetSource[0].milestoneId} and project_id = ${projectId} for update`,
+      );
+    }
     await transaction.execute(
       sql`select id from ${clientAcceptanceTargets} where id = ${targetId} and project_id = ${projectId} for update`,
     );
@@ -1666,6 +1834,7 @@ export async function listClientNotifications(
     .select({
       id: clientCollaborationNotifications.id,
       projectId: clientCollaborationNotifications.projectId,
+      projectName: projects.name,
       kind: clientCollaborationNotifications.kind,
       requestId: clientCollaborationNotifications.requestId,
       packetId: clientCollaborationNotifications.packetId,
@@ -1682,6 +1851,10 @@ export async function listClientNotifications(
         clientCollaborationNotifications.recipientParticipantId,
       ),
     )
+    .innerJoin(
+      projects,
+      eq(projects.id, clientCollaborationNotifications.projectId),
+    )
     .where(
       and(
         eq(clientCollaborationNotifications.recipientUserId, actor.userId),
@@ -1694,9 +1867,59 @@ export async function listClientNotifications(
   return rows;
 }
 
+export async function listInternalClientNotifications(
+  actor: UserActor,
+  workspaceId: string,
+  page = 1,
+  pageSize = 25,
+) {
+  const access = await getDb()
+    .select({ userId: memberships.userId })
+    .from(memberships)
+    .where(
+      and(
+        eq(memberships.workspaceId, workspaceId),
+        eq(memberships.userId, actor.userId),
+      ),
+    )
+    .limit(1);
+  if (!access[0]) throw notFound();
+  return getDb()
+    .select({
+      id: clientCollaborationNotifications.id,
+      projectId: clientCollaborationNotifications.projectId,
+      projectKey: projects.key,
+      projectName: projects.name,
+      kind: clientCollaborationNotifications.kind,
+      actorName: users.name,
+      requestId: clientCollaborationNotifications.requestId,
+      packetId: clientCollaborationNotifications.packetId,
+      acceptanceTargetId: clientCollaborationNotifications.acceptanceTargetId,
+      readAt: clientCollaborationNotifications.readAt,
+      createdAt: clientCollaborationNotifications.createdAt,
+    })
+    .from(clientCollaborationNotifications)
+    .innerJoin(
+      projects,
+      eq(projects.id, clientCollaborationNotifications.projectId),
+    )
+    .leftJoin(users, eq(users.id, clientCollaborationNotifications.actorUserId))
+    .where(
+      and(
+        eq(clientCollaborationNotifications.workspaceId, workspaceId),
+        eq(clientCollaborationNotifications.recipientUserId, actor.userId),
+        isNull(clientCollaborationNotifications.recipientParticipantId),
+      ),
+    )
+    .orderBy(desc(clientCollaborationNotifications.createdAt))
+    .limit(Math.min(pageSize, 100))
+    .offset((page - 1) * Math.min(pageSize, 100));
+}
+
 export async function markClientNotificationRead(
   actor: UserActor,
   notificationId: string,
+  workspaceId?: string,
 ) {
   const rows = await getDb()
     .update(clientCollaborationNotifications)
@@ -1705,12 +1928,18 @@ export async function markClientNotificationRead(
       and(
         eq(clientCollaborationNotifications.id, notificationId),
         eq(clientCollaborationNotifications.recipientUserId, actor.userId),
-        sql`exists (
-          select 1
-          from ${clientProjectParticipants}
-          where ${clientProjectParticipants.id} = ${clientCollaborationNotifications.recipientParticipantId}
-            and ${clientProjectParticipants.revokedAt} is null
-        )`,
+        workspaceId
+          ? eq(clientCollaborationNotifications.workspaceId, workspaceId)
+          : undefined,
+        or(
+          isNull(clientCollaborationNotifications.recipientParticipantId),
+          sql`exists (
+            select 1
+            from ${clientProjectParticipants}
+            where ${clientProjectParticipants.id} = ${clientCollaborationNotifications.recipientParticipantId}
+              and ${clientProjectParticipants.revokedAt} is null
+          )`,
+        ),
       ),
     )
     .returning({ id: clientCollaborationNotifications.id });

@@ -194,7 +194,7 @@ export async function createCommercialRequest(
       workspaceId,
       projectId,
     );
-    await lockProject(transaction, projectId);
+    await lockCommercialRequestProject(transaction, projectId);
     const existing = await transaction
       .select({ id: commercialRequests.id })
       .from(commercialRequests)
@@ -206,7 +206,7 @@ export async function createCommercialRequest(
       )
       .limit(1);
     if (existing[0]) return existing[0].id;
-    await assertRequestCapacity(transaction, projectId);
+    await assertCommercialRequestCapacity(transaction, projectId);
     const scopeItemIds = [...new Set(input.scopeItemIds)];
     await assertScopeItems(transaction, projectId, scopeItemIds, false);
     const id = randomUUID();
@@ -289,52 +289,73 @@ export async function updateCommercialRequestState(
       workspaceId,
       projectId,
     );
-    const request = await transaction
-      .select({ state: commercialRequests.state })
-      .from(commercialRequests)
-      .where(
-        and(
-          eq(commercialRequests.id, requestId),
-          eq(commercialRequests.projectId, projectId),
-        ),
-      )
-      .for("update")
-      .limit(1);
-    if (!request[0]) throw notFound();
-    if (request[0].state === input.state) return;
-    const currentDecision = await transaction
-      .select({ id: commercialDecisions.id })
-      .from(commercialDecisions)
-      .where(
-        and(
-          eq(commercialDecisions.requestId, requestId),
-          eq(commercialDecisions.projectId, projectId),
-          isNull(commercialDecisions.supersededAt),
-        ),
-      )
-      .limit(1);
-    if (currentDecision[0]) {
-      throw conflict(
-        "request_has_effective_decision",
-        "Supersede the current decision instead of reopening this request.",
-      );
-    }
-    await transaction
-      .update(commercialRequests)
-      .set({ state: input.state, updatedAt: new Date() })
-      .where(eq(commercialRequests.id, requestId));
-    await insertAudit(transaction, actor, workspaceId, {
-      eventType: "commercial.request.state.updated.v1",
-      targetType: "commercial_request",
-      targetId: requestId,
-      metadata: {
-        projectId,
-        previousState: request[0].state,
-        state: input.state,
-      },
-    });
+    await transitionCommercialRequestState(
+      transaction,
+      actor,
+      workspaceId,
+      projectId,
+      requestId,
+      input.state,
+    );
   });
   return getCommercialRequest(actor, workspaceId, projectId, requestId);
+}
+
+export async function transitionCommercialRequestState(
+  transaction: Transaction,
+  actor: UserActor,
+  workspaceId: string,
+  projectId: string,
+  requestId: string,
+  state: UpdateCommercialRequestStateInput["state"],
+) {
+  const request = await transaction
+    .select({ state: commercialRequests.state })
+    .from(commercialRequests)
+    .where(
+      and(
+        eq(commercialRequests.id, requestId),
+        eq(commercialRequests.projectId, projectId),
+      ),
+    )
+    .for("update")
+    .limit(1);
+  if (!request[0]) throw notFound();
+  if (request[0].state === state) {
+    return { changed: false, previousState: state, state };
+  }
+  const currentDecision = await transaction
+    .select({ id: commercialDecisions.id })
+    .from(commercialDecisions)
+    .where(
+      and(
+        eq(commercialDecisions.requestId, requestId),
+        eq(commercialDecisions.projectId, projectId),
+        isNull(commercialDecisions.supersededAt),
+      ),
+    )
+    .limit(1);
+  if (currentDecision[0]) {
+    throw conflict(
+      "request_has_effective_decision",
+      "Supersede the current decision instead of reopening this request.",
+    );
+  }
+  await transaction
+    .update(commercialRequests)
+    .set({ state, updatedAt: new Date() })
+    .where(eq(commercialRequests.id, requestId));
+  await insertAudit(transaction, actor, workspaceId, {
+    eventType: "commercial.request.state.updated.v1",
+    targetType: "commercial_request",
+    targetId: requestId,
+    metadata: {
+      projectId,
+      previousState: request[0].state,
+      state,
+    },
+  });
+  return { changed: true, previousState: request[0].state, state };
 }
 
 export async function createCommercialDecision(
@@ -1209,6 +1230,20 @@ async function assertRequestCapacity(
       `A project may contain at most ${MAX_REQUESTS_PER_PROJECT} commercial requests.`,
     );
   }
+}
+
+export async function lockCommercialRequestProject(
+  transaction: Transaction,
+  projectId: string,
+) {
+  await lockProject(transaction, projectId);
+}
+
+export async function assertCommercialRequestCapacity(
+  transaction: Transaction,
+  projectId: string,
+) {
+  await assertRequestCapacity(transaction, projectId);
 }
 
 async function assertDecisionCapacity(

@@ -6,6 +6,7 @@ import {
   getClientProjectProjection,
   listClientProjects,
 } from "@/server/client-collaboration";
+import { listWorkspaces } from "@/server/workspaces";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +17,12 @@ export default async function ClientProjectPage({
   const actor = { userId: session.user.id, email: session.user.email };
   const { projectId } = await params;
   const pageData = await (async () => {
-    const [projects, projection] = await Promise.all([
+    const [projects, projection, workspaces] = await Promise.all([
       listClientProjects(actor),
       getClientProjectProjection(actor, projectId),
+      listWorkspaces(actor),
     ]);
-    return { projects, projection };
+    return { projects, projection, workspaces };
   })().catch(() => notFound());
 
   return (
@@ -31,6 +33,7 @@ export default async function ClientProjectPage({
         role,
       }))}
       projection={pageData.projection}
+      hasInternalAccess={pageData.workspaces.length > 0}
     />
   );
 }

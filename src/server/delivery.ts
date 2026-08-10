@@ -993,6 +993,8 @@ export async function listWorkItems(
     ...row,
     identifier: `${projectKey}-${row.number}`,
     commercialBasisCount: commercialBasisByWorkItem.get(row.id)?.total ?? 0,
+    commercialHistoricalBasisCount:
+      commercialBasisByWorkItem.get(row.id)?.historicalTotal ?? 0,
     commercialStaleBasisCount:
       commercialBasisByWorkItem.get(row.id)?.staleTotal ?? 0,
     labels: labels.filter((label) => label.workItemId === row.id),
@@ -1158,6 +1160,8 @@ export async function listMyWork(
       ...row,
       identifier: `${row.projectKey}-${row.number}`,
       commercialBasisCount: commercialBasisByWorkItem.get(row.id)?.total ?? 0,
+      commercialHistoricalBasisCount:
+        commercialBasisByWorkItem.get(row.id)?.historicalTotal ?? 0,
       commercialStaleBasisCount:
         commercialBasisByWorkItem.get(row.id)?.staleTotal ?? 0,
       labels: labels.filter((label) => label.workItemId === row.id),
@@ -1390,6 +1394,8 @@ export async function getWorkItem(
     ...rows[0],
     identifier: `${key}-${rows[0].number}`,
     commercialBasisCount: commercialBasisCounts[0]?.total ?? 0,
+    commercialHistoricalBasisCount:
+      commercialBasisCounts[0]?.historicalTotal ?? 0,
     commercialStaleBasisCount: commercialBasisCounts[0]?.staleTotal ?? 0,
     labels,
   };
@@ -2016,6 +2022,7 @@ async function listCommercialBasisCounts(
             and ${commercialDecisions.supersededAt} is null
             and ${commercialDecisions.disposition} in ('covered', 'absorbed', 'swap', 'paid_change'))
       )::int`,
+      historicalTotal: sql<number>`count(*)::int`,
       staleTotal: sql<number>`count(*) filter (
         where ${commercialBasisLinks.basisType} = 'baseline_scope_item'
           and ${hasEffectiveBaseline}

@@ -562,10 +562,12 @@ describe("commercial baseline domain boundary", () => {
         }),
         expect.objectContaining({
           id: completedWork.id,
+          commercialHistoricalBasisCount: 1,
           commercialStaleBasisCount: 0,
         }),
         expect.objectContaining({
           id: canceledWork.id,
+          commercialHistoricalBasisCount: 1,
           commercialStaleBasisCount: 0,
         }),
       ]),
@@ -593,6 +595,7 @@ describe("commercial baseline domain boundary", () => {
       items: [
         expect.objectContaining({
           id: completedWork.id,
+          commercialHistoricalBasisCount: 1,
           commercialStaleBasisCount: 0,
         }),
       ],
@@ -607,16 +610,23 @@ describe("commercial baseline domain boundary", () => {
       items: [
         expect.objectContaining({
           id: canceledWork.id,
+          commercialHistoricalBasisCount: 1,
           commercialStaleBasisCount: 0,
         }),
       ],
     });
     await expect(
       getWorkItem(owner, workspace.id, project.id, completedWork.id),
-    ).resolves.toMatchObject({ commercialStaleBasisCount: 0 });
+    ).resolves.toMatchObject({
+      commercialHistoricalBasisCount: 1,
+      commercialStaleBasisCount: 0,
+    });
     await expect(
       getWorkItem(owner, workspace.id, project.id, canceledWork.id),
-    ).resolves.toMatchObject({ commercialStaleBasisCount: 0 });
+    ).resolves.toMatchObject({
+      commercialHistoricalBasisCount: 1,
+      commercialStaleBasisCount: 0,
+    });
     await createCommercialBasisLink(owner, workspace.id, project.id, work.id, {
       scopeItemRevisionId: revised.revisionId,
     });

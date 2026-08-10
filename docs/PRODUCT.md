@@ -53,9 +53,13 @@ A team should be able to use ScopeDelta as its primary project/delivery workspac
 
 The differentiated system is the **Commercial Delivery Graph**.
 
-Its Layer-2 wedge is more precise:
+Its core commercial wedge is:
 
 > **Commercial provenance is a first-class property of delivery work. Every material client-deliverable work item can point to the effective baseline commitment or confirmed commercial decision that authorizes it; missing or stale relationships are surfaced before capacity is silently consumed.**
+
+Its validated Layer-3 client-collaboration extension is:
+
+> **One commercial truth, two projections. The delivery team works from the internal project and Commercial Delivery Graph; the client sees only the requests, commitments, decisions, impacts and acceptance actions relevant to them. Every client action is tied to the exact commercial or delivery version they saw.**
 
 The graph eventually connects:
 
@@ -65,10 +69,11 @@ The graph eventually connects:
 - requirements, deliverables, exclusions and constraints;
 - client requests/clarifications;
 - explicit commercial decisions and impacts;
+- client-visible publication versions and client actions;
 - project milestones, cycles and work items;
 - repository/PR/CI evidence from integrations;
 - QA/test/defect evidence;
-- client approval/acceptance;
+- client delivery acceptance;
 - audit history.
 
 The graph data structure itself is not the USP. The USP is the opinionated commercial meaning of those relationships inside the daily software-service delivery workflow.
@@ -114,87 +119,119 @@ Optional planning overlay:
 
 `Project → Cycle → Work item`
 
-### Layer 2 — Commercial Delivery Graph
+### Layer 2 — Commercial Delivery Graph — COMPLETE
 
-ScopeDelta's primary wedge. Research checkpoint completed 2026-08-09; durable detail is in `docs/research/LAYER2_COMMERCIAL_DELIVERY_GRAPH_RESEARCH_2026-08.md`.
+Durable research: `docs/research/LAYER2_COMMERCIAL_DELIVERY_GRAPH_RESEARCH_2026-08.md`.
 
-#### Commercial evidence and baseline
+Layer 2 provides:
 
-- immutable private commercial evidence sources from pasted text, text-based PDF and DOCX;
-- deterministic extraction/storage and evidence anchors without semantic AI inference;
+- immutable private commercial evidence from pasted text, text-based PDF and DOCX;
+- deterministic extraction/storage and evidence anchors;
 - logical commercial baseline with immutable versions/amendments;
-- evidence-backed commercial scope items with minimum kinds `deliverable`, `requirement`, `exclusion`, `constraint`;
-- prior versions/history never rewritten by later amendments.
-
-#### Client request lifecycle
-
-A client request is a commercial question, not authorization by itself.
-
-Minimum request states:
-
-- `open`;
-- `needs_clarification`;
-- `resolved`;
-- `withdrawn`.
-
-`needs_clarification` is workflow state, not a commercial decision.
-
-#### Commercial decisions
-
-Minimum effective dispositions:
-
-- `covered` — current agreement already obligates the work;
-- `absorbed` — provider knowingly accepts incremental unbilled work;
-- `swap` — changed/new work is accepted against explicit reduced/removed existing commitment;
-- `paid_change` — incremental work is commercially authorized as additional paid scope;
-- `deferred` — not authorized for the current scope/phase;
-- `rejected` — explicitly not to perform.
-
-For `covered`, preserve an optional basis such as baseline, defect/warranty, revision allowance, or other existing obligation.
+- evidence-backed commercial scope items (`deliverable`, `requirement`, `exclusion`, `constraint`);
+- client request lifecycle (`open`, `needs_clarification`, `resolved`, `withdrawn`);
+- commercial dispositions (`covered`, `absorbed`, `swap`, `paid_change`, `deferred`, `rejected`);
+- optional exact effort/schedule/money impacts with estimates separated from confirmed values;
+- work-purpose classification (`unclassified`, `client_delivery`, `delivery_support`, `internal`);
+- baseline/decision commercial-basis links to delivery work;
+- commercially-unlinked and stale-basis advisory drift;
+- amendment/scope-item lineage and historical reconstruction.
 
 Direct work-to-baseline scope links are valid provenance and do not require redundant `covered` decisions for every original ticket.
 
-#### Work provenance and drift
+Warnings are advisory by default; they do not silently block delivery.
 
-Minimum work-purpose states:
+Layer 2 remains Local/LAN and does not require semantic AI, OCR SaaS, e-signature, CRM, billing or another paid provider.
 
-- `unclassified`;
-- `client_delivery`;
-- `delivery_support`;
-- `internal`.
+### Layer 3 — Client Collaboration & Negotiation — RESEARCH COMPLETE / IMPLEMENTATION ACTIVE
 
-`client_delivery` work is expected to have an effective commercial basis: one or more current/effective baseline scope items and/or confirmed commercial decisions. Client-delivery work without one is **commercially unlinked**.
+Durable research: `docs/research/LAYER3_CLIENT_COLLABORATION_RESEARCH_2026-08.md`.
 
-`unclassified` is a lower-severity hygiene state. `delivery_support` and `internal` work do not receive high-severity drift warnings merely because they lack a direct commercial link. This prevents normal refactoring, QA infrastructure, administration and technical enablement from becoming false-positive scope creep.
+#### Product boundary
 
-Warnings are advisory by default; they do not silently block delivery. Optional stricter organization policy remains later scope.
+A generic branded portal, guest account or approval button is table stakes. ScopeDelta's client surface exists to project the Commercial Delivery Graph safely and precisely to clients without duplicating state.
 
-#### Impact/history
+The core Layer-3 chain is:
 
-- optional effort, schedule and monetary impact on requests/decisions;
-- estimates are explicitly separated from confirmed facts/commitments;
-- money is exact-decimal + currency-code safe;
-- no autonomous binding price/date decisions;
-- amendments preserve lineage to previous baseline/items and decisions;
-- historical work remains explainable against the commercial basis effective when it was authorized/performed.
+`Client request → internal commercial treatment → immutable client-visible packet → client action/evidence → delivery commercial basis → delivery acceptance/history`
 
-#### Layer-2 document/AI boundary
+#### External identity
 
-Layer 2 supports deterministic validation, private storage, text extraction and evidence anchors for paste/text-PDF/DOCX. Humans curate commercial scope items and decisions.
+Ongoing collaboration uses authenticated, account-backed **project-scoped external participants**. They do not become normal internal workspace members.
 
-Scanned/image OCR, semantic SOW extraction, automated request decomposition, AI in/out-of-scope verdicts, impact estimation and generated change-order prose are not required for Layer 2. SC-009 owns the AI-native intelligence layer after the durable graph exists.
+Initial external capabilities:
 
-### Layer 3 — Client Collaboration & Negotiation
+- **Client collaborator** — client-safe project visibility, request/clarification participation and external-safe discussion where enabled.
+- **Client approver** — collaborator capabilities plus commercial decision and delivery-acceptance actions.
 
-A client-safe experience built into the same project rather than exposing the internal board directly:
+Avoid a generic permission-set builder.
 
-- client request/clarification channel;
-- client-facing project status and milestones;
-- scope/change negotiation packets;
-- secure approve/reject/request-clarification flows;
-- deliverable/milestone acceptance;
-- immutable shared versions and audit history;
-- client-safe terminology separated from internal technical detail.
+#### Client-safe project surface
+
+The client experience prioritizes:
+
+- `Needs your attention`;
+- selected client-visible milestones/deliverables;
+- client request/clarification history;
+- published commercial packet versions/actions;
+- delivery acceptance targets/actions;
+- client-visible discussion/activity where appropriate.
+
+Do not expose the internal backlog/board by default.
+
+Internal-only by default:
+
+- work-item/subtask/dependency detail;
+- internal estimates, capacity/workload;
+- internal comments/notes/activity;
+- commercial drift warnings;
+- provider-only commercial rationale;
+- unconfirmed impacts;
+- workspace directory/admin;
+- private commercial source bodies/evidence unless explicitly shared;
+- AI/provider metadata;
+- later Git/CI/QA detail unless explicitly projected.
+
+#### Client request intake
+
+Client-native requests enter the existing SC-006B request lifecycle. A request starts `open` and never authorizes delivery by itself. `needs_clarification` remains request state, not approval.
+
+#### Commercial publication
+
+Money/timeline/deliverable commitments are client-visible only after explicit authorized publication. A published client packet is an immutable/versioned target; later edits create a successor version.
+
+Default client action:
+
+- `covered` — informational; clarification available;
+- `absorbed` — informational/goodwill; clarification available;
+- `swap` — approve/reject/request clarification;
+- `paid_change` — approve/reject/request clarification;
+- `deferred` — informational; clarification available;
+- `rejected` — informational; clarification available.
+
+Internal commercial treatment, publication, client action, current delivery authorization and later amendment history remain distinct facts. ScopeDelta must never fabricate client approval from an internal decision.
+
+#### Delivery acceptance
+
+An internal user can later publish a versioned milestone/deliverable acceptance target. An authorized client approver can accept or request changes against the exact target version. This is business delivery evidence, not legal e-signature/warranty certification.
+
+#### Discussion boundary
+
+Client-visible discussion exists on external-safe objects and remains structurally separate from internal comments/notes. Internal content must not become client-visible through accidental inheritance or a subtle visibility toggle.
+
+#### Runtime/economics
+
+Core Layer-3 state and actions are **Local/LAN**. Outbound email is **Hybrid/optional external**: ScopeDelta Cloud may provide managed delivery, while self-host can use customer SMTP/local mail or manually deliver generated invitation/action URLs.
+
+Layer 3 requires no mandatory paid external provider.
+
+External client participants should not consume normal paid internal employee seats. Exact hosted client limits/pricing remain a later SC-010/founder decision.
+
+#### Delivery sequence
+
+- SC-007A / #36 — external client boundary, client-safe project home and request intake — **READY FOR CODEX**.
+- SC-007B / #37 — immutable commercial publication and client decision actions — blocked by #36.
+- SC-007C / #38 — delivery acceptance and client-collaboration hardening — blocked by #37.
 
 ### Layer 4 — Engineering & QA Delivery Loop
 
@@ -208,6 +245,8 @@ Connect delivery planning with engineering evidence without rebuilding source-co
 - trace requested → commercially authorized → planned → implemented → tested → accepted.
 
 ScopeDelta does not initially host Git repositories or build its own CI/CD runner platform.
+
+SC-008 research begins only after Layer 3 is complete.
 
 ### Layer 5 — AI-Native Delivery Intelligence
 
@@ -223,7 +262,7 @@ AI is a system layer, not a decorative chatbot:
 - take bounded actions with permission, audit and cost controls;
 - support managed AI plus BYO/local-model paths where practical.
 
-AI may propose classifications/actions but may not fabricate commercial authorization or completion evidence.
+AI may propose classifications/actions but may not fabricate commercial authorization, client approval or completion evidence.
 
 ### Layer 6 — Subscription, Cloud Economics & Source Distribution
 
@@ -262,19 +301,19 @@ The browser experience is first-class and universal for ScopeDelta Cloud and cus
 
 ### Desktop client
 
-A first-party Windows/macOS/Linux client is planned, but it must use the same server/domain/API authorization rules as web rather than becoming a separate backend/product. It does not preempt the Commercial Delivery Graph without new evidence.
+A first-party Windows/macOS/Linux client is planned, but it uses the same server/domain/API authorization rules as web rather than becoming a separate backend/product.
 
 ### ScopeDelta Cloud
 
-ScopeDelta operates the server, database, persistent source/file storage as needed, upgrades, backups, managed AI, notifications/integration workers and observability subject to plan limits.
+ScopeDelta operates the server, database, persistent source/file storage as needed, upgrades, backups, managed AI, managed outbound notifications/integration workers and observability subject to plan limits.
 
 ### Self-hosted / private server
 
-A customer can run the same ScopeDelta core on its own server/VPC/private network. Core Local/LAN-class capabilities, including required Layer-2 Commercial Delivery Graph behavior, must not require ScopeDelta Cloud.
+A customer can run the same ScopeDelta core on its own server/VPC/private network. Core Local/LAN capabilities, including Layers 1–3 required product behavior, must not require ScopeDelta Cloud.
 
 ### LAN/private team deployment
 
-A 50–500-person company may run one shared ScopeDelta server/database on its office/private infrastructure. Web and future desktop clients connect to that server over the organization's LAN/VPN/network controls. The server remains authoritative for collaborative project/commercial/audit state.
+A 50–500-person company may run one shared ScopeDelta server/database on office/private infrastructure. Web and future desktop clients connect over the organization's LAN/VPN/network controls. External client access requires the deployment to be network-reachable to those external participants through the customer's chosen network topology; it still does not require ScopeDelta Cloud.
 
 ### Air-gapped direction
 
@@ -290,11 +329,11 @@ Less manual translation, backlog cleanup, status reporting, chasing approvals an
 
 ### Account / commercial owner
 
-Clear relationship between agreement, requested changes, explicit treatment, delivery impact and client acceptance.
+Clear relationship between agreement, requested changes, explicit treatment, published client state, delivery impact and client acceptance.
 
 ### Developer
 
-Clean actionable work with current context and compact commercial provenance without requiring contract reading.
+Clean actionable work with current context and compact commercial provenance without requiring contract reading or client-portal administration.
 
 ### QA / tester
 
@@ -302,7 +341,7 @@ Direct traceability from requirement/change to acceptance criteria, implementati
 
 ### Client
 
-A simple client-safe project surface for requests, decisions, progress and approvals instead of access to an internal engineering tool.
+A simple project-specific surface to request, understand, clarify, approve and accept the right things without being exposed to an internal engineering tool.
 
 ## Product principles
 
@@ -317,6 +356,8 @@ APIs, events, auditability, integrations and AI execution boundaries are first-c
 ### Simple by default
 
 The product should feel closer to Linear's speed/opinionated workflow than Jira's configuration burden. Advanced configurability should be earned by real customer need.
+
+For clients specifically, `Needs your attention` and a small project projection are preferred over a miniature internal PM suite.
 
 ### Premium reliability at disruptive cost
 
@@ -336,7 +377,7 @@ Core domain models must support global customers, currencies, time zones and reg
 
 ### Human authority
 
-AI may recommend and take bounded operational actions, but binding commercial commitments, client-visible approvals and destructive actions remain governed by authorized users/policies.
+AI may recommend and take bounded operational actions, but binding commercial commitments, client-visible publications/approvals and destructive actions remain governed by authorized users/policies.
 
 ## Commercial model direction
 
@@ -348,7 +389,9 @@ The intended model is:
 - usage limits that cover managed AI/storage/email/background-processing economics;
 - higher-value business/enterprise governance and managed capabilities.
 
-Avoid relying exclusively on per-seat pricing. For 50–500-person delivery organizations, a working hypothesis is to price managed cloud around active client-delivery capacity plus managed AI/usage, with generous collaboration/client access. Exact pricing is not yet approved.
+Avoid relying exclusively on per-seat pricing. For 50–500-person delivery organizations, a working hypothesis is to price managed cloud around active client-delivery capacity plus managed AI/usage, with generous collaboration/client access.
+
+**External client participants should not consume normal paid internal employee seats.** Exact pricing/limits are not yet approved.
 
 ## Competitive boundary
 
@@ -365,11 +408,13 @@ It should integrate with mature infrastructure rather than rebuild it where ther
 
 Layer 2 additionally avoids rebuilding PSA financial operations, CRM pipelines, contract lifecycle management, e-signature and generic requirements-management platforms.
 
+Layer 3 additionally avoids a generic portal builder, generic guest-permission framework, creative proofing suite, legal e-signature system and public anonymous project portal.
+
 ## Production release principle
 
 A landing page or isolated AI demo is not a product release.
 
-Each capability layer must be production-quality before it becomes a dependency of the next layer. General availability requires a coherent self-service workflow with tested tenant isolation, recoverability, observability, cost controls and no routine founder intervention.
+Each capability layer must be production-quality before it becomes a dependency of the next layer. General availability requires a coherent self-service workflow with tested tenant/client isolation, recoverability, observability, cost controls and no routine founder intervention.
 
 ## Durable decisions
 
@@ -380,9 +425,11 @@ See:
 - `docs/research/MARKET_PROBLEM_THESIS_2026-08.md`
 - `docs/research/LAYER1_DELIVERY_CORE_RESEARCH_2026-08.md`
 - `docs/research/LAYER2_COMMERCIAL_DELIVERY_GRAPH_RESEARCH_2026-08.md`
+- `docs/research/LAYER3_CLIENT_COLLABORATION_RESEARCH_2026-08.md`
 - `docs/research/DEPLOYMENT_RUNTIME_LICENSE_THESIS_2026-08.md`
 - `docs/FEATURE_RUNTIME_MATRIX.md`
-- SC-006 / #10 and SC-006A/B/C / #30/#31/#32
+- SC-006 / #10 — complete
+- SC-007 / #11 and SC-007A/B/C / #36/#37/#38
 - LIC-001
 - ARCH-001
 - DX-001

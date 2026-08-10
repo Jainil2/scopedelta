@@ -229,9 +229,11 @@ External client participants should not consume normal paid internal employee se
 
 #### Delivery sequence
 
-- SC-007A / #36 — external client boundary, client-safe project home and request intake — **READY FOR CODEX**.
-- SC-007B / #37 — immutable commercial publication and client decision actions — blocked by #36.
-- SC-007C / #38 — delivery acceptance and client-collaboration hardening — blocked by #37.
+- SC-007 / #11 — one consolidated implementation and primary PR covering the
+  external boundary, request intake, immutable commercial publication, client
+  actions, delivery acceptance, notifications, and hardening.
+- The former SC-007A/B/C issues #36/#37/#38 are closed as superseded. Their
+  boundaries remain implementation phases within SC-007, not separate releases.
 
 ### Layer 4 — Engineering & QA Delivery Loop
 
@@ -429,7 +431,7 @@ See:
 - `docs/research/DEPLOYMENT_RUNTIME_LICENSE_THESIS_2026-08.md`
 - `docs/FEATURE_RUNTIME_MATRIX.md`
 - SC-006 / #10 — complete
-- SC-007 / #11 and SC-007A/B/C / #36/#37/#38
+- SC-007 / #11 — consolidated Layer-3 implementation; #36/#37/#38 superseded
 - LIC-001
 - ARCH-001
 - DX-001

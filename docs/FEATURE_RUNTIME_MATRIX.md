@@ -121,15 +121,15 @@ The validated architecture is **one commercial truth, two projections**: interna
 
 | Capability | Runtime class | Planned slice |
 |---|---|---|
-| External client users/invites | Local/LAN | SC-007A |
-| Client-safe project portal | Local/LAN | SC-007A |
-| Client request intake | Local/LAN | SC-007A |
-| Client-safe discussion | Local/LAN | SC-007B + SC-007C |
-| Negotiation/change proposal packet | Local/LAN | SC-007B |
-| Approve/reject/clarify | Local/LAN | SC-007B |
-| Milestone/deliverable acceptance | Local/LAN | SC-007C |
-| Immutable shared versions | Local/LAN | SC-007B + SC-007C |
-| Outbound email notifications | Hybrid/optional external | SC-007C; optional provider/SMTP |
+| External client users/invites | Local/LAN | SC-007 |
+| Client-safe project portal | Local/LAN | SC-007 |
+| Client request intake | Local/LAN | SC-007 |
+| Client-safe discussion | Local/LAN | SC-007 |
+| Negotiation/change proposal packet | Local/LAN | SC-007 |
+| Approve/reject/clarify | Local/LAN | SC-007 |
+| Milestone/deliverable acceptance | Local/LAN | SC-007 |
+| Immutable shared versions | Local/LAN | SC-007 |
+| Outbound email notifications | Hybrid/optional external | SC-007; optional provider/SMTP |
 | Public/action links | Local/LAN | Token generation local; broad unauthenticated portal deferred |
 
 Layer-3 runtime rules:

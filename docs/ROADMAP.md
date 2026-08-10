@@ -201,7 +201,7 @@ Layer 3 introduces **no mandatory paid external provider**.
 
 External client participants should not consume normal paid internal employee seats; exact hosted pricing/limits remain SC-010/founder scope.
 
-### SC-007 / #11 — consolidated Layer-3 implementation — READY FOR CODEX
+### SC-007 / #11 — consolidated Layer-3 implementation — IMPLEMENTED / IN REVIEW
 
 SC-007 is intentionally one engineering issue and one primary PR. The previously proposed SC-007A/B/C issues #36/#37/#38 are closed as superseded. Their boundaries remain useful internal implementation phases only:
 
@@ -356,7 +356,7 @@ Current sequence:
 1. SC-004 / #8 — Layer 0 Platform Kernel — **DONE**.
 2. SC-005 / #9 — Layer 1 Delivery Core — **DONE**.
 3. SC-006 / #10 — Layer 2 Commercial Delivery Graph — **DONE**.
-4. SC-007 / #11 — Layer 3 client collaboration/negotiation/acceptance — **READY FOR CODEX** as one consolidated task/primary PR.
+4. SC-007 / #11 — Layer 3 client collaboration/negotiation/acceptance — **IMPLEMENTED / IN REVIEW** as one consolidated task/primary PR.
 5. SC-008 / #12 — Layer 4 engineering/QA evidence — blocked until Layer 3 completion + research.
 6. SC-009 / #17 — Layer 5 AI-native delivery intelligence.
 7. SC-010 / #13 — Layer 6 subscription/cloud economics/source distribution.

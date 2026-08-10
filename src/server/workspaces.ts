@@ -1,10 +1,9 @@
-import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { and, asc, count, eq, ne, sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import {
-  actionRateLimits,
   auditEvents,
   memberships,
   users,
@@ -17,8 +16,8 @@ import {
   communityEntitlementPolicy,
   type EntitlementPolicy,
 } from "@/lib/entitlements";
-import { getAuthSecret } from "@/lib/env";
 import { forbidden, notFound, PlatformError } from "@/lib/platform-errors";
+import { consumeActionLimit } from "@/server/action-rate-limit";
 
 export type UserActor = { userId: string; email: string };
 
@@ -691,42 +690,6 @@ async function assertAnotherOwner(
       "last_owner_required",
       409,
       "Promote another owner before removing or changing the last owner.",
-    );
-  }
-}
-
-async function consumeActionLimit(
-  keySource: string,
-  maximum: number,
-  windowSeconds: number,
-) {
-  const key = createHmac("sha256", getAuthSecret())
-    .update(keySource)
-    .digest("hex");
-  const result = await getDb().execute<{ count: number }>(sql`
-    insert into ${actionRateLimits} (key, count, window_started_at, expires_at)
-    values (${key}, 1, now(), now() + (${windowSeconds} * interval '1 second'))
-    on conflict (key) do update set
-      count = case
-        when ${actionRateLimits.expiresAt} <= now() then 1
-        else ${actionRateLimits.count} + 1
-      end,
-      window_started_at = case
-        when ${actionRateLimits.expiresAt} <= now() then now()
-        else ${actionRateLimits.windowStartedAt}
-      end,
-      expires_at = case
-        when ${actionRateLimits.expiresAt} <= now()
-          then now() + (${windowSeconds} * interval '1 second')
-        else ${actionRateLimits.expiresAt}
-      end
-    returning count
-  `);
-  if (Number(result.rows[0]?.count ?? 0) > maximum) {
-    throw new PlatformError(
-      "rate_limited",
-      429,
-      "Too many requests. Try again later.",
     );
   }
 }

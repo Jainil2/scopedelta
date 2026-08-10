@@ -684,6 +684,9 @@ export function ProjectOverview({
           >
             Commercial
           </Link>
+          <Link href={`/app/${workspaceSlug}/projects/${project.key}/client`}>
+            Client view
+          </Link>
           <Link href={`/app/${workspaceSlug}/projects/${project.key}/activity`}>
             Activity
           </Link>
@@ -1078,6 +1081,9 @@ export function BacklogWorkspace({
             href={`/app/${workspaceSlug}/projects/${project.key}/commercial`}
           >
             Commercial
+          </Link>
+          <Link href={`/app/${workspaceSlug}/projects/${project.key}/client`}>
+            Client view
           </Link>
           <Link href={`/app/${workspaceSlug}/projects/${project.key}/activity`}>
             Activity

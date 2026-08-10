@@ -1,6 +1,14 @@
 import { after } from "next/server";
 import nodemailer from "nodemailer";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
+import { getDb } from "@/db";
+import {
+  clientCollaborationNotifications,
+  clientProjectInvitations,
+  clientProjectParticipants,
+  users,
+} from "@/db/schema";
 import { getAppUrl, getSmtpConfig } from "@/lib/env";
 
 type Mail = {
@@ -77,6 +85,144 @@ export function scheduleWorkspaceInvitationEmail(
     text: `You have been invited to join a ScopeDelta workspace: ${url}\n\nThis link expires in seven days.`,
     html: `<p>You have been invited to join <strong>${escapeHtml(workspaceName)}</strong> in ScopeDelta.</p><p><a href="${safeUrl}">Accept invitation</a></p><p>This link expires in seven days.</p>`,
   });
+}
+
+export function scheduleClientInvitationEmail(
+  to: string,
+  projectName: string,
+  token: string,
+  invitationId: string,
+) {
+  const url = `${getAppUrl()}/client/invitations/accept#token=${encodeURIComponent(token)}`;
+  const safeUrl = escapeHtml(url);
+  after(async () => {
+    try {
+      await deliver({
+        to,
+        subject: `Join ${projectName} in ScopeDelta`,
+        text: `You have been invited to a ScopeDelta client project: ${url}\n\nThis link expires in seven days.`,
+        html: `<p>You have been invited to the client workspace for <strong>${escapeHtml(projectName)}</strong>.</p><p><a href="${safeUrl}">Open client project</a></p><p>This link expires in seven days.</p>`,
+      });
+      await getDb()
+        .update(clientProjectInvitations)
+        .set({
+          emailDeliveryState: "sent",
+          emailAttemptCount: sql`${clientProjectInvitations.emailAttemptCount} + 1`,
+          lastEmailAttemptAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(clientProjectInvitations.id, invitationId));
+    } catch {
+      await getDb()
+        .update(clientProjectInvitations)
+        .set({
+          emailDeliveryState: "failed",
+          emailAttemptCount: sql`${clientProjectInvitations.emailAttemptCount} + 1`,
+          lastEmailAttemptAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(clientProjectInvitations.id, invitationId));
+      console.error("client_invitation_email_delivery_failed");
+    }
+  });
+}
+
+export async function scheduleClientCollaborationNotificationEmails(
+  dedupeKey: string,
+) {
+  try {
+    getSmtpConfig();
+  } catch {
+    return 0;
+  }
+  try {
+    const database = getDb();
+    const notifications = await database
+      .select({
+        id: clientCollaborationNotifications.id,
+        email: users.email,
+        participantId: clientCollaborationNotifications.recipientParticipantId,
+      })
+      .from(clientCollaborationNotifications)
+      .innerJoin(
+        users,
+        eq(users.id, clientCollaborationNotifications.recipientUserId),
+      )
+      .leftJoin(
+        clientProjectParticipants,
+        eq(
+          clientProjectParticipants.id,
+          clientCollaborationNotifications.recipientParticipantId,
+        ),
+      )
+      .where(
+        and(
+          eq(clientCollaborationNotifications.dedupeKey, dedupeKey),
+          inArray(clientCollaborationNotifications.emailDeliveryState, [
+            "not_requested",
+            "failed",
+          ]),
+          or(
+            isNull(clientCollaborationNotifications.recipientParticipantId),
+            isNull(clientProjectParticipants.revokedAt),
+          ),
+        ),
+      );
+
+    let scheduled = 0;
+    for (const notification of notifications) {
+      const queued = await database
+        .update(clientCollaborationNotifications)
+        .set({ emailDeliveryState: "pending" })
+        .where(
+          and(
+            eq(clientCollaborationNotifications.id, notification.id),
+            inArray(clientCollaborationNotifications.emailDeliveryState, [
+              "not_requested",
+              "failed",
+            ]),
+          ),
+        )
+        .returning({ id: clientCollaborationNotifications.id });
+      if (!queued[0]) continue;
+      scheduled += 1;
+
+      const destination = notification.participantId ? "/client" : "/app";
+      const url = `${getAppUrl()}${destination}`;
+      after(async () => {
+        try {
+          await deliver({
+            to: notification.email,
+            subject: "ScopeDelta needs your attention",
+            text: `A shared project has an update that needs your attention: ${url}`,
+            html: `<p>A shared project has an update that needs your attention.</p><p><a href="${escapeHtml(url)}">Open ScopeDelta</a></p>`,
+          });
+          await updateClientNotificationDelivery(notification.id, "sent");
+        } catch {
+          await updateClientNotificationDelivery(notification.id, "failed");
+          console.error("client_notification_email_delivery_failed");
+        }
+      });
+    }
+    return scheduled;
+  } catch {
+    console.error("client_notification_email_queue_failed");
+    return 0;
+  }
+}
+
+async function updateClientNotificationDelivery(
+  notificationId: string,
+  state: "sent" | "failed",
+) {
+  await getDb()
+    .update(clientCollaborationNotifications)
+    .set({
+      emailDeliveryState: state,
+      emailAttemptCount: sql`${clientCollaborationNotifications.emailAttemptCount} + 1`,
+      lastEmailAttemptAt: new Date(),
+    })
+    .where(eq(clientCollaborationNotifications.id, notificationId));
 }
 
 function escapeHtml(value: string) {

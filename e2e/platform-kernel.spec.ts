@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   expect,
   type APIRequestContext,
@@ -924,6 +926,237 @@ test("duplicate signup stays generic and an expired database session is rejected
   await expireSessions(email);
   await page.goto(protectedUrl);
   await page.waitForURL(/\/sign-in/);
+});
+
+test("client collaboration keeps one commercial truth across internal and external contexts", async ({
+  page,
+  request,
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const ownerEmail = `client-owner-${suffix}@example.test`;
+  const approverEmail = `client-approver-${suffix}@example.test`;
+  const password = "test-password-123";
+
+  await signUpAndVerify(page, request, ownerEmail, password, "/onboarding");
+  await page.getByLabel(/Workspace name/).fill("Client Collaboration Studio");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await page.getByText("New client").click();
+  await page.getByLabel("Client name").fill("Northstar Client");
+  await page.getByRole("button", { name: "Create client" }).click();
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
+  await page.getByText("New project").click();
+  await page.getByLabel("Project key").fill("PORTAL");
+  await page.getByLabel("Project name").fill("Northstar Portal");
+  await page.getByLabel("Summary").fill("Private internal project summary");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await page.getByRole("link", { name: /Northstar Portal/ }).click();
+  await page.getByText("New milestone").click();
+  const milestoneForm = page.locator("form").filter({
+    has: page.getByRole("button", { name: "Create milestone" }),
+  });
+  await milestoneForm.getByLabel("Name").fill("Launch handover");
+  await milestoneForm
+    .getByLabel("Description")
+    .fill("Private milestone implementation detail");
+  await milestoneForm.getByRole("button", { name: "Create milestone" }).click();
+
+  await page.getByRole("link", { name: "Client view" }).click();
+  await page
+    .getByLabel("Client summary")
+    .fill("A focused view of launch delivery and commercial decisions.");
+  await page.getByRole("button", { name: "Save client summary" }).click();
+  await page.getByLabel("Milestone").selectOption({ label: "Launch handover" });
+  await page
+    .getByLabel("Client-safe summary")
+    .fill("Launch readiness, handover, and agreed acceptance.");
+  await page.getByRole("button", { name: "Add to client view" }).click();
+  await page.getByLabel("Email").fill(approverEmail);
+  await page.getByLabel("Role").selectOption("approver");
+  await page.getByRole("button", { name: "Create invitation" }).click();
+  const invitationUrl = await page
+    .getByLabel("Copyable client invitation")
+    .inputValue();
+
+  const clientContext = await browser.newContext();
+  const clientPage = await clientContext.newPage();
+  await clientPage.goto(invitationUrl);
+  await expect(
+    clientPage.getByText(/Sign in or create a verified account/),
+  ).toBeVisible();
+  await clientPage.getByRole("link", { name: "Create account" }).click();
+  await fillSignUp(clientPage, approverEmail, password);
+  const verification = await waitForEmailLink(
+    request,
+    approverEmail,
+    "Verify your ScopeDelta account",
+  );
+  await clientPage.goto(verification);
+  await clientPage.getByRole("link", { name: "Continue" }).click();
+  await clientPage.waitForURL(/\/client\/projects\//);
+  await expect(
+    clientPage.getByRole("heading", { name: "Northstar Portal" }),
+  ).toBeVisible();
+  await expect(
+    clientPage.getByText(
+      "A focused view of launch delivery and commercial decisions.",
+    ),
+  ).toBeVisible();
+  await expect(
+    clientPage.getByText("Launch readiness, handover, and agreed acceptance."),
+  ).toBeVisible();
+  await expect(
+    clientPage.getByText("Private internal project summary"),
+  ).toHaveCount(0);
+  await expect(
+    clientPage.getByText("Private milestone implementation detail"),
+  ).toHaveCount(0);
+
+  await clientPage.getByLabel("Short title").fill("Add enterprise SSO");
+  await clientPage
+    .getByLabel("What would you like to change?")
+    .fill("Please add SAML sign-in for launch.");
+  await clientPage.getByRole("button", { name: "Send request" }).click();
+  await expect(clientPage.getByRole("status")).toContainText("Request sent");
+
+  const seeded = await withTestDatabase(async (pool) => {
+    const requestRow = await pool.query<{ id: string; project_id: string }>(
+      `select id, project_id from commercial_requests
+       where title = $1
+       order by created_at desc limit 1`,
+      ["Add enterprise SSO"],
+    );
+    const ownerRow = await pool.query<{ id: string }>(
+      "select id from users where email = $1",
+      [ownerEmail],
+    );
+    const requestId = requestRow.rows[0]!.id;
+    const projectId = requestRow.rows[0]!.project_id;
+    const ownerId = ownerRow.rows[0]!.id;
+    const decisionId = randomUUID();
+    const impactId = randomUUID();
+    await pool.query(
+      `insert into commercial_decisions
+        (id, project_id, request_id, idempotency_key, disposition, rationale,
+         confirmed_at, created_by_user_id)
+       values ($1, $2, $3, $4, 'paid_change', $5, now(), $6)`,
+      [
+        decisionId,
+        projectId,
+        requestId,
+        randomUUID(),
+        "Private margin rationale",
+        ownerId,
+      ],
+    );
+    await pool.query(
+      `insert into commercial_impact_assessments
+        (id, project_id, request_id, decision_id, idempotency_key, confidence,
+         effort_minutes, schedule_delta_days, monetary_amount, currency_code,
+         notes, created_by_user_id)
+       values ($1, $2, $3, $4, $5, 'confirmed', 2400, 3, 1200, 'USD', $6, $7)`,
+      [
+        impactId,
+        projectId,
+        requestId,
+        decisionId,
+        randomUUID(),
+        "Private estimate note",
+        ownerId,
+      ],
+    );
+    return { requestId, projectId };
+  });
+
+  await page.reload();
+  const packetForm = page.locator("form.publication-form").filter({
+    hasText: "Add enterprise SSO",
+  });
+  await packetForm
+    .getByLabel("Safe request summary")
+    .fill("Add SAML sign-in for launch.");
+  await packetForm
+    .getByLabel("Safe treatment summary")
+    .fill("This is a paid change requiring client approval.");
+  await packetForm.getByLabel("Confirmed values").selectOption({ index: 1 });
+  await packetForm
+    .getByRole("button", { name: "Publish successor packet" })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "packet version was published",
+  );
+
+  await clientPage.reload();
+  await expect(clientPage.getByText("USD 1200.00")).toBeVisible();
+  await expect(clientPage.getByText("Private margin rationale")).toHaveCount(0);
+  await expect(clientPage.getByText("Private estimate note")).toHaveCount(0);
+  await clientPage.getByRole("button", { name: "Approve" }).click();
+  await expect(clientPage.getByRole("status")).toContainText(
+    "response was recorded",
+  );
+
+  await page.reload();
+  await expect(page.getByText("approved", { exact: true })).toBeVisible();
+  const acceptanceForm = page
+    .locator("form.publication-form")
+    .filter({
+      hasText: "Launch handover",
+    })
+    .last();
+  await acceptanceForm
+    .getByLabel("What is being accepted?")
+    .fill("Accept the published launch handover version.");
+  await acceptanceForm
+    .getByRole("button", { name: "Publish successor target" })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "acceptance target was published",
+  );
+
+  await clientPage.reload();
+  await clientPage.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    clientPage.getByRole("heading", { name: "Needs your attention" }),
+  ).toBeVisible();
+  await clientPage.getByRole("button", { name: "Accept this version" }).click();
+  await expect(clientPage.getByRole("status")).toContainText(
+    "response was recorded",
+  );
+  await expectBasicAccessibility(clientPage);
+
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(clientPage);
+    await clientPage.screenshot({
+      path: "docs/screenshots/sc-007-client-mobile.png",
+      fullPage: true,
+    });
+    await clientPage.setViewportSize({ width: 1440, height: 1000 });
+    await clientPage.screenshot({
+      path: "docs/screenshots/sc-007-client-desktop.png",
+      fullPage: true,
+    });
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({
+      path: "docs/screenshots/sc-007-internal-desktop.png",
+      fullPage: true,
+    });
+  }
+
+  await page.getByRole("button", { name: "Revoke" }).click();
+  const revokedApi = await clientPage.request.get(
+    `/api/v1/client/projects/${seeded.projectId}`,
+  );
+  expect(revokedApi.status()).toBe(404);
+  const revokedPage = await clientPage.goto(
+    `/client/projects/${seeded.projectId}`,
+  );
+  expect(revokedPage?.status()).toBe(404);
+  await expect(clientPage.getByText(/could not be found/i)).toBeVisible();
+  await clientContext.close();
 });
 
 async function signUpAndVerify(

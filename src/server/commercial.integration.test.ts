@@ -48,6 +48,7 @@ import {
   createClient,
   createProject,
   createWorkItem,
+  getWorkItem,
   listMyWork,
   listWorkItems,
   updateWorkItem,
@@ -385,7 +386,7 @@ describe("commercial baseline domain boundary", () => {
       owner,
       workspace.id,
       project.id,
-      workInput("Complete legacy dashboard support"),
+      workInput("Complete legacy dashboard support", owner.userId),
     );
     await updateWorkPurpose(owner, workspace.id, project.id, completedWork.id, {
       purpose: "client_delivery",
@@ -399,6 +400,25 @@ describe("commercial baseline domain boundary", () => {
     );
     await updateWorkItem(owner, workspace.id, project.id, completedWork.id, {
       status: "done",
+    });
+    const canceledWork = await createWorkItem(
+      owner,
+      workspace.id,
+      project.id,
+      workInput("Cancel legacy dashboard support", owner.userId),
+    );
+    await updateWorkPurpose(owner, workspace.id, project.id, canceledWork.id, {
+      purpose: "client_delivery",
+    });
+    await createCommercialBasisLink(
+      owner,
+      workspace.id,
+      project.id,
+      canceledWork.id,
+      { scopeItemRevisionId: retiredBasis.revisionId },
+    );
+    await updateWorkItem(owner, workspace.id, project.id, canceledWork.id, {
+      status: "canceled",
     });
 
     const amendmentText =
@@ -529,6 +549,74 @@ describe("commercial baseline domain boundary", () => {
     ).resolves.toMatchObject({
       data: [expect.objectContaining({ id: work.id, staleBasisCount: 1 })],
     });
+    await expect(
+      listWorkItems(owner, workspace.id, project.id, {
+        page: 1,
+        pageSize: 50,
+      }),
+    ).resolves.toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          id: work.id,
+          commercialStaleBasisCount: 1,
+        }),
+        expect.objectContaining({
+          id: completedWork.id,
+          commercialStaleBasisCount: 0,
+        }),
+        expect.objectContaining({
+          id: canceledWork.id,
+          commercialStaleBasisCount: 0,
+        }),
+      ]),
+    });
+    await expect(
+      listMyWork(owner, workspace.id, {
+        page: 1,
+        pageSize: 50,
+      }),
+    ).resolves.toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          id: work.id,
+          commercialStaleBasisCount: 1,
+        }),
+      ]),
+    });
+    await expect(
+      listMyWork(owner, workspace.id, {
+        page: 1,
+        pageSize: 50,
+        status: "done",
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({
+          id: completedWork.id,
+          commercialStaleBasisCount: 0,
+        }),
+      ],
+    });
+    await expect(
+      listMyWork(owner, workspace.id, {
+        page: 1,
+        pageSize: 50,
+        status: "canceled",
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({
+          id: canceledWork.id,
+          commercialStaleBasisCount: 0,
+        }),
+      ],
+    });
+    await expect(
+      getWorkItem(owner, workspace.id, project.id, completedWork.id),
+    ).resolves.toMatchObject({ commercialStaleBasisCount: 0 });
+    await expect(
+      getWorkItem(owner, workspace.id, project.id, canceledWork.id),
+    ).resolves.toMatchObject({ commercialStaleBasisCount: 0 });
     await createCommercialBasisLink(owner, workspace.id, project.id, work.id, {
       scopeItemRevisionId: revised.revisionId,
     });
@@ -569,7 +657,7 @@ describe("commercial baseline domain boundary", () => {
       expect.arrayContaining([
         expect.objectContaining({
           title: "Legacy dashboard support",
-          workLinks: 1,
+          workLinks: 2,
         }),
       ]),
     );

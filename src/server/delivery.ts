@@ -2003,6 +2003,8 @@ async function listCommercialBasisCounts(
     where current_version.project_id = ${commercialBasisLinks.projectId}
       and current_version.state = 'effective'
   )`;
+  const activeWork = sql`${workItems.archivedAt} is null
+    and ${workItems.status} not in ('done', 'canceled')`;
   return getDb()
     .select({
       workItemId: commercialBasisLinks.workItemId,
@@ -2018,9 +2020,17 @@ async function listCommercialBasisCounts(
         where ${commercialBasisLinks.basisType} = 'baseline_scope_item'
           and ${hasEffectiveBaseline}
           and not (${currentBaselineBasis})
+          and ${activeWork}
       )::int`,
     })
     .from(commercialBasisLinks)
+    .innerJoin(
+      workItems,
+      and(
+        eq(workItems.id, commercialBasisLinks.workItemId),
+        eq(workItems.projectId, commercialBasisLinks.projectId),
+      ),
+    )
     .leftJoin(
       commercialScopeItemRevisions,
       and(

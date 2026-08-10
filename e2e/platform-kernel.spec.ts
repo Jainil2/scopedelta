@@ -545,6 +545,9 @@ test("commercial baseline, decision authorization and contradictions stay tracea
     label: "paid change · Add production export",
   });
   await page.getByRole("button", { name: "Link commercial basis" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Commercial provenance linked.",
+  );
   await expect(
     page.getByText("Add production export", { exact: true }),
   ).toBeVisible();
@@ -552,6 +555,10 @@ test("commercial baseline, decision authorization and contradictions stay tracea
     hasText: "Authenticated client portal",
   });
   await baselineLink.getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Commercial basis removed.",
+  );
+  await expect(baselineLink).toBeHidden();
   await expect(page.getByRole("heading", { name: "Linked" })).toBeVisible();
 
   await page.goto(`/app/${workspaceSlug}/projects/SCOPE/commercial`);

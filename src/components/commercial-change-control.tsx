@@ -404,9 +404,6 @@ function RequestCard({
 }: Omit<RequestGroupProps, "title" | "requests" | "empty"> & {
   request: CommercialRequest;
 }) {
-  const priorDecisions = request.decisionHistory.filter(
-    (decision) => decision.id !== request.currentDecision?.id,
-  );
   return (
     <article className="commercial-request-card">
       <div className="section-heading">
@@ -437,6 +434,52 @@ function RequestCard({
         </p>
       ) : null}
 
+      <DecisionLedger
+        request={request}
+        workspaceId={workspaceId}
+        projectId={projectId}
+      />
+      <RequestLinkedWork
+        request={request}
+        workspaceSlug={workspaceSlug}
+        projectKey={projectKey}
+      />
+      <RequestImpactHistory impacts={request.impacts} />
+      <RequestStateActions
+        request={request}
+        pending={pending}
+        updateState={updateState}
+      />
+      <RequestDecisionEditor
+        request={request}
+        pending={pending}
+        sources={sources}
+        scopeItems={scopeItems}
+        confirmDecision={confirmDecision}
+      />
+      <RequestImpactEditor
+        request={request}
+        pending={pending}
+        recordImpact={recordImpact}
+      />
+    </article>
+  );
+}
+
+function DecisionLedger({
+  request,
+  workspaceId,
+  projectId,
+}: Readonly<{
+  request: CommercialRequest;
+  workspaceId: string;
+  projectId: string;
+}>) {
+  const priorDecisions = request.decisionHistory.filter(
+    (decision) => decision.id !== request.currentDecision?.id,
+  );
+  return (
+    <>
       {request.currentDecision ? (
         <div className="commercial-decision-summary">
           <strong>
@@ -460,7 +503,6 @@ function RequestCard({
           />
         </div>
       ) : null}
-
       {priorDecisions.length ? (
         <details className="commercial-decision-history">
           <summary>Prior decisions ({priorDecisions.length})</summary>
@@ -479,144 +521,196 @@ function RequestCard({
           ))}
         </details>
       ) : null}
+    </>
+  );
+}
 
-      {request.linkedWorkItems.length ? (
-        <div className="commercial-linked-work">
-          <strong>Affected active work</strong>
-          {request.linkedWorkItems.map((work) => (
-            <Link
-              key={work.id}
-              href={`/app/${workspaceSlug}/projects/${projectKey}/work/${work.id}`}
-            >
-              {projectKey}-{work.number} · {work.title} (
-              {work.status.replaceAll("_", " ")})
-            </Link>
-          ))}
-        </div>
-      ) : null}
+function RequestLinkedWork({
+  request,
+  workspaceSlug,
+  projectKey,
+}: Readonly<{
+  request: CommercialRequest;
+  workspaceSlug: string;
+  projectKey: string;
+}>) {
+  if (!request.linkedWorkItems.length) return null;
+  return (
+    <div className="commercial-linked-work">
+      <strong>Affected active work</strong>
+      {request.linkedWorkItems.map((work) => (
+        <Link
+          key={work.id}
+          href={`/app/${workspaceSlug}/projects/${projectKey}/work/${work.id}`}
+        >
+          {projectKey}-{work.number} · {work.title} (
+          {work.status.replaceAll("_", " ")})
+        </Link>
+      ))}
+    </div>
+  );
+}
 
-      {request.impacts.length ? (
-        <div className="commercial-impact-list">
-          <strong>Impact history</strong>
-          {request.impacts.map((impact) => (
-            <span key={impact.id}>{formatImpact(impact)}</span>
-          ))}
-        </div>
-      ) : null}
+function RequestImpactHistory({ impacts }: Readonly<{ impacts: Impact[] }>) {
+  if (!impacts.length) return null;
+  return (
+    <div className="commercial-impact-list">
+      <strong>Impact history</strong>
+      {impacts.map((impact) => (
+        <span key={impact.id}>{formatImpact(impact)}</span>
+      ))}
+    </div>
+  );
+}
 
-      <div className="commercial-request-actions">
-        {!request.currentDecision && request.state !== "withdrawn" ? (
-          <>
-            <button
-              type="button"
-              disabled={pending || request.state === "open"}
-              onClick={() => updateState(request.id, "open")}
-            >
-              Mark open
-            </button>
-            <button
-              type="button"
-              disabled={pending || request.state === "needs_clarification"}
-              onClick={() => updateState(request.id, "needs_clarification")}
-            >
-              Needs clarification
-            </button>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => updateState(request.id, "withdrawn")}
-            >
-              Withdraw
-            </button>
-          </>
-        ) : null}
-        {request.state === "withdrawn" ? (
+function RequestStateActions({
+  request,
+  pending,
+  updateState,
+}: Readonly<{
+  request: CommercialRequest;
+  pending: boolean;
+  updateState: RequestGroupProps["updateState"];
+}>) {
+  return (
+    <div className="commercial-request-actions">
+      {!request.currentDecision && request.state !== "withdrawn" ? (
+        <>
+          <button
+            type="button"
+            disabled={pending || request.state === "open"}
+            onClick={() => updateState(request.id, "open")}
+          >
+            Mark open
+          </button>
+          <button
+            type="button"
+            disabled={pending || request.state === "needs_clarification"}
+            onClick={() => updateState(request.id, "needs_clarification")}
+          >
+            Needs clarification
+          </button>
           <button
             type="button"
             disabled={pending}
-            onClick={() => updateState(request.id, "open")}
+            onClick={() => updateState(request.id, "withdrawn")}
           >
-            Reopen request
+            Withdraw
           </button>
-        ) : null}
-      </div>
-
-      {request.state !== "withdrawn" ? (
-        <details>
-          <summary>
-            {request.currentDecision
-              ? "Correct/supersede decision"
-              : "Confirm decision"}
-          </summary>
-          <form
-            key={request.currentDecision?.id ?? "new-decision"}
-            className="commercial-change-form"
-            onSubmit={(event) => confirmDecision(event, request)}
-          >
-            <label>
-              Disposition
-              <select
-                name="disposition"
-                defaultValue={request.currentDecision?.disposition ?? "covered"}
-              >
-                <option value="covered">Covered</option>
-                <option value="absorbed">Absorbed</option>
-                <option value="swap">Scope swap</option>
-                <option value="paid_change">Paid change</option>
-                <option value="deferred">Deferred</option>
-                <option value="rejected">Rejected</option>
-              </select>
-            </label>
-            <label>
-              Covered basis (only for covered)
-              <select name="coverageBasis" defaultValue="">
-                <option value="">Not specified</option>
-                <option value="baseline">Baseline</option>
-                <option value="defect_or_warranty">Defect or warranty</option>
-                <option value="revision_allowance">Revision allowance</option>
-                <option value="other_existing_obligation">
-                  Other obligation
-                </option>
-              </select>
-            </label>
-            <label className="field-wide">
-              Decision rationale
-              <textarea name="rationale" maxLength={10_000} rows={3} />
-            </label>
-            <ScopeSelection
-              name="affectedScopeItemIds"
-              label="Affected baseline scope"
-              scopeItems={scopeItems}
-            />
-            <ScopeSelection
-              name="swapOffsetScopeItemIds"
-              label="Scope reduced/removed by a swap"
-              scopeItems={scopeItems}
-            />
-            <EvidenceFields prefix="decision" sources={sources} />
-            <ImpactFields prefix="decision" />
-            <button type="submit" disabled={pending}>
-              {request.currentDecision
-                ? "Supersede decision"
-                : "Confirm decision"}
-            </button>
-          </form>
-        </details>
+        </>
       ) : null}
-
-      <details>
-        <summary>Record a later impact assessment</summary>
-        <form
-          className="commercial-change-form"
-          onSubmit={(event) => recordImpact(event, request)}
+      {request.state === "withdrawn" ? (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => updateState(request.id, "open")}
         >
-          <ImpactFields prefix="followup" />
-          <button type="submit" disabled={pending}>
-            Record impact
-          </button>
-        </form>
-      </details>
-    </article>
+          Reopen request
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function RequestDecisionEditor({
+  request,
+  pending,
+  sources,
+  scopeItems,
+  confirmDecision,
+}: Readonly<{
+  request: CommercialRequest;
+  pending: boolean;
+  sources: Source[];
+  scopeItems: ScopeItem[];
+  confirmDecision: RequestGroupProps["confirmDecision"];
+}>) {
+  if (request.state === "withdrawn") return null;
+  const buttonLabel = request.currentDecision
+    ? "Supersede decision"
+    : "Confirm decision";
+  return (
+    <details>
+      <summary>
+        {request.currentDecision
+          ? "Correct/supersede decision"
+          : "Confirm decision"}
+      </summary>
+      <form
+        key={request.currentDecision?.id ?? "new-decision"}
+        className="commercial-change-form"
+        onSubmit={(event) => confirmDecision(event, request)}
+      >
+        <label>
+          Disposition
+          <select
+            name="disposition"
+            defaultValue={request.currentDecision?.disposition ?? "covered"}
+          >
+            <option value="covered">Covered</option>
+            <option value="absorbed">Absorbed</option>
+            <option value="swap">Scope swap</option>
+            <option value="paid_change">Paid change</option>
+            <option value="deferred">Deferred</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </label>
+        <label>
+          Covered basis (only for covered)
+          <select name="coverageBasis" defaultValue="">
+            <option value="">Not specified</option>
+            <option value="baseline">Baseline</option>
+            <option value="defect_or_warranty">Defect or warranty</option>
+            <option value="revision_allowance">Revision allowance</option>
+            <option value="other_existing_obligation">Other obligation</option>
+          </select>
+        </label>
+        <label className="field-wide">
+          Decision rationale
+          <textarea name="rationale" maxLength={10_000} rows={3} />
+        </label>
+        <ScopeSelection
+          name="affectedScopeItemIds"
+          label="Affected baseline scope"
+          scopeItems={scopeItems}
+        />
+        <ScopeSelection
+          name="swapOffsetScopeItemIds"
+          label="Scope reduced/removed by a swap"
+          scopeItems={scopeItems}
+        />
+        <EvidenceFields prefix="decision" sources={sources} />
+        <ImpactFields prefix="decision" />
+        <button type="submit" disabled={pending}>
+          {buttonLabel}
+        </button>
+      </form>
+    </details>
+  );
+}
+
+function RequestImpactEditor({
+  request,
+  pending,
+  recordImpact,
+}: Readonly<{
+  request: CommercialRequest;
+  pending: boolean;
+  recordImpact: RequestGroupProps["recordImpact"];
+}>) {
+  return (
+    <details>
+      <summary>Record a later impact assessment</summary>
+      <form
+        className="commercial-change-form"
+        onSubmit={(event) => recordImpact(event, request)}
+      >
+        <ImpactFields prefix="followup" />
+        <button type="submit" disabled={pending}>
+          Record impact
+        </button>
+      </form>
+    </details>
   );
 }
 

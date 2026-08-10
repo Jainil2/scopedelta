@@ -376,36 +376,7 @@ export async function createCommercialDecision(
       )
       .limit(1);
     if (duplicate[0]) return duplicate[0].id;
-    if (request[0].state === "withdrawn") {
-      throw conflict(
-        "request_withdrawn",
-        "Reopen this request before confirming a decision.",
-      );
-    }
-    if (input.disposition !== "covered" && input.coverageBasis) {
-      throw conflict(
-        "coverage_basis_not_allowed",
-        "Only covered decisions can record an existing-obligation basis.",
-      );
-    }
-    if (
-      input.disposition === "swap" &&
-      input.swapOffsetScopeItemIds.length === 0
-    ) {
-      throw conflict(
-        "swap_offset_required",
-        "A scope swap requires at least one active offsetting scope item.",
-      );
-    }
-    if (
-      input.disposition !== "swap" &&
-      input.swapOffsetScopeItemIds.length > 0
-    ) {
-      throw conflict(
-        "swap_offset_not_allowed",
-        "Only scope-swap decisions can identify offsetting scope.",
-      );
-    }
+    validateDecisionInput(request[0].state, input);
     await assertDecisionCapacity(transaction, requestId);
     const current = await transaction
       .select({ id: commercialDecisions.id })
@@ -419,149 +390,278 @@ export async function createCommercialDecision(
       )
       .for("update")
       .limit(1);
-    if (current[0]?.id !== (input.supersedesDecisionId ?? undefined)) {
-      throw conflict(
-        "decision_supersession_conflict",
-        current[0]
-          ? "Supersede the current effective decision explicitly."
-          : "There is no current decision to supersede.",
-      );
-    }
-    const affectedScopeItemIds = [...new Set(input.affectedScopeItemIds)];
-    const swapOffsetScopeItemIds = [...new Set(input.swapOffsetScopeItemIds)];
-    if (
-      swapOffsetScopeItemIds.some((id) => affectedScopeItemIds.includes(id))
-    ) {
-      throw conflict(
-        "swap_scope_overlap",
-        "Accepted and offsetting scope items must be different.",
-      );
-    }
-    await assertScopeItems(transaction, projectId, affectedScopeItemIds, false);
-    await assertScopeItems(
-      transaction,
-      projectId,
-      swapOffsetScopeItemIds,
-      true,
+    const currentDecisionId = current[0]?.id ?? null;
+    assertDecisionSupersession(
+      currentDecisionId,
+      input.supersedesDecisionId ?? null,
     );
-    const now = new Date();
-    if (current[0]) {
-      await transaction
-        .update(commercialDecisions)
-        .set({ supersededAt: now })
-        .where(eq(commercialDecisions.id, current[0].id));
-    }
-    const id = randomUUID();
-    await transaction.insert(commercialDecisions).values({
-      id,
-      projectId,
-      requestId,
-      idempotencyKey: input.idempotencyKey,
-      disposition: input.disposition,
-      coverageBasis: input.coverageBasis,
-      rationale: input.rationale,
-      supersedesDecisionId: current[0]?.id ?? null,
-      confirmedAt: now,
-      createdByUserId: actor.userId,
-    });
-    const scopeRows = [
-      ...affectedScopeItemIds.map((scopeItemId) => ({
-        projectId,
-        decisionId: id,
-        scopeItemId,
-        role: "affected" as const,
-      })),
-      ...swapOffsetScopeItemIds.map((scopeItemId) => ({
-        projectId,
-        decisionId: id,
-        scopeItemId,
-        role: "swap_offset" as const,
-      })),
-    ];
-    if (scopeRows.length) {
-      await transaction.insert(commercialDecisionScopeItems).values(scopeRows);
-    }
-    const anchorIds = await createEvidenceAnchors(
+    const scope = await validateDecisionScope(transaction, projectId, input);
+    const { id, confirmedAt } = await insertDecisionRecord(
       transaction,
       actor.userId,
       projectId,
+      requestId,
+      currentDecisionId,
+      input,
+    );
+    const anchorIds = await insertDecisionEvidence(
+      transaction,
+      actor.userId,
+      projectId,
+      id,
+      scope,
       input.anchors,
     );
-    if (anchorIds.length) {
-      await transaction.insert(commercialDecisionAnchors).values(
-        anchorIds.map((evidenceAnchorId) => ({
-          projectId,
-          decisionId: id,
-          evidenceAnchorId,
-        })),
-      );
-    }
-    const previousImpact = input.impact
-      ? await transaction
-          .select({ id: commercialImpactAssessments.id })
-          .from(commercialImpactAssessments)
-          .where(
-            and(
-              eq(commercialImpactAssessments.requestId, requestId),
-              eq(commercialImpactAssessments.projectId, projectId),
-            ),
-          )
-          .orderBy(
-            desc(commercialImpactAssessments.createdAt),
-            desc(commercialImpactAssessments.id),
-          )
-          .for("update")
-          .limit(1)
-      : [];
-    const impactId = input.impact
-      ? await insertImpactAssessment(
-          transaction,
-          actor.userId,
-          projectId,
-          requestId,
-          id,
-          input.impact,
-          previousImpact[0]?.id ?? null,
-        )
-      : null;
-    await transaction
-      .update(commercialRequests)
-      .set({ state: "resolved", updatedAt: now })
-      .where(eq(commercialRequests.id, requestId));
-    await insertAudit(transaction, actor, workspaceId, {
-      eventType: "commercial.decision.confirmed.v1",
-      targetType: "commercial_decision",
-      targetId: id,
-      metadata: {
-        projectId,
-        requestId,
-        disposition: input.disposition,
-        coverageBasis: input.coverageBasis ?? "",
-        supersedesDecisionId: current[0]?.id ?? "",
-        affectedScopeItemIds,
-        swapOffsetScopeItemIds,
-        anchorIds,
-        ...(impactId ? { impactAssessmentId: impactId } : {}),
-        ...(previousImpact[0]
-          ? { supersedesImpactAssessmentId: previousImpact[0].id }
-          : {}),
-      },
-    });
-    if (request[0].state !== "resolved") {
-      await insertAudit(transaction, actor, workspaceId, {
-        eventType: "commercial.request.state.updated.v1",
-        targetType: "commercial_request",
-        targetId: requestId,
-        metadata: {
-          projectId,
-          previousState: request[0].state,
-          state: "resolved",
-        },
-      });
-    }
+    const impact = await insertDecisionImpact(
+      transaction,
+      actor.userId,
+      projectId,
+      requestId,
+      id,
+      input.impact ?? null,
+    );
+    await finalizeDecision(
+      transaction,
+      actor,
+      workspaceId,
+      projectId,
+      requestId,
+      request[0].state,
+      currentDecisionId,
+      id,
+      confirmedAt,
+      input,
+      scope,
+      anchorIds,
+      impact,
+    );
     return id;
   });
   return getCommercialRequest(actor, workspaceId, projectId, requestId);
+}
+
+type RequestState = typeof commercialRequests.$inferSelect.state;
+type DecisionScopeIds = {
+  affectedScopeItemIds: string[];
+  swapOffsetScopeItemIds: string[];
+};
+
+function validateDecisionInput(
+  requestState: RequestState,
+  input: CreateCommercialDecisionInput,
+) {
+  if (requestState === "withdrawn") {
+    throw conflict(
+      "request_withdrawn",
+      "Reopen this request before confirming a decision.",
+    );
+  }
+  if (input.disposition !== "covered" && input.coverageBasis) {
+    throw conflict(
+      "coverage_basis_not_allowed",
+      "Only covered decisions can record an existing-obligation basis.",
+    );
+  }
+  if (input.disposition === "swap" && !input.swapOffsetScopeItemIds.length) {
+    throw conflict(
+      "swap_offset_required",
+      "A scope swap requires at least one active offsetting scope item.",
+    );
+  }
+  if (input.disposition !== "swap" && input.swapOffsetScopeItemIds.length) {
+    throw conflict(
+      "swap_offset_not_allowed",
+      "Only scope-swap decisions can identify offsetting scope.",
+    );
+  }
+}
+
+function assertDecisionSupersession(
+  currentDecisionId: string | null,
+  supersedesDecisionId: string | null,
+) {
+  if (currentDecisionId === supersedesDecisionId) return;
+  throw conflict(
+    "decision_supersession_conflict",
+    currentDecisionId
+      ? "Supersede the current effective decision explicitly."
+      : "There is no current decision to supersede.",
+  );
+}
+
+async function validateDecisionScope(
+  transaction: Transaction,
+  projectId: string,
+  input: CreateCommercialDecisionInput,
+): Promise<DecisionScopeIds> {
+  const affectedScopeItemIds = [...new Set(input.affectedScopeItemIds)];
+  const swapOffsetScopeItemIds = [...new Set(input.swapOffsetScopeItemIds)];
+  if (swapOffsetScopeItemIds.some((id) => affectedScopeItemIds.includes(id))) {
+    throw conflict(
+      "swap_scope_overlap",
+      "Accepted and offsetting scope items must be different.",
+    );
+  }
+  await assertScopeItems(transaction, projectId, affectedScopeItemIds, false);
+  await assertScopeItems(transaction, projectId, swapOffsetScopeItemIds, true);
+  return { affectedScopeItemIds, swapOffsetScopeItemIds };
+}
+
+async function insertDecisionRecord(
+  transaction: Transaction,
+  actorUserId: string,
+  projectId: string,
+  requestId: string,
+  currentDecisionId: string | null,
+  input: CreateCommercialDecisionInput,
+) {
+  const confirmedAt = new Date();
+  if (currentDecisionId) {
+    await transaction
+      .update(commercialDecisions)
+      .set({ supersededAt: confirmedAt })
+      .where(eq(commercialDecisions.id, currentDecisionId));
+  }
+  const id = randomUUID();
+  await transaction.insert(commercialDecisions).values({
+    id,
+    projectId,
+    requestId,
+    idempotencyKey: input.idempotencyKey,
+    disposition: input.disposition,
+    coverageBasis: input.coverageBasis,
+    rationale: input.rationale,
+    supersedesDecisionId: currentDecisionId,
+    confirmedAt,
+    createdByUserId: actorUserId,
+  });
+  return { id, confirmedAt };
+}
+
+async function insertDecisionEvidence(
+  transaction: Transaction,
+  actorUserId: string,
+  projectId: string,
+  decisionId: string,
+  scope: DecisionScopeIds,
+  anchors: EvidenceAnchorInput[],
+) {
+  const scopeRows = [
+    ...scope.affectedScopeItemIds.map((scopeItemId) => ({
+      projectId,
+      decisionId,
+      scopeItemId,
+      role: "affected" as const,
+    })),
+    ...scope.swapOffsetScopeItemIds.map((scopeItemId) => ({
+      projectId,
+      decisionId,
+      scopeItemId,
+      role: "swap_offset" as const,
+    })),
+  ];
+  if (scopeRows.length)
+    await transaction.insert(commercialDecisionScopeItems).values(scopeRows);
+  const anchorIds = await createEvidenceAnchors(
+    transaction,
+    actorUserId,
+    projectId,
+    anchors,
+  );
+  if (anchorIds.length) {
+    await transaction.insert(commercialDecisionAnchors).values(
+      anchorIds.map((evidenceAnchorId) => ({
+        projectId,
+        decisionId,
+        evidenceAnchorId,
+      })),
+    );
+  }
+  return anchorIds;
+}
+
+async function insertDecisionImpact(
+  transaction: Transaction,
+  actorUserId: string,
+  projectId: string,
+  requestId: string,
+  decisionId: string,
+  impact: ImpactInput | null,
+) {
+  if (!impact) return { impactId: null, previousImpactId: null };
+  const previous = await transaction
+    .select({ id: commercialImpactAssessments.id })
+    .from(commercialImpactAssessments)
+    .where(
+      and(
+        eq(commercialImpactAssessments.requestId, requestId),
+        eq(commercialImpactAssessments.projectId, projectId),
+      ),
+    )
+    .orderBy(
+      desc(commercialImpactAssessments.createdAt),
+      desc(commercialImpactAssessments.id),
+    )
+    .for("update")
+    .limit(1);
+  const previousImpactId = previous[0]?.id ?? null;
+  const impactId = await insertImpactAssessment(
+    transaction,
+    actorUserId,
+    projectId,
+    requestId,
+    decisionId,
+    impact,
+    previousImpactId,
+  );
+  return { impactId, previousImpactId };
+}
+
+async function finalizeDecision(
+  transaction: Transaction,
+  actor: UserActor,
+  workspaceId: string,
+  projectId: string,
+  requestId: string,
+  previousState: RequestState,
+  currentDecisionId: string | null,
+  decisionId: string,
+  confirmedAt: Date,
+  input: CreateCommercialDecisionInput,
+  scope: DecisionScopeIds,
+  anchorIds: string[],
+  impact: { impactId: string | null; previousImpactId: string | null },
+) {
+  await transaction
+    .update(commercialRequests)
+    .set({ state: "resolved", updatedAt: confirmedAt })
+    .where(eq(commercialRequests.id, requestId));
+  await insertAudit(transaction, actor, workspaceId, {
+    eventType: "commercial.decision.confirmed.v1",
+    targetType: "commercial_decision",
+    targetId: decisionId,
+    metadata: {
+      projectId,
+      requestId,
+      disposition: input.disposition,
+      coverageBasis: input.coverageBasis ?? "",
+      supersedesDecisionId: currentDecisionId ?? "",
+      ...scope,
+      anchorIds,
+      ...(impact.impactId ? { impactAssessmentId: impact.impactId } : {}),
+      ...(impact.previousImpactId
+        ? { supersedesImpactAssessmentId: impact.previousImpactId }
+        : {}),
+    },
+  });
+  if (previousState !== "resolved") {
+    await insertAudit(transaction, actor, workspaceId, {
+      eventType: "commercial.request.state.updated.v1",
+      targetType: "commercial_request",
+      targetId: requestId,
+      metadata: { projectId, previousState, state: "resolved" },
+    });
+  }
 }
 
 export async function createCommercialImpactAssessment(

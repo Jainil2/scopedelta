@@ -4,6 +4,7 @@ import { CommercialChangeControl } from "@/components/commercial-change-control"
 import { CommercialWorkspace } from "@/components/commercial-workspace";
 import {
   commercialDriftFiltersSchema,
+  commercialHistoryFiltersSchema,
   commercialRequestFiltersSchema,
 } from "@/lib/commercial-validation";
 import { parseInput } from "@/lib/platform-validation";
@@ -13,6 +14,7 @@ import {
   listCommercialOverview,
 } from "@/server/commercial";
 import { listCommercialRequests } from "@/server/commercial-change-control";
+import { listCommercialHistory } from "@/server/commercial-amendments";
 import { getProjectByKey } from "@/server/delivery";
 import { getWorkspaceBySlug } from "@/server/workspaces";
 
@@ -34,7 +36,7 @@ export default async function CommercialPage({
   );
   return (
     <CommercialWorkspace
-      key={`${data.drift.page.number}:${data.requests.page.number}`}
+      key={`${data.drift.page.number}:${data.requests.page.number}:${data.history.page.number}`}
       workspaceId={data.workspace.id}
       workspaceSlug={workspaceSlug}
       project={data.project}
@@ -44,10 +46,24 @@ export default async function CommercialPage({
         commerciallyUnlinked: data.unlinked.page.total,
         needsClassification: data.unclassified.page.total,
         linked: data.linked.page.total,
+        staleBasis: data.stale.page.total,
         supportInternal: data.support.page.total,
       }}
+      history={data.history}
+      decisionOptions={data.requests.data.flatMap((request) =>
+        request.currentDecision
+          ? [
+              {
+                id: request.currentDecision.id,
+                requestTitle: request.title,
+                disposition: request.currentDecision.disposition,
+              },
+            ]
+          : [],
+      )}
       changeControl={
         <CommercialChangeControl
+          key="commercial-change-control"
           workspaceId={data.workspace.id}
           workspaceSlug={workspaceSlug}
           projectId={data.project.id}
@@ -80,38 +96,60 @@ async function loadCommercial(
           : undefined,
       pageSize: 25,
     });
+    const historyFilters = parseInput(commercialHistoryFiltersSchema, {
+      page:
+        typeof searchParams.historyPage === "string"
+          ? searchParams.historyPage
+          : undefined,
+      pageSize: 10,
+    });
     const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
     const project = await getProjectByKey(
       actor,
       workspace.id,
       projectKey.toUpperCase(),
     );
-    const [overview, drift, unlinked, unclassified, linked, support, requests] =
-      await Promise.all([
-        listCommercialOverview(actor, workspace.id, project.id),
-        listCommercialDrift(actor, workspace.id, project.id, filters),
-        listCommercialDrift(actor, workspace.id, project.id, {
-          page: 1,
-          pageSize: 1,
-          state: "commercially_unlinked",
-        }),
-        listCommercialDrift(actor, workspace.id, project.id, {
-          page: 1,
-          pageSize: 1,
-          state: "needs_classification",
-        }),
-        listCommercialDrift(actor, workspace.id, project.id, {
-          page: 1,
-          pageSize: 1,
-          state: "linked",
-        }),
-        listCommercialDrift(actor, workspace.id, project.id, {
-          page: 1,
-          pageSize: 1,
-          state: "support_internal",
-        }),
-        listCommercialRequests(actor, workspace.id, project.id, requestFilters),
-      ]);
+    const [
+      overview,
+      drift,
+      unlinked,
+      unclassified,
+      linked,
+      stale,
+      support,
+      requests,
+      history,
+    ] = await Promise.all([
+      listCommercialOverview(actor, workspace.id, project.id),
+      listCommercialDrift(actor, workspace.id, project.id, filters),
+      listCommercialDrift(actor, workspace.id, project.id, {
+        page: 1,
+        pageSize: 1,
+        state: "commercially_unlinked",
+      }),
+      listCommercialDrift(actor, workspace.id, project.id, {
+        page: 1,
+        pageSize: 1,
+        state: "needs_classification",
+      }),
+      listCommercialDrift(actor, workspace.id, project.id, {
+        page: 1,
+        pageSize: 1,
+        state: "linked",
+      }),
+      listCommercialDrift(actor, workspace.id, project.id, {
+        page: 1,
+        pageSize: 1,
+        state: "stale_basis",
+      }),
+      listCommercialDrift(actor, workspace.id, project.id, {
+        page: 1,
+        pageSize: 1,
+        state: "support_internal",
+      }),
+      listCommercialRequests(actor, workspace.id, project.id, requestFilters),
+      listCommercialHistory(actor, workspace.id, project.id, historyFilters),
+    ]);
     return {
       workspace,
       project,
@@ -120,8 +158,10 @@ async function loadCommercial(
       unlinked,
       unclassified,
       linked,
+      stale,
       support,
       requests,
+      history,
     };
   } catch {
     notFound();

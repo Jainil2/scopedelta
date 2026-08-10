@@ -199,6 +199,16 @@ export const commercialScopeKind = pgEnum("commercial_scope_kind", [
   "constraint",
 ]);
 
+export const commercialBaselineVersionState = pgEnum(
+  "commercial_baseline_version_state",
+  ["draft", "effective", "superseded"],
+);
+
+export const commercialScopeLineageKind = pgEnum(
+  "commercial_scope_lineage_kind",
+  ["carried_forward", "revised", "added", "retired"],
+);
+
 export const commercialRequestState = pgEnum("commercial_request_state", [
   "open",
   "needs_clarification",
@@ -702,7 +712,15 @@ export const commercialBaselineVersions = pgTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     baselineId: uuid("baseline_id").notNull(),
     sourceId: uuid("source_id").notNull(),
-    versionNumber: integer("version_number").notNull(),
+    previousVersionId: uuid("previous_version_id"),
+    versionNumber: integer("version_number"),
+    label: text("label").notNull(),
+    state: commercialBaselineVersionState("state").default("draft").notNull(),
+    effectiveAt: timestamp("effective_at", { withTimezone: true }),
+    effectiveByUserId: uuid("effective_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -728,14 +746,69 @@ export const commercialBaselineVersions = pgTable(
       ],
       name: "commercial_baseline_versions_source_project_fk",
     }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.previousVersionId, table.projectId],
+      foreignColumns: [table.id, table.projectId],
+      name: "commercial_baseline_versions_previous_project_fk",
+    }).onDelete("restrict"),
     uniqueIndex("commercial_baseline_versions_number_uidx").on(
       table.baselineId,
       table.versionNumber,
     ),
+    uniqueIndex("commercial_baseline_versions_effective_uidx")
+      .on(table.baselineId)
+      .where(sql`${table.state} = 'effective'`),
+    uniqueIndex("commercial_baseline_versions_draft_uidx")
+      .on(table.baselineId)
+      .where(sql`${table.state} = 'draft'`),
+    index("commercial_baseline_versions_project_state_idx").on(
+      table.projectId,
+      table.state,
+      table.createdAt,
+      table.id,
+    ),
     check(
       "commercial_baseline_versions_number_positive",
-      sql`${table.versionNumber} > 0`,
+      sql`${table.versionNumber} is null or ${table.versionNumber} > 0`,
     ),
+    check(
+      "commercial_baseline_versions_label_length",
+      sql`char_length(btrim(${table.label})) between 1 and 160`,
+    ),
+    check(
+      "commercial_baseline_versions_lifecycle",
+      sql`(${table.state} = 'draft' and ${table.versionNumber} is null and ${table.effectiveAt} is null and ${table.effectiveByUserId} is null and ${table.supersededAt} is null) or (${table.state} = 'effective' and ${table.versionNumber} is not null and ${table.effectiveAt} is not null and ${table.effectiveByUserId} is not null and ${table.supersededAt} is null) or (${table.state} = 'superseded' and ${table.versionNumber} is not null and ${table.effectiveAt} is not null and ${table.effectiveByUserId} is not null and ${table.supersededAt} is not null and ${table.supersededAt} >= ${table.effectiveAt})`,
+    ),
+  ],
+);
+
+export const commercialBaselineVersionSources = pgTable(
+  "commercial_baseline_version_sources",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    baselineVersionId: uuid("baseline_version_id").notNull(),
+    sourceId: uuid("source_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.baselineVersionId, table.sourceId] }),
+    foreignKey({
+      columns: [table.baselineVersionId, table.projectId],
+      foreignColumns: [
+        commercialBaselineVersions.id,
+        commercialBaselineVersions.projectId,
+      ],
+      name: "commercial_baseline_version_sources_version_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.sourceId, table.projectId],
+      foreignColumns: [
+        commercialEvidenceSources.id,
+        commercialEvidenceSources.projectId,
+      ],
+      name: "commercial_baseline_version_sources_source_project_fk",
+    }).onDelete("restrict"),
   ],
 );
 
@@ -747,6 +820,7 @@ export const commercialScopeItems = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     baselineVersionId: uuid("baseline_version_id").notNull(),
+    materialBasisScopeItemId: uuid("material_basis_scope_item_id").notNull(),
     idempotencyKey: uuid("idempotency_key").notNull(),
     createdByUserId: uuid("created_by_user_id")
       .notNull()
@@ -759,6 +833,11 @@ export const commercialScopeItems = pgTable(
       table.id,
       table.projectId,
     ),
+    unique("commercial_scope_items_id_version_project_unique").on(
+      table.id,
+      table.baselineVersionId,
+      table.projectId,
+    ),
     foreignKey({
       columns: [table.baselineVersionId, table.projectId],
       foreignColumns: [
@@ -766,6 +845,11 @@ export const commercialScopeItems = pgTable(
         commercialBaselineVersions.projectId,
       ],
       name: "commercial_scope_items_version_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.materialBasisScopeItemId, table.projectId],
+      foreignColumns: [table.id, table.projectId],
+      name: "commercial_scope_items_material_basis_project_fk",
     }).onDelete("restrict"),
     uniqueIndex("commercial_scope_items_project_idempotency_uidx").on(
       table.projectId,
@@ -828,6 +912,75 @@ export const commercialScopeItemRevisions = pgTable(
     check(
       "commercial_scope_revisions_details_length",
       sql`${table.details} is null or char_length(${table.details}) <= 10000`,
+    ),
+  ],
+);
+
+export const commercialScopeItemLineages = pgTable(
+  "commercial_scope_item_lineages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    baselineVersionId: uuid("baseline_version_id").notNull(),
+    previousScopeItemId: uuid("previous_scope_item_id"),
+    currentScopeItemId: uuid("current_scope_item_id").notNull(),
+    kind: commercialScopeLineageKind("kind").notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("commercial_scope_lineages_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.baselineVersionId, table.projectId],
+      foreignColumns: [
+        commercialBaselineVersions.id,
+        commercialBaselineVersions.projectId,
+      ],
+      name: "commercial_scope_lineages_version_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.previousScopeItemId, table.projectId],
+      foreignColumns: [commercialScopeItems.id, commercialScopeItems.projectId],
+      name: "commercial_scope_lineages_previous_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [
+        table.currentScopeItemId,
+        table.baselineVersionId,
+        table.projectId,
+      ],
+      foreignColumns: [
+        commercialScopeItems.id,
+        commercialScopeItems.baselineVersionId,
+        commercialScopeItems.projectId,
+      ],
+      name: "commercial_scope_lineages_current_version_project_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("commercial_scope_lineages_version_previous_uidx").on(
+      table.baselineVersionId,
+      table.previousScopeItemId,
+    ),
+    uniqueIndex("commercial_scope_lineages_version_current_uidx").on(
+      table.baselineVersionId,
+      table.currentScopeItemId,
+    ),
+    index("commercial_scope_lineages_project_kind_idx").on(
+      table.projectId,
+      table.kind,
+      table.baselineVersionId,
+    ),
+    check(
+      "commercial_scope_lineages_shape",
+      sql`(${table.kind} = 'added' and ${table.previousScopeItemId} is null) or (${table.kind} <> 'added' and ${table.previousScopeItemId} is not null)`,
     ),
   ],
 );
@@ -1126,6 +1279,37 @@ export const commercialDecisionScopeItems = pgTable(
       foreignColumns: [commercialScopeItems.id, commercialScopeItems.projectId],
       name: "commercial_decision_scope_items_scope_project_fk",
     }).onDelete("restrict"),
+  ],
+);
+
+export const commercialBaselineVersionDecisions = pgTable(
+  "commercial_baseline_version_decisions",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    baselineVersionId: uuid("baseline_version_id").notNull(),
+    decisionId: uuid("decision_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.baselineVersionId, table.decisionId] }),
+    foreignKey({
+      columns: [table.baselineVersionId, table.projectId],
+      foreignColumns: [
+        commercialBaselineVersions.id,
+        commercialBaselineVersions.projectId,
+      ],
+      name: "commercial_baseline_version_decisions_version_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.decisionId, table.projectId],
+      foreignColumns: [commercialDecisions.id, commercialDecisions.projectId],
+      name: "commercial_baseline_version_decisions_decision_project_fk",
+    }).onDelete("restrict"),
+    index("commercial_baseline_version_decisions_project_decision_idx").on(
+      table.projectId,
+      table.decisionId,
+    ),
   ],
 );
 
@@ -1659,6 +1843,10 @@ export type CommercialParseState =
   (typeof commercialParseState.enumValues)[number];
 export type CommercialScopeKind =
   (typeof commercialScopeKind.enumValues)[number];
+export type CommercialBaselineVersionState =
+  (typeof commercialBaselineVersionState.enumValues)[number];
+export type CommercialScopeLineageKind =
+  (typeof commercialScopeLineageKind.enumValues)[number];
 export type CommercialRequestState =
   (typeof commercialRequestState.enumValues)[number];
 export type CommercialDecisionDisposition =

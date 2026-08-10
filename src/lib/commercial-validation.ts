@@ -66,6 +66,21 @@ export const createCommercialBaselineSchema = z.object({
   sourceId: z.string().uuid(),
 });
 
+export const createCommercialAmendmentSchema = z.object({
+  sourceId: z.string().uuid(),
+  label: z.string().trim().min(1).max(160),
+  decisionIds: z.array(z.string().uuid()).max(50).default([]),
+});
+
+export const activateCommercialBaselineVersionSchema = z.object({
+  effectiveAt: z.string().datetime({ offset: true }).optional(),
+});
+
+export const commercialHistoryFiltersSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(20),
+});
+
 export const commercialEvidenceAnchorInputSchema = z.object({
   sourceId: z.string().uuid(),
   startOffset: z
@@ -263,6 +278,7 @@ export const commercialDriftFiltersSchema = z.object({
     .enum([
       "commercially_unlinked",
       "needs_classification",
+      "stale_basis",
       "linked",
       "support_internal",
     ])
@@ -274,6 +290,15 @@ export type CreateCommercialSourceInput = z.output<
 >;
 export type CreateCommercialBaselineInput = z.output<
   typeof createCommercialBaselineSchema
+>;
+export type CreateCommercialAmendmentInput = z.output<
+  typeof createCommercialAmendmentSchema
+>;
+export type ActivateCommercialBaselineVersionInput = z.output<
+  typeof activateCommercialBaselineVersionSchema
+>;
+export type CommercialHistoryFilters = z.output<
+  typeof commercialHistoryFiltersSchema
 >;
 export type CreateCommercialScopeItemInput = z.output<
   typeof createCommercialScopeItemSchema

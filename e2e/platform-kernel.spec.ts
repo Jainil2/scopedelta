@@ -405,7 +405,7 @@ test("commercial baseline, decision authorization and contradictions stay tracea
     label: "Signed SOW extract",
   });
   await page.getByRole("button", { name: "Create baseline v1" }).click();
-  await expect(page.getByText("Version 1", { exact: true })).toBeVisible();
+  await expect(page.getByText("Draft", { exact: true }).first()).toBeVisible();
   const evidence = page.locator("textarea.source-text-inspector");
   await expect(evidence).toHaveValue(commercialText);
   await evidence.press("ControlOrMeta+A");
@@ -425,8 +425,13 @@ test("commercial baseline, decision authorization and contradictions stay tracea
   );
   await page.reload({ waitUntil: "networkidle" });
   await expect(
-    page.getByText("Authenticated client portal", { exact: true }),
+    page.getByText("Authenticated client portal", { exact: true }).first(),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Make version effective" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Baseline version is now effective.",
+  );
+  await expect(page.getByText("Version 1", { exact: true })).toBeVisible();
 
   const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
   await page.goto(`/app/${workspaceSlug}/projects/SCOPE/backlog`);
@@ -467,6 +472,82 @@ test("commercial baseline, decision authorization and contradictions stay tracea
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({
       path: "docs/screenshots/sc-006a-commercial-mobile.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
+
+  const amendmentText =
+    "The authenticated client portal now includes enterprise SSO.";
+  await page.getByText("Add commercial source").click();
+  await sourceForm.getByLabel("Source name").fill("Signed SSO amendment");
+  await sourceForm.getByLabel("Commercial text").fill(amendmentText);
+  await sourceForm.getByRole("button", { name: "Preserve source" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Commercial source preserved and parsed.",
+  );
+  await page.getByLabel("Amendment label").fill("Enterprise SSO amendment");
+  await page.getByLabel("Amendment source").selectOption({
+    label: "Signed SSO amendment",
+  });
+  const prepareAmendment = page.getByRole("button", {
+    name: "Prepare amendment draft",
+  });
+  await expect(prepareAmendment).toBeEnabled();
+  await prepareAmendment.click();
+  await expect(
+    page.getByText("carried forward", { exact: true }).first(),
+  ).toBeVisible();
+  const carriedScope = page.locator(".scope-ledger article").filter({
+    hasText: "Authenticated client portal",
+  });
+  await carriedScope.getByRole("button", { name: "Revise" }).click();
+  const amendmentSourceRow = page
+    .locator(".commercial-source-list article")
+    .filter({
+      hasText: "Signed SSO amendment",
+    });
+  await amendmentSourceRow.getByRole("button", { name: "Inspect" }).click();
+  await expect(evidence).toHaveValue(amendmentText);
+  await evidence.press("ControlOrMeta+A");
+  await scopeItemForm
+    .getByLabel("Scope item")
+    .fill("Authenticated client portal with enterprise SSO");
+  await scopeItemForm
+    .getByRole("button", { name: "Preserve revision" })
+    .click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Scope revision preserved.",
+  );
+  await page.getByRole("button", { name: "Make version effective" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Baseline version is now effective.",
+  );
+  await expect(page.getByText("Version 2", { exact: true })).toBeVisible();
+  await page.goto(`/app/${workspaceSlug}/projects/SCOPE/backlog`);
+  await page
+    .getByRole("button", { name: /Build authenticated portal/ })
+    .click();
+  await page
+    .getByRole("link", { name: "Open discussion and activity" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Stale basis" }),
+  ).toBeVisible();
+  await page.goto(`/app/${workspaceSlug}/projects/SCOPE/commercial`);
+  await expect(page.getByText("SSO and launch amendment")).toHaveCount(0);
+  await expect(page.getByText("Enterprise SSO amendment")).toBeVisible();
+
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-006c-amendment-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-006c-amendment-mobile.png",
       fullPage: true,
     });
     await page.setViewportSize({ width: 1440, height: 1000 });

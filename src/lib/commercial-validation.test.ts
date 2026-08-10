@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   createCommercialDecisionSchema,
+  createCommercialAmendmentSchema,
   createCommercialImpactAssessmentSchema,
+  commercialHistoryFiltersSchema,
 } from "@/lib/commercial-validation";
 
 const dispositions = [
@@ -74,6 +76,34 @@ describe("commercial change-control validation", () => {
         monetaryAmount: "1.999",
         currencyCode: "USD",
       }).success,
+    ).toBe(false);
+  });
+
+  it("bounds amendment labels, formalized decisions and history pages", () => {
+    expect(
+      createCommercialAmendmentSchema.safeParse({
+        sourceId: randomUUID(),
+        label: "Signed launch amendment",
+        decisionIds: [randomUUID()],
+      }).success,
+    ).toBe(true);
+    expect(
+      createCommercialAmendmentSchema.safeParse({
+        sourceId: randomUUID(),
+        label: " ",
+        decisionIds: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      createCommercialAmendmentSchema.safeParse({
+        sourceId: randomUUID(),
+        label: "Too many decisions",
+        decisionIds: Array.from({ length: 51 }, () => randomUUID()),
+      }).success,
+    ).toBe(false);
+    expect(
+      commercialHistoryFiltersSchema.safeParse({ page: 1, pageSize: 51 })
+        .success,
     ).toBe(false);
   });
 });

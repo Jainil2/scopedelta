@@ -2,13 +2,14 @@
 
 ## Status
 
-Implemented through SC-006B. The SC-004 production platform kernel now supports
+Implemented through SC-006C. The SC-004 production platform kernel now supports
 the client-project delivery foundation plus production board, optional cycle
 planning, authorized cross-project daily execution, and internal project
 collaboration. SC-006A adds the first evidence-backed commercial baseline and
 advisory work provenance. SC-006B adds atomic client requests, explicit
-commercial decisions and impact history, plus decision-backed work provenance;
-baseline amendment lineage remains in SC-006C.
+commercial decisions and impact history, plus decision-backed work provenance.
+SC-006C adds immutable baseline amendments, explicit item lineage, and advisory
+stale-basis review for active delivery.
 
 ## System decision
 
@@ -222,13 +223,14 @@ Malformed, password-protected, and resource-limit failures retain the private
 original with a stable parser state and safe error code so a manager can retry
 or use pasted text.
 
-The initial baseline is created only from a successfully parsed source and is
-fixed at version 1. Scope items are limited to 500, are manually classified as
+The initial baseline draft is created only from a successfully parsed source
+and receives version 1 when explicitly activated. Scope items are limited to
+500 and are manually classified as
 deliverable, requirement, exclusion, or constraint, and require at least one
-anchor into that baseline source. Editing creates a new immutable revision;
-archive/restore changes lifecycle without deleting history. Work links target a
-specific current scope-item revision, so later revisions do not rewrite the
-commercial meaning that authorized existing work.
+anchor into the version's cumulative source evidence. Draft editing creates a
+new immutable revision; effective and superseded versions cannot be edited.
+Work links target a specific scope-item revision, so later revisions and
+versions do not rewrite the commercial meaning that authorized existing work.
 
 Workspace owners/admins and the project lead manage commercial evidence,
 baselines, scope, classification, and links. Other authorized project members
@@ -284,6 +286,35 @@ request, decision, evidence, impact, scope, and work links. The implementation
 uses only PostgreSQL and the shared server core, so it has no AI, OCR SaaS,
 e-signature, CRM, billing, or managed-cloud dependency.
 
+## Commercial baseline amendments
+
+Migrations `0008_commercial_baseline_amendments.sql` and
+`0009_commercial_single_draft.sql`
+extend the baseline into a linear, immutable version chain. A project may have
+one effective and one draft version at a time, and each baseline is capped at
+50 versions. Draft creation locks the project, snapshots all active scope from
+the effective version, preserves the cumulative source chain, and optionally
+links current commercial decisions that the amendment formalizes. A draft does
+not consume a version number; activation serializes on the project and assigns
+the next number only after its predecessor and complete lineage are verified.
+
+Every amendment item records exactly one outcome: `carried_forward`, `revised`,
+`added`, or `retired`. Carried items retain their material-basis identity and
+may reuse original evidence anchors. Revised and added items establish a new
+material basis and require evidence from the version's source chain. Retired
+items remain in history. Activation supersedes the previous effective version
+without changing its scope, sources, decisions, actor, or recorded/effective
+times.
+
+Active delivery linked to a materially revised or retired basis receives an
+advisory `stale_basis` state. Unchanged carried commitments remain effective.
+Completed and canceled work retain their historical links without an active
+warning. A manager explicitly reconfirms provenance by linking the work to the
+current scope revision; delivery status and workflow remain untouched.
+Paginated history exposes version state, actor/time, source, lineage totals,
+scope volume, and formalized decisions. Source parsing failure and competing
+draft or activation attempts leave the current effective baseline unchanged.
+
 ## Invitations
 
 An invitation stores a normalized email, role, expiry, and SHA-256 hash of a
@@ -320,8 +351,9 @@ Better Auth is mounted at `/api/auth/*`. ScopeDelta owns `/api/v1` routes for
 workspaces, settings, memberships, invitations, fragment-token staging,
 acceptance, clients, projects, project memberships, milestones, cycles, labels,
 work items, My work, dependencies, lifecycle actions, and reorder actions.
-Project routes also expose commercial sources/downloads/retries, the initial
-baseline, scope revisions and archive lifecycle, atomic commercial requests,
+Project routes also expose commercial sources/downloads/retries, baseline draft
+creation and activation, amendment preparation, paginated baseline history,
+scope revisions and retirement lifecycle, atomic commercial requests,
 request state, decision confirmation/supersession, impact assessments, work
 purpose/basis links, and paginated advisory drift.
 Successful payloads are `{ data: ... }`; paginated lists include page metadata
@@ -347,8 +379,9 @@ Unit/component tests run in jsdom. PostgreSQL integration tests validate
 migrations, persistence, tenancy, roles, last-owner protection, concurrent work
 numbering, subtask/dependency rules, commercial revision/link history, request
 and decision idempotency, all six commercial outcomes, impact supersession,
-current-work contradictions, parser failure isolation, cross-project graph
-rejection, pagination, and safe audit metadata. Playwright verifies identity and
+current-work contradictions, amendment lineage, stale-basis relinking,
+concurrent activation, parser failure isolation, cross-project graph rejection,
+pagination, and safe audit metadata. Playwright verifies identity and
 workspace journeys plus client-project backlog creation/editing and the
 evidence-to-work commercial path on desktop and mobile.
 CI runs the full suite plus production and container builds.
@@ -399,6 +432,6 @@ and does not rely on source secrecy for security.
 - SC-005B deliberately keeps the fixed workflow and explicit accessible move
   controls; it does not add drag/drop, workflow configuration, saved views,
   Git/CI integration, AI, billing, SSO/SCIM, client portals, analytics, or
-  outbound audit webhooks. SC-006A stores only bounded commercial evidence in
-  PostgreSQL and does not add OCR, automated extraction, amendments, impact
-  analysis, or change-order workflows.
+  outbound audit webhooks. The commercial graph stores bounded evidence and
+  version history in PostgreSQL; it does not add OCR, semantic extraction, AI,
+  e-signature, CRM, billing, or automated change-order generation.

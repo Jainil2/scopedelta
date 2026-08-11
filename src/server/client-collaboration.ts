@@ -2361,10 +2361,15 @@ async function buildClientProjection(
   };
 }
 
+const DEFAULT_CLIENT_HISTORY_PAGE: { page: number; pageSize: number } = {
+  page: 1,
+  pageSize: 25,
+};
+
 export async function getClientProjectProjection(
   actor: UserActor,
   projectId: string,
-  historyPage = { page: 1, pageSize: 25 },
+  historyPage = DEFAULT_CLIENT_HISTORY_PAGE,
 ) {
   const access = await getClientAccess(getDb(), actor, projectId);
   return buildClientProjection(
@@ -2383,5 +2388,5 @@ export async function getClientProjectPreview(
   projectId: string,
 ) {
   await getProjectAccess(getDb(), actor, workspaceId, projectId);
-  return buildClientProjection(projectId, null, { page: 1, pageSize: 25 });
+  return buildClientProjection(projectId, null, DEFAULT_CLIENT_HISTORY_PAGE);
 }

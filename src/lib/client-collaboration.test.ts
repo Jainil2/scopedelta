@@ -90,6 +90,7 @@ describe("client collaboration boundary", () => {
       "acceptanceTargets",
       "discussion",
       "attention",
+      "history",
     ] satisfies ReadonlyArray<keyof ClientProjectProjection>);
     const serialized = JSON.stringify(CLIENT_PROJECT_PROJECTION_KEYS);
     for (const forbidden of [

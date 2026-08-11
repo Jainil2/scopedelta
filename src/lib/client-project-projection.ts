@@ -92,6 +92,18 @@ export type ClientProjectProjection = {
     targetId: string;
     label: string;
   }>;
+  history: {
+    page: number;
+    pageSize: number;
+    hasNewer: boolean;
+    hasOlder: boolean;
+    hasMore: {
+      requests: boolean;
+      packets: boolean;
+      acceptanceTargets: boolean;
+      discussion: boolean;
+    };
+  };
 };
 
 export const CLIENT_PROJECT_PROJECTION_KEYS = [
@@ -103,6 +115,7 @@ export const CLIENT_PROJECT_PROJECTION_KEYS = [
   "acceptanceTargets",
   "discussion",
   "attention",
+  "history",
 ] as const satisfies ReadonlyArray<keyof ClientProjectProjection>;
 
 export function packetRequirementForDisposition(

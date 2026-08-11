@@ -2016,8 +2016,11 @@ function deriveClientAttention(
 async function buildClientProjection(
   projectId: string,
   participant: { id: string; role: ClientParticipantRole } | null,
+  historyPage: { page: number; pageSize: number },
 ): Promise<ClientProjectProjection> {
   const db = getDb();
+  const historyLimit = historyPage.pageSize + 1;
+  const historyOffset = (historyPage.page - 1) * historyPage.pageSize;
   const projectRows = await db
     .select({
       id: projects.id,
@@ -2082,7 +2085,9 @@ async function buildClientProjection(
         .orderBy(
           desc(commercialRequests.receivedAt),
           desc(commercialRequests.id),
-        ),
+        )
+        .limit(historyLimit)
+        .offset(historyOffset),
       db
         .select({
           id: clientCommercialPackets.id,
@@ -2122,7 +2127,9 @@ async function buildClientProjection(
         .orderBy(
           desc(clientCommercialPackets.publishedAt),
           desc(clientCommercialPackets.id),
-        ),
+        )
+        .limit(historyLimit)
+        .offset(historyOffset),
       db
         .select({
           id: clientAcceptanceTargets.id,
@@ -2159,7 +2166,9 @@ async function buildClientProjection(
         .orderBy(
           desc(clientAcceptanceTargets.publishedAt),
           desc(clientAcceptanceTargets.id),
-        ),
+        )
+        .limit(historyLimit)
+        .offset(historyOffset),
       db
         .select({
           id: clientDiscussionMessages.id,
@@ -2176,12 +2185,49 @@ async function buildClientProjection(
         .innerJoin(users, eq(users.id, clientDiscussionMessages.authorUserId))
         .where(eq(clientDiscussionMessages.projectId, projectId))
         .orderBy(
-          asc(clientDiscussionMessages.createdAt),
-          asc(clientDiscussionMessages.id),
-        ),
+          desc(clientDiscussionMessages.createdAt),
+          desc(clientDiscussionMessages.id),
+        )
+        .limit(historyLimit)
+        .offset(historyOffset),
     ]);
 
-  const acceptanceIds = acceptanceRows.map(({ id }) => id);
+  const hasMore = {
+    requests: requestRows.length > historyPage.pageSize,
+    packets: packetRows.length > historyPage.pageSize,
+    acceptanceTargets: acceptanceRows.length > historyPage.pageSize,
+    discussion: discussionRows.length > historyPage.pageSize,
+  };
+  const boundedRequestRows = requestRows.slice(0, historyPage.pageSize);
+  const boundedPacketRows = packetRows.slice(0, historyPage.pageSize);
+  const boundedAcceptanceRows = acceptanceRows.slice(0, historyPage.pageSize);
+  const boundedDiscussionRows = discussionRows
+    .slice(0, historyPage.pageSize)
+    .reverse();
+
+  const boundedRequestIds = boundedRequestRows.map(({ id }) => id);
+  const latestRequestMessageRows = boundedRequestIds.length
+    ? await db
+        .selectDistinctOn([clientDiscussionMessages.requestId], {
+          requestId: clientDiscussionMessages.requestId,
+          authorParticipantId: clientDiscussionMessages.authorParticipantId,
+        })
+        .from(clientDiscussionMessages)
+        .where(inArray(clientDiscussionMessages.requestId, boundedRequestIds))
+        .orderBy(
+          clientDiscussionMessages.requestId,
+          desc(clientDiscussionMessages.createdAt),
+          desc(clientDiscussionMessages.id),
+        )
+    : [];
+  const latestRequestAuthor = new Map(
+    latestRequestMessageRows.map((message) => [
+      message.requestId,
+      message.authorParticipantId ? ("client" as const) : ("team" as const),
+    ]),
+  );
+
+  const acceptanceIds = boundedAcceptanceRows.map(({ id }) => id);
   const acceptancePacketRows = acceptanceIds.length
     ? await db
         .select({
@@ -2203,16 +2249,7 @@ async function buildClientProjection(
     packetIdsByAcceptance.set(link.targetId, packetIds);
   }
 
-  const latestRequestAuthor = new Map<string, "client" | "team">();
-  for (const message of discussionRows) {
-    if (message.requestId) {
-      latestRequestAuthor.set(
-        message.requestId,
-        message.authorParticipantId ? "client" : "team",
-      );
-    }
-  }
-  const requests = requestRows.map((request) => ({
+  const requests = boundedRequestRows.map((request) => ({
     id: request.id,
     title: request.title,
     requestText: request.requestText,
@@ -2223,7 +2260,7 @@ async function buildClientProjection(
       request.state === "needs_clarification" &&
       latestRequestAuthor.get(request.id) === "team",
   }));
-  const packets = packetRows.map((packet) => {
+  const packets = boundedPacketRows.map((packet) => {
     const current = !packet.supersededAt && !packet.decisionSupersededAt;
     const mayClarify = participant !== null;
     const mayDecide =
@@ -2256,7 +2293,7 @@ async function buildClientProjection(
       actionable: current && !packet.action && (mayClarify || mayDecide),
     };
   });
-  const acceptanceTargets = acceptanceRows.map((target) => {
+  const acceptanceTargets = boundedAcceptanceRows.map((target) => {
     const milestoneFresh =
       !target.milestoneSourceUpdatedAt ||
       target.currentMilestoneUpdatedAt?.getTime() ===
@@ -2285,7 +2322,7 @@ async function buildClientProjection(
       actionable: current && participant?.role === "approver" && !target.action,
     };
   });
-  const discussion = discussionRows.map((message) => ({
+  const discussion = boundedDiscussionRows.map((message) => ({
     id: message.id,
     target: message.target,
     targetId:
@@ -2314,18 +2351,30 @@ async function buildClientProjection(
     acceptanceTargets,
     discussion,
     attention,
+    history: {
+      page: historyPage.page,
+      pageSize: historyPage.pageSize,
+      hasNewer: historyPage.page > 1,
+      hasOlder: Object.values(hasMore).some(Boolean),
+      hasMore,
+    },
   };
 }
 
 export async function getClientProjectProjection(
   actor: UserActor,
   projectId: string,
+  historyPage = { page: 1, pageSize: 25 },
 ) {
   const access = await getClientAccess(getDb(), actor, projectId);
-  return buildClientProjection(projectId, {
-    id: access.participantId,
-    role: access.role,
-  });
+  return buildClientProjection(
+    projectId,
+    {
+      id: access.participantId,
+      role: access.role,
+    },
+    historyPage,
+  );
 }
 
 export async function getClientProjectPreview(
@@ -2334,5 +2383,5 @@ export async function getClientProjectPreview(
   projectId: string,
 ) {
   await getProjectAccess(getDb(), actor, workspaceId, projectId);
-  return buildClientProjection(projectId, null);
+  return buildClientProjection(projectId, null, { page: 1, pageSize: 25 });
 }

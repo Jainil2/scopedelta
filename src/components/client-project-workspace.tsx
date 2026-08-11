@@ -307,6 +307,42 @@ export function ClientProjectWorkspace({
               <h3>{request.title}</h3>
               <p>{request.requestText}</p>
               <time>{new Date(request.receivedAt).toLocaleDateString()}</time>
+              {projection.discussion
+                .filter(
+                  (entry) =>
+                    entry.target === "request" && entry.targetId === request.id,
+                )
+                .map((entry) => (
+                  <div className="client-discussion" key={entry.id}>
+                    <strong>
+                      {entry.author === "team"
+                        ? "Project team · client-visible"
+                        : "Client reply"}
+                    </strong>
+                    <p>{entry.body}</p>
+                    <time>{new Date(entry.createdAt).toLocaleString()}</time>
+                  </div>
+                ))}
+              {request.needsReply ? (
+                <form className="client-form" onSubmit={submitDiscussion}>
+                  <input
+                    type="hidden"
+                    name="target"
+                    value={`request:${request.id}`}
+                  />
+                  <label>
+                    <span>Reply to the project team</span>
+                    <textarea name="body" required maxLength={5_000} rows={3} />
+                  </label>
+                  <button
+                    type="submit"
+                    className="client-button primary"
+                    disabled={pending}
+                  >
+                    Send clarification reply
+                  </button>
+                </form>
+              ) : null}
             </article>
           ))}
         </div>
@@ -335,6 +371,16 @@ export function ClientProjectWorkspace({
               {packet.monetaryAmount ? (
                 <p className="client-commercial-value">
                   {packet.currencyCode} {packet.monetaryAmount}
+                </p>
+              ) : null}
+              {packet.scheduleDeltaDays !== null ? (
+                <p className="client-commercial-value">
+                  Schedule change: {packet.scheduleDeltaDays} days
+                </p>
+              ) : null}
+              {packet.targetDate ? (
+                <p className="client-commercial-value">
+                  Published target date: {packet.targetDate}
                 </p>
               ) : null}
               {packet.action ? (
@@ -397,6 +443,27 @@ export function ClientProjectWorkspace({
                 <span>{target.current ? "Current" : "Superseded"}</span>
               </header>
               <p>{target.summary}</p>
+              {target.packetIds.length ? (
+                <div className="client-decision">
+                  <strong>Commercial context</strong>
+                  <ul>
+                    {target.packetIds.map((packetId) => {
+                      const packet = projection.packets.find(
+                        (entry) => entry.id === packetId,
+                      );
+                      return (
+                        <li key={packetId}>
+                          <a href={`#packet-${packetId}`}>
+                            {packet
+                              ? `Packet v${packet.version} · ${packet.title}`
+                              : `Published packet ${packetId}`}
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
               {target.action ? (
                 <p className="client-recorded">
                   Recorded: {target.action.action.replace("_", " ")}
@@ -478,6 +545,32 @@ export function ClientProjectWorkspace({
           ))}
         </div>
       </section>
+
+      {projection.history.hasNewer || projection.history.hasOlder ? (
+        <nav
+          className="client-section client-actions"
+          aria-label="Client history"
+        >
+          {projection.history.hasNewer ? (
+            <Link
+              href={`?page=${projection.history.page - 1}&pageSize=${projection.history.pageSize}`}
+            >
+              Newer history
+            </Link>
+          ) : null}
+          <span>
+            History page {projection.history.page} · up to{" "}
+            {projection.history.pageSize} records per section
+          </span>
+          {projection.history.hasOlder ? (
+            <Link
+              href={`?page=${projection.history.page + 1}&pageSize=${projection.history.pageSize}`}
+            >
+              Older history
+            </Link>
+          ) : null}
+        </nav>
+      ) : null}
     </main>
   );
 }

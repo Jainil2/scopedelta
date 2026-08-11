@@ -222,9 +222,9 @@ export function ClientCollaborationWorkspace({
         treatmentSummary: data.get("treatmentSummary"),
         scopeSummary: null,
         assumptions: null,
-        includeScheduleDeltaDays: Boolean(impactId),
-        includeTargetDate: Boolean(impactId),
-        includeMonetaryAmount: Boolean(impactId),
+        includeScheduleDeltaDays: data.get("includeScheduleDeltaDays") === "on",
+        includeTargetDate: data.get("includeTargetDate") === "on",
+        includeMonetaryAmount: data.get("includeMonetaryAmount") === "on",
         scopeItemRevisionIds: [],
       });
       done(scope, "A new immutable client packet version was published.");
@@ -247,7 +247,9 @@ export function ClientCollaborationWorkspace({
         projectItemId: itemId,
         snapshotTitle: data.get("snapshotTitle"),
         snapshotSummary: data.get("snapshotSummary"),
-        packetIds: [],
+        packetIds: data
+          .getAll("packetIds")
+          .filter((value): value is string => typeof value === "string"),
       });
       done(scope, "A new immutable acceptance target was published.");
     } catch (error) {
@@ -255,6 +257,68 @@ export function ClientCollaborationWorkspace({
         error instanceof Error
           ? error.message
           : "Could not publish acceptance target.",
+      );
+    }
+  }
+
+  async function requestClarification(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const requestId = formString(data, "requestId");
+    const scope = `clarification:${requestId}`;
+    try {
+      await request(`${base}/requests/${requestId}`, "PATCH", {
+        idempotencyKey: keyFor(scope),
+        state: "needs_clarification",
+        prompt: data.get("prompt"),
+      });
+      form.reset();
+      done(scope, "Client-visible clarification requested.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not request clarification.",
+      );
+    }
+  }
+
+  async function continueRequest(requestId: string) {
+    const scope = `continue:${requestId}`;
+    try {
+      await request(`${base}/requests/${requestId}`, "PATCH", {
+        idempotencyKey: keyFor(scope),
+        state: "open",
+      });
+      done(scope, "Request returned to the open commercial review.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not continue review.",
+      );
+    }
+  }
+
+  async function postClientVisibleMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const requestId = formString(data, "requestId");
+    const scope = `shared-message:${requestId}`;
+    try {
+      await request(`${base}/discussion`, "POST", {
+        idempotencyKey: keyFor(scope),
+        target: "request",
+        targetId: requestId,
+        body: data.get("body"),
+      });
+      form.reset();
+      done(scope, "Message added to the client-visible discussion.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not add client-visible message.",
       );
     }
   }
@@ -352,6 +416,93 @@ export function ClientCollaborationWorkspace({
                 Copy
               </button>
             </div>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="management-panel">
+        <p className="eyebrow">Client-visible request conversation</p>
+        <h2>Clarify without exposing internal notes</h2>
+        <p>
+          Everything in this section is shared with the client. Internal request
+          notes and commercial rationale remain on the team-only surface.
+        </p>
+        <div className="publication-grid">
+          {preview.requests.map((clientRequest) => {
+            const messages = preview.discussion.filter(
+              (entry) =>
+                entry.target === "request" &&
+                entry.targetId === clientRequest.id,
+            );
+            return (
+              <article className="management-panel" key={clientRequest.id}>
+                <span className="client-chip">
+                  {clientRequest.state.replace("_", " ")}
+                </span>
+                <h3>{clientRequest.title}</h3>
+                <p>{clientRequest.requestText}</p>
+                {messages.map((entry) => (
+                  <blockquote key={entry.id}>
+                    <strong>
+                      {entry.author === "team" ? "Project team" : "Client"}
+                    </strong>
+                    <p>{entry.body}</p>
+                  </blockquote>
+                ))}
+                {clientRequest.state === "needs_clarification" ? (
+                  <button
+                    type="button"
+                    onClick={() => void continueRequest(clientRequest.id)}
+                    disabled={pending}
+                  >
+                    Continue review as open
+                  </button>
+                ) : (
+                  <form
+                    className="delivery-form"
+                    onSubmit={requestClarification}
+                  >
+                    <input
+                      type="hidden"
+                      name="requestId"
+                      value={clientRequest.id}
+                    />
+                    <label>
+                      <span>Client-visible clarification prompt</span>
+                      <textarea
+                        name="prompt"
+                        required
+                        maxLength={5_000}
+                        rows={3}
+                      />
+                    </label>
+                    <button type="submit" disabled={pending}>
+                      Request clarification
+                    </button>
+                  </form>
+                )}
+                <form
+                  className="delivery-form"
+                  onSubmit={postClientVisibleMessage}
+                >
+                  <input
+                    type="hidden"
+                    name="requestId"
+                    value={clientRequest.id}
+                  />
+                  <label>
+                    <span>Other client-visible message</span>
+                    <textarea name="body" required maxLength={5_000} rows={2} />
+                  </label>
+                  <button type="submit" disabled={pending}>
+                    Add shared message
+                  </button>
+                </form>
+              </article>
+            );
+          })}
+          {!preview.requests.length ? (
+            <p>No client-originated requests yet.</p>
           ) : null}
         </div>
       </section>
@@ -524,13 +675,30 @@ export function ClientCollaborationWorkspace({
                       <option value="">Do not publish values</option>
                       {confirmed.map((impact) => (
                         <option value={impact.id} key={impact.id}>
+                          Schedule: {impact.scheduleDeltaDays ?? "not set"} days
+                          · target: {impact.targetDate ?? "not set"} · amount:{" "}
                           {impact.currencyCode && impact.monetaryAmount
                             ? `${impact.currencyCode} ${impact.monetaryAmount}`
-                            : "Confirmed schedule"}
+                            : "not set"}
                         </option>
                       ))}
                     </select>
                   </label>
+                  <fieldset>
+                    <legend>Publish only the selected safe values</legend>
+                    <label>
+                      <input type="checkbox" name="includeScheduleDeltaDays" />
+                      <span>Publish schedule delta</span>
+                    </label>
+                    <label>
+                      <input type="checkbox" name="includeTargetDate" />
+                      <span>Publish target date</span>
+                    </label>
+                    <label>
+                      <input type="checkbox" name="includeMonetaryAmount" />
+                      <span>Publish monetary amount</span>
+                    </label>
+                  </fieldset>
                   <button type="submit" disabled={pending}>
                     Publish successor packet
                   </button>
@@ -572,6 +740,23 @@ export function ClientCollaborationWorkspace({
                   maxLength={5_000}
                 />
               </label>
+              {preview.packets.length ? (
+                <fieldset>
+                  <legend>Published commercial context</legend>
+                  {preview.packets.map((packet) => (
+                    <label key={packet.id}>
+                      <input
+                        type="checkbox"
+                        name="packetIds"
+                        value={packet.id}
+                      />
+                      <span>
+                        Packet v{packet.version} · {packet.title}
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
+              ) : null}
               <button type="submit" disabled={pending}>
                 Publish successor target
               </button>

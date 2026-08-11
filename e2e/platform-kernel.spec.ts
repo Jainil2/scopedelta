@@ -1056,6 +1056,53 @@ test("client collaboration keeps one commercial truth across internal and extern
   ).toBeVisible();
   await page.goto(clientManagementUrl);
 
+  const clientRequestCard = page.locator("article.management-panel").filter({
+    hasText: "Add enterprise SSO",
+  });
+  await clientRequestCard
+    .getByLabel("Client-visible clarification prompt")
+    .fill("Which identity provider should we support for launch?");
+  await clientRequestCard
+    .getByRole("button", { name: "Request clarification" })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Client-visible clarification requested",
+  );
+
+  await clientPage.reload();
+  await expect(
+    clientPage
+      .getByText("Which identity provider should we support for launch?")
+      .first(),
+  ).toBeVisible();
+  await expect(
+    clientPage.getByRole("heading", { name: "Needs your attention" }),
+  ).toBeVisible();
+  const clarificationRequest = clientPage
+    .locator("article")
+    .filter({ hasText: "Add enterprise SSO" })
+    .first();
+  await clarificationRequest
+    .getByLabel("Reply to the project team")
+    .fill("Okta is our launch identity provider.");
+  await clarificationRequest
+    .getByRole("button", { name: "Send clarification reply" })
+    .click();
+  await expect(clientPage.getByRole("status")).toContainText(
+    "Message added to the shared discussion",
+  );
+
+  await page.reload();
+  await expect(
+    page.getByText("Okta is our launch identity provider."),
+  ).toBeVisible();
+  await clientRequestCard
+    .getByRole("button", { name: "Continue review as open" })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "returned to the open commercial review",
+  );
+
   const seeded = await withTestDatabase(async (pool) => {
     const requestRow = await pool.query<{ id: string; project_id: string }>(
       `select id, project_id from commercial_requests
@@ -1116,6 +1163,7 @@ test("client collaboration keeps one commercial truth across internal and extern
     .getByLabel("Safe treatment summary")
     .fill("This is a paid change requiring client approval.");
   await packetForm.getByLabel("Confirmed values").selectOption({ index: 1 });
+  await packetForm.getByLabel("Publish monetary amount").check();
   await packetForm
     .getByRole("button", { name: "Publish successor packet" })
     .click();
@@ -1133,6 +1181,23 @@ test("client collaboration keeps one commercial truth across internal and extern
   ).toHaveCount(0);
   await clientPage.getByRole("link", { name: "Open project" }).first().click();
   await expect(clientPage.getByText("USD 1200.00")).toBeVisible();
+  await expect(clientPage.getByText("Schedule change: 3 days")).toHaveCount(0);
+  const publishedProjection = (await (
+    await clientPage.request.get(`/api/v1/client/projects/${seeded.projectId}`)
+  ).json()) as {
+    data: {
+      packets: Array<{
+        scheduleDeltaDays: number | null;
+        targetDate: string | null;
+        monetaryAmount: string | null;
+      }>;
+    };
+  };
+  expect(publishedProjection.data.packets[0]).toMatchObject({
+    scheduleDeltaDays: null,
+    targetDate: null,
+    monetaryAmount: "1200.00",
+  });
   await expect(clientPage.getByText("Private margin rationale")).toHaveCount(0);
   await expect(clientPage.getByText("Private estimate note")).toHaveCount(0);
   await clientPage.getByRole("button", { name: "Approve" }).click();
@@ -1151,6 +1216,7 @@ test("client collaboration keeps one commercial truth across internal and extern
   await acceptanceForm
     .getByLabel("What is being accepted?")
     .fill("Accept the published launch handover version.");
+  await acceptanceForm.getByLabel(/Packet v1 · Add enterprise SSO/).check();
   await acceptanceForm
     .getByRole("button", { name: "Publish successor target" })
     .click();
@@ -1160,6 +1226,12 @@ test("client collaboration keeps one commercial truth across internal and extern
 
   await clientPage.reload();
   await clientPage.setViewportSize({ width: 390, height: 844 });
+  await expect(clientPage.getByText("Commercial context")).toBeVisible();
+  await expect(
+    clientPage.getByRole("link", {
+      name: /Packet v1 · Add enterprise SSO/,
+    }),
+  ).toBeVisible();
   await expect(
     clientPage.getByRole("heading", { name: "Needs your attention" }),
   ).toBeVisible();

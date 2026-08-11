@@ -438,7 +438,7 @@ describe("client collaboration domain boundary", () => {
         treatmentSummary: "Handled as a paid change.",
         scopeSummary: null,
         assumptions: null,
-        includeScheduleDeltaDays: true,
+        includeScheduleDeltaDays: false,
         includeTargetDate: false,
         includeMonetaryAmount: true,
         scopeItemRevisionIds: [],
@@ -450,7 +450,8 @@ describe("client collaboration domain boundary", () => {
     );
     expect(visible.packets[0]).toMatchObject({
       requirement: "approval",
-      scheduleDeltaDays: 3,
+      scheduleDeltaDays: null,
+      targetDate: null,
       monetaryAmount: "1200.00",
       currencyCode: "USD",
     });
@@ -1081,6 +1082,78 @@ describe("client collaboration domain boundary", () => {
       first.workspace.id,
     );
     expect(readInbox[0]?.readAt).toBeInstanceOf(Date);
+  });
+
+  it("bounds the default projection while keeping older client history reachable", async () => {
+    const fixture = await createFixture("HISTORY");
+    const client = await createParticipant(
+      fixture,
+      "collaborator",
+      "history@example.test",
+    );
+    const clientParticipantId = await participantId(
+      fixture.project.id,
+      client.userId,
+    );
+    const requestRows = Array.from({ length: 30 }, (_, index) => ({
+      id: randomUUID(),
+      projectId: fixture.project.id,
+      idempotencyKey: randomUUID(),
+      title: `History request ${index}`,
+      requestText: `Safe request body ${index}`,
+      submittedByClientParticipantId: clientParticipantId,
+      receivedAt: new Date(Date.UTC(2026, 0, 1, 0, index)),
+      createdByUserId: client.userId,
+    }));
+    await db.insert(commercialRequests).values(requestRows);
+    await db.insert(clientDiscussionMessages).values(
+      requestRows.map((request, index) => ({
+        projectId: fixture.project.id,
+        target: "request" as const,
+        requestId: request.id,
+        authorUserId: client.userId,
+        authorParticipantId: clientParticipantId,
+        idempotencyKey: randomUUID(),
+        body: `Reachable discussion ${index}`,
+        createdAt: new Date(Date.UTC(2026, 0, 2, 0, index)),
+      })),
+    );
+
+    const defaultPage = await getClientProjectProjection(
+      client,
+      fixture.project.id,
+    );
+    expect(defaultPage.requests).toHaveLength(25);
+    expect(defaultPage.discussion).toHaveLength(25);
+    expect(defaultPage.history).toMatchObject({
+      page: 1,
+      pageSize: 25,
+      hasNewer: false,
+      hasOlder: true,
+      hasMore: { requests: true, discussion: true },
+    });
+    expect(
+      defaultPage.requests.some(({ title }) => title === "History request 0"),
+    ).toBe(false);
+
+    const olderPage = await getClientProjectProjection(
+      client,
+      fixture.project.id,
+      { page: 2, pageSize: 25 },
+    );
+    expect(olderPage.requests).toHaveLength(5);
+    expect(olderPage.discussion).toHaveLength(5);
+    expect(olderPage.requests.map(({ title }) => title)).toContain(
+      "History request 0",
+    );
+    expect(olderPage.discussion.map(({ body }) => body)).toContain(
+      "Reachable discussion 0",
+    );
+    expect(olderPage.history).toMatchObject({
+      page: 2,
+      hasNewer: true,
+      hasOlder: false,
+    });
   });
 });
 

@@ -779,22 +779,24 @@ describe("client collaboration domain boundary", () => {
       await releaseDecision.promise;
     });
     await decisionLocked.promise;
-    const decisionRaceAction = actOnClientCommercialPacket(
-      approver,
-      fixture.project.id,
-      firstPacket.id,
-      {
-        idempotencyKey: randomUUID(),
-        action: "approved",
-        comment: null,
-      },
-    );
-    releaseDecision.resolve();
-    await supersedeDecision;
-    await expect(decisionRaceAction).rejects.toMatchObject({
+    const decisionRaceAssertion = expect(
+      actOnClientCommercialPacket(
+        approver,
+        fixture.project.id,
+        firstPacket.id,
+        {
+          idempotencyKey: randomUUID(),
+          action: "approved",
+          comment: null,
+        },
+      ),
+    ).rejects.toMatchObject({
       code: "client_packet_stale",
       status: 409,
     });
+    releaseDecision.resolve();
+    await supersedeDecision;
+    await decisionRaceAssertion;
 
     const second = await seedDecision(fixture, "paid_change");
     const secondPacket = await publishClientCommercialPacket(
@@ -834,7 +836,7 @@ describe("client collaboration domain boundary", () => {
       await releasePacket.promise;
     });
     await packetLocked.promise;
-    const packetRaceAction = actOnClientCommercialPacket(
+    const packetRaceError = actOnClientCommercialPacket(
       approver,
       fixture.project.id,
       secondPacket.id,
@@ -843,12 +845,10 @@ describe("client collaboration domain boundary", () => {
         action: "rejected",
         comment: null,
       },
-    );
+    ).catch((error: unknown) => error);
     releasePacket.resolve();
     await publishSuccessor;
-    const stalePacketError = await packetRaceAction.catch((error: unknown) =>
-      Promise.resolve(error),
-    );
+    const stalePacketError = await packetRaceError;
     expect(stalePacketError).toMatchObject({ code: "client_packet_stale" });
     expect((stalePacketError as Error).message).toContain(successorId);
     await expect(
@@ -908,21 +908,23 @@ describe("client collaboration domain boundary", () => {
       await releaseMilestone.promise;
     });
     await milestoneLocked.promise;
-    const milestoneRaceAction = actOnClientAcceptanceTarget(
-      approver,
-      fixture.project.id,
-      firstTarget.id,
-      {
-        idempotencyKey: randomUUID(),
-        action: "accepted",
-        comment: null,
-      },
-    );
-    releaseMilestone.resolve();
-    await changeMilestone;
-    await expect(milestoneRaceAction).rejects.toMatchObject({
+    const milestoneRaceAssertion = expect(
+      actOnClientAcceptanceTarget(
+        approver,
+        fixture.project.id,
+        firstTarget.id,
+        {
+          idempotencyKey: randomUUID(),
+          action: "accepted",
+          comment: null,
+        },
+      ),
+    ).rejects.toMatchObject({
       code: "client_acceptance_stale",
     });
+    releaseMilestone.resolve();
+    await changeMilestone;
+    await milestoneRaceAssertion;
 
     const secondTarget = await publishClientAcceptanceTarget(
       fixture.owner,
@@ -960,7 +962,7 @@ describe("client collaboration domain boundary", () => {
       await releaseTarget.promise;
     });
     await targetLocked.promise;
-    const targetRaceAction = actOnClientAcceptanceTarget(
+    const targetRaceError = actOnClientAcceptanceTarget(
       approver,
       fixture.project.id,
       secondTarget.id,
@@ -969,12 +971,10 @@ describe("client collaboration domain boundary", () => {
         action: "needs_changes",
         comment: null,
       },
-    );
+    ).catch((error: unknown) => error);
     releaseTarget.resolve();
     await publishSuccessor;
-    const staleTargetError = await targetRaceAction.catch((error: unknown) =>
-      Promise.resolve(error),
-    );
+    const staleTargetError = await targetRaceError;
     expect(staleTargetError).toMatchObject({
       code: "client_acceptance_stale",
     });
@@ -1015,21 +1015,23 @@ describe("client collaboration domain boundary", () => {
       await releaseItem.promise;
     });
     await itemLocked.promise;
-    const hiddenRaceAction = actOnClientAcceptanceTarget(
-      approver,
-      fixture.project.id,
-      hiddenTarget.id,
-      {
-        idempotencyKey: randomUUID(),
-        action: "accepted",
-        comment: null,
-      },
-    );
-    releaseItem.resolve();
-    await hideItem;
-    await expect(hiddenRaceAction).rejects.toMatchObject({
+    const hiddenRaceAssertion = expect(
+      actOnClientAcceptanceTarget(
+        approver,
+        fixture.project.id,
+        hiddenTarget.id,
+        {
+          idempotencyKey: randomUUID(),
+          action: "accepted",
+          comment: null,
+        },
+      ),
+    ).rejects.toMatchObject({
       code: "client_acceptance_stale",
     });
+    releaseItem.resolve();
+    await hideItem;
+    await hiddenRaceAssertion;
     await expect(
       db.select().from(clientAcceptanceActions),
     ).resolves.toHaveLength(0);

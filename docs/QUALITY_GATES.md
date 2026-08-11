@@ -39,11 +39,11 @@ SHA cannot authorize a newer head.
    full gate as the inner development loop.
 5. After functional approval, freeze feature scope and record the full
    40-character lowercase PR head SHA.
-6. Dispatch `.github/workflows/merge-gate.yml` against the PR branch and enter
+6. Dispatch `.github/workflows/ci.yml` against the PR branch and enter
    that exact SHA. With GitHub CLI, the equivalent is:
 
    ```bash
-   gh workflow run merge-gate.yml --ref <pr-branch> -f expected_sha=<40-character-head-sha>
+   gh workflow run ci.yml --ref <pr-branch> -f expected_sha=<40-character-head-sha>
    ```
 
 7. The exact-SHA guard rejects tags, malformed SHAs, stale input, or a branch

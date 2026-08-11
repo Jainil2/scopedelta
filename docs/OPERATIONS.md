@@ -117,8 +117,8 @@ it does not require the complete hosted gate first.
 Before merging the functionally approved exact head:
 
 1. Review generated SQL and verify it contains only the approved schema change.
-2. Freeze ordinary feature scope and dispatch `Merge candidate` against the PR
-   branch with its exact 40-character head SHA.
+2. Freeze ordinary feature scope and manually dispatch the `CI` workflow against
+   the PR branch with its exact 40-character head SHA.
 3. Require the full hosted gate to run `pnpm db:check` and apply the complete
    migration chain twice to a fresh disposable database.
 4. Require integration/browser tests against migrated PostgreSQL, plus the

@@ -574,19 +574,16 @@ describe("client collaboration domain boundary", () => {
       await releaseDowngrade.promise;
     });
     await downgradeLocked.promise;
-    const packetAction = actOnClientCommercialPacket(
-      approver,
-      fixture.project.id,
-      packet.id,
-      {
+    const packetActionAssertion = expect(
+      actOnClientCommercialPacket(approver, fixture.project.id, packet.id, {
         idempotencyKey: randomUUID(),
         action: "approved",
         comment: null,
-      },
-    );
+      }),
+    ).rejects.toMatchObject({ code: "forbidden" });
     releaseDowngrade.resolve();
     await downgrade;
-    await expect(packetAction).rejects.toMatchObject({ code: "forbidden" });
+    await packetActionAssertion;
     await expect(
       db
         .select()
@@ -646,19 +643,16 @@ describe("client collaboration domain boundary", () => {
       await releaseRevoke.promise;
     });
     await revokeLocked.promise;
-    const acceptanceAction = actOnClientAcceptanceTarget(
-      approver,
-      fixture.project.id,
-      target.id,
-      {
+    const acceptanceActionAssertion = expect(
+      actOnClientAcceptanceTarget(approver, fixture.project.id, target.id, {
         idempotencyKey: randomUUID(),
         action: "accepted",
         comment: null,
-      },
-    );
+      }),
+    ).rejects.toMatchObject({ code: "not_found" });
     releaseRevoke.resolve();
     await revoke;
-    await expect(acceptanceAction).rejects.toMatchObject({ code: "not_found" });
+    await acceptanceActionAssertion;
     await expect(
       db
         .select()

@@ -91,6 +91,7 @@ export type ClientProjectProjection = {
     kind: "clarification" | "packet" | "acceptance";
     targetId: string;
     label: string;
+    historyPage: number;
   }>;
   history: {
     page: number;

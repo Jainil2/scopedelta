@@ -221,7 +221,7 @@ export function ClientProjectWorkspace({
           <div className="attention-list">
             {projection.attention.map((item) => (
               <a
-                href={`#${item.kind}-${item.targetId}`}
+                href={`?page=${item.historyPage}&pageSize=${projection.history.pageSize}#${item.kind}-${item.targetId}`}
                 key={`${item.kind}-${item.targetId}`}
               >
                 <span>{item.kind.replace("_", " ")}</span>

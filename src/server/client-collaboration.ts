@@ -1977,38 +1977,195 @@ export async function retryClientNotificationEmail(
   return rows[0];
 }
 
-function deriveClientAttention(
-  requests: ClientProjectProjection["requests"],
-  packets: ClientProjectProjection["packets"],
-  acceptanceTargets: ClientProjectProjection["acceptanceTargets"],
+const CLIENT_ATTENTION_LIMIT = 1_000;
+
+function attentionHistoryPage(historyRank: number, pageSize: number) {
+  return Math.ceil(historyRank / pageSize);
+}
+
+async function buildClientAttention(
+  projectId: string,
+  participant: { role: ClientParticipantRole } | null,
+  pageSize: number,
 ) {
+  const db = getDb();
+  const rankedRequests = db
+    .select({
+      id: commercialRequests.id,
+      title: commercialRequests.title,
+      state: commercialRequests.state,
+      historyRank:
+        sql<number>`(row_number() over (order by ${commercialRequests.receivedAt} desc, ${commercialRequests.id} desc))::int`.as(
+          "history_rank",
+        ),
+    })
+    .from(commercialRequests)
+    .where(
+      and(
+        eq(commercialRequests.projectId, projectId),
+        sql`${commercialRequests.submittedByClientParticipantId} is not null`,
+      ),
+    )
+    .as("ranked_client_attention_requests");
+  const rankedPackets = db
+    .select({
+      id: clientCommercialPackets.id,
+      title: clientCommercialPackets.title,
+      requirement: clientCommercialPackets.requirement,
+      supersededAt: clientCommercialPackets.supersededAt,
+      decisionSupersededAt: commercialDecisions.supersededAt,
+      actionId: clientCommercialPacketActions.id,
+      historyRank:
+        sql<number>`(row_number() over (order by ${clientCommercialPackets.publishedAt} desc, ${clientCommercialPackets.id} desc))::int`.as(
+          "history_rank",
+        ),
+    })
+    .from(clientCommercialPackets)
+    .innerJoin(
+      commercialDecisions,
+      eq(commercialDecisions.id, clientCommercialPackets.decisionId),
+    )
+    .leftJoin(
+      clientCommercialPacketActions,
+      eq(clientCommercialPacketActions.packetId, clientCommercialPackets.id),
+    )
+    .where(eq(clientCommercialPackets.projectId, projectId))
+    .as("ranked_client_attention_packets");
+  const rankedAcceptanceTargets = db
+    .select({
+      id: clientAcceptanceTargets.id,
+      title: clientAcceptanceTargets.snapshotTitle,
+      supersededAt: clientAcceptanceTargets.supersededAt,
+      milestoneSourceUpdatedAt:
+        clientAcceptanceTargets.milestoneSourceUpdatedAt,
+      currentMilestoneUpdatedAt: milestones.updatedAt,
+      itemHiddenAt: clientProjectItems.hiddenAt,
+      actionId: clientAcceptanceActions.id,
+      historyRank:
+        sql<number>`(row_number() over (order by ${clientAcceptanceTargets.publishedAt} desc, ${clientAcceptanceTargets.id} desc))::int`.as(
+          "history_rank",
+        ),
+    })
+    .from(clientAcceptanceTargets)
+    .innerJoin(
+      clientProjectItems,
+      eq(clientProjectItems.id, clientAcceptanceTargets.projectItemId),
+    )
+    .leftJoin(milestones, eq(milestones.id, clientProjectItems.milestoneId))
+    .leftJoin(
+      clientAcceptanceActions,
+      eq(
+        clientAcceptanceActions.acceptanceTargetId,
+        clientAcceptanceTargets.id,
+      ),
+    )
+    .where(eq(clientAcceptanceTargets.projectId, projectId))
+    .as("ranked_client_attention_acceptance_targets");
+
+  const [clarificationCandidates, packetCandidates, acceptanceCandidates] =
+    await Promise.all([
+      db
+        .select({
+          id: rankedRequests.id,
+          title: rankedRequests.title,
+          historyRank: rankedRequests.historyRank,
+        })
+        .from(rankedRequests)
+        .where(eq(rankedRequests.state, "needs_clarification"))
+        .orderBy(asc(rankedRequests.historyRank))
+        .limit(CLIENT_ATTENTION_LIMIT),
+      participant?.role === "approver"
+        ? db
+            .select({
+              id: rankedPackets.id,
+              title: rankedPackets.title,
+              historyRank: rankedPackets.historyRank,
+            })
+            .from(rankedPackets)
+            .where(
+              and(
+                eq(rankedPackets.requirement, "approval"),
+                isNull(rankedPackets.supersededAt),
+                isNull(rankedPackets.decisionSupersededAt),
+                isNull(rankedPackets.actionId),
+              ),
+            )
+            .orderBy(asc(rankedPackets.historyRank))
+            .limit(CLIENT_ATTENTION_LIMIT)
+        : [],
+      participant?.role === "approver"
+        ? db
+            .select({
+              id: rankedAcceptanceTargets.id,
+              title: rankedAcceptanceTargets.title,
+              historyRank: rankedAcceptanceTargets.historyRank,
+            })
+            .from(rankedAcceptanceTargets)
+            .where(
+              and(
+                isNull(rankedAcceptanceTargets.supersededAt),
+                isNull(rankedAcceptanceTargets.itemHiddenAt),
+                isNull(rankedAcceptanceTargets.actionId),
+                or(
+                  isNull(rankedAcceptanceTargets.milestoneSourceUpdatedAt),
+                  eq(
+                    rankedAcceptanceTargets.currentMilestoneUpdatedAt,
+                    rankedAcceptanceTargets.milestoneSourceUpdatedAt,
+                  ),
+                ),
+              ),
+            )
+            .orderBy(asc(rankedAcceptanceTargets.historyRank))
+            .limit(CLIENT_ATTENTION_LIMIT)
+        : [],
+    ]);
+
+  const clarificationIds = clarificationCandidates.map(({ id }) => id);
+  const latestClarificationMessages = clarificationIds.length
+    ? await db
+        .selectDistinctOn([clientDiscussionMessages.requestId], {
+          requestId: clientDiscussionMessages.requestId,
+          authorParticipantId: clientDiscussionMessages.authorParticipantId,
+        })
+        .from(clientDiscussionMessages)
+        .where(inArray(clientDiscussionMessages.requestId, clarificationIds))
+        .orderBy(
+          clientDiscussionMessages.requestId,
+          desc(clientDiscussionMessages.createdAt),
+          desc(clientDiscussionMessages.id),
+        )
+    : [];
+  const teamPromptRequestIds = new Set(
+    latestClarificationMessages
+      .filter(({ authorParticipantId }) => authorParticipantId === null)
+      .map(({ requestId }) => requestId),
+  );
   const attention: ClientProjectProjection["attention"] = [];
-  for (const request of requests) {
-    if (request.needsReply) {
+  for (const request of clarificationCandidates) {
+    if (teamPromptRequestIds.has(request.id)) {
       attention.push({
         kind: "clarification",
         targetId: request.id,
         label: `Reply to ${request.title}`,
+        historyPage: attentionHistoryPage(request.historyRank, pageSize),
       });
     }
   }
-  for (const packet of packets) {
-    if (packet.actionable && packet.requirement === "approval") {
-      attention.push({
-        kind: "packet",
-        targetId: packet.id,
-        label: `Review ${packet.title}`,
-      });
-    }
+  for (const packet of packetCandidates) {
+    attention.push({
+      kind: "packet",
+      targetId: packet.id,
+      label: `Review ${packet.title}`,
+      historyPage: attentionHistoryPage(packet.historyRank, pageSize),
+    });
   }
-  for (const target of acceptanceTargets) {
-    if (target.actionable) {
-      attention.push({
-        kind: "acceptance",
-        targetId: target.id,
-        label: `Accept ${target.title}`,
-      });
-    }
+  for (const target of acceptanceCandidates) {
+    attention.push({
+      kind: "acceptance",
+      targetId: target.id,
+      label: `Accept ${target.title}`,
+      historyPage: attentionHistoryPage(target.historyRank, pageSize),
+    });
   }
   return attention;
 }
@@ -2192,6 +2349,12 @@ async function buildClientProjection(
         .offset(historyOffset),
     ]);
 
+  const attention = await buildClientAttention(
+    projectId,
+    participant,
+    historyPage.pageSize,
+  );
+
   const hasMore = {
     requests: requestRows.length > historyPage.pageSize,
     packets: packetRows.length > historyPage.pageSize,
@@ -2334,7 +2497,6 @@ async function buildClientProjection(
     body: message.body,
     createdAt: message.createdAt.toISOString(),
   }));
-  const attention = deriveClientAttention(requests, packets, acceptanceTargets);
   return {
     project: { id: project.id, name: project.name, summary: project.summary },
     participant,

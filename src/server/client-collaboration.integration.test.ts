@@ -1084,7 +1084,7 @@ describe("client collaboration domain boundary", () => {
     expect(readInbox[0]?.readAt).toBeInstanceOf(Date);
   });
 
-  it("bounds the default projection while keeping older client history reachable", async () => {
+  it("keeps older actionable attention visible while client history stays bounded", async () => {
     const fixture = await createFixture("HISTORY");
     const client = await createParticipant(
       fixture,
@@ -1101,6 +1101,7 @@ describe("client collaboration domain boundary", () => {
       idempotencyKey: randomUUID(),
       title: `History request ${index}`,
       requestText: `Safe request body ${index}`,
+      state: index === 0 ? ("needs_clarification" as const) : ("open" as const),
       submittedByClientParticipantId: clientParticipantId,
       receivedAt: new Date(Date.UTC(2026, 0, 1, 0, index)),
       createdByUserId: client.userId,
@@ -1111,8 +1112,8 @@ describe("client collaboration domain boundary", () => {
         projectId: fixture.project.id,
         target: "request" as const,
         requestId: request.id,
-        authorUserId: client.userId,
-        authorParticipantId: clientParticipantId,
+        authorUserId: index === 0 ? fixture.owner.userId : client.userId,
+        authorParticipantId: index === 0 ? null : clientParticipantId,
         idempotencyKey: randomUUID(),
         body: `Reachable discussion ${index}`,
         createdAt: new Date(Date.UTC(2026, 0, 2, 0, index)),
@@ -1135,6 +1136,12 @@ describe("client collaboration domain boundary", () => {
     expect(
       defaultPage.requests.some(({ title }) => title === "History request 0"),
     ).toBe(false);
+    expect(defaultPage.attention).toContainEqual({
+      kind: "clarification",
+      targetId: requestRows[0]!.id,
+      label: "Reply to History request 0",
+      historyPage: 2,
+    });
 
     const olderPage = await getClientProjectProjection(
       client,
@@ -1149,6 +1156,12 @@ describe("client collaboration domain boundary", () => {
     expect(olderPage.discussion.map(({ body }) => body)).toContain(
       "Reachable discussion 0",
     );
+    expect(olderPage.attention).toContainEqual({
+      kind: "clarification",
+      targetId: requestRows[0]!.id,
+      label: "Reply to History request 0",
+      historyPage: 2,
+    });
     expect(olderPage.history).toMatchObject({
       page: 2,
       hasNewer: true,

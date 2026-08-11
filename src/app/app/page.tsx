@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/session";
+import { listClientProjects } from "@/server/client-collaboration";
 import { listWorkspaces } from "@/server/workspaces";
 
 export default async function AppEntryPage() {
@@ -9,5 +10,10 @@ export default async function AppEntryPage() {
     userId: session.user.id,
     email: session.user.email,
   });
-  redirect(workspaces[0] ? `/app/${workspaces[0].slug}` : "/onboarding");
+  if (workspaces[0]) redirect(`/app/${workspaces[0].slug}`);
+  const clientProjects = await listClientProjects({
+    userId: session.user.id,
+    email: session.user.email,
+  });
+  redirect(clientProjects.length ? "/client" : "/onboarding");
 }

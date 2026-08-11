@@ -5,6 +5,7 @@ import { paginationSchema } from "@/lib/delivery-validation";
 import { parseInput } from "@/lib/platform-validation";
 import { requireSession } from "@/lib/session";
 import { listNotifications } from "@/server/collaboration";
+import { listInternalClientNotifications } from "@/server/client-collaboration";
 import { getWorkspaceBySlug } from "@/server/workspaces";
 
 export default async function InboxPage({
@@ -24,6 +25,7 @@ export default async function InboxPage({
       workspaceId={data.workspace.id}
       workspaceSlug={workspaceSlug}
       initialNotifications={data.result.data}
+      initialClientNotifications={data.clientNotifications}
       page={data.result.page}
     />
   );
@@ -41,11 +43,14 @@ async function loadInbox(
       pageSize: 50,
     });
     const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
-    const result = await listNotifications(actor, workspace.id, {
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-    });
-    return { workspace, result };
+    const [result, clientNotifications] = await Promise.all([
+      listNotifications(actor, workspace.id, {
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+      }),
+      listInternalClientNotifications(actor, workspace.id, 1, 50),
+    ]);
+    return { workspace, result, clientNotifications };
   } catch {
     notFound();
   }

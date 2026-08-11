@@ -2,12 +2,14 @@
 
 ## Status and change boundary
 
-Implemented through SC-006A. This runbook covers the public lead flow, production
+Implemented through SC-007. This runbook covers the public lead flow, production
 platform kernel, additive client-project backlog migration, and optional cycle
-planning, collaboration, and initial commercial-baseline migrations. It does not
+planning, internal collaboration, commercial-delivery graph, and client
+collaboration migrations. It does not
 authorize production credentials, database creation, DNS changes, a paid
 service, or destructive database work without founder approval. It does not
-cover SC-006B/SC-006C, OCR/AI extraction, billing, SSO, or client portals.
+cover OCR/AI extraction, billing, SSO, anonymous action links, or legal
+e-signature.
 
 ## Supported deployment shapes
 
@@ -234,6 +236,38 @@ against the additive schema and ignores the defaulted purpose column and new
 tables. Leave them in place and fix forward. Restore tests must verify that an
 authorized manager can download an original, inspect extracted text, open the
 baseline and scope history, and see work provenance after the database restore.
+
+### SC-007 migration `0010_client_collaboration.sql`
+
+This migration is additive. It creates project-scoped client participants and
+hashed invitations, safe project profiles/items, immutable packet and
+acceptance version chains, terminal actions, external discussion, and durable
+client-collaboration notifications. It also adds a nullable client-participant
+provenance reference to commercial requests. Existing requests and projects
+need no backfill. Apply it after the SC-006 migrations and before serving
+`/client` or `/api/v1/client`.
+
+Review the composite project foreign keys, version uniqueness, terminal-action
+uniqueness, and immutable-row triggers before release. Apply the full migration
+chain twice to a fresh PostgreSQL 17 database, then run the client collaboration
+integration and separate-context browser journey. If application deployment
+fails after migration, the previous application can ignore these additive
+structures; leave them in place and fix forward.
+
+Invitation creation always returns a copyable fragment URL to the authorized
+internal manager. SMTP runs only after commit and is optional. On invite email
+failure, copy the existing URL while it remains valid or reissue the invitation,
+which revokes the prior token and rotates to a new value. Notification delivery
+state may be retried without modifying the durable business action. Never log
+recipient addresses, token fragments, message bodies, packet/request text, or
+SMTP/provider responses; fixed event names and identifiers are sufficient.
+
+Client pages and APIs must retain `private, no-store`, no-index/no-follow/
+no-archive, and no-referrer headers at the reverse proxy. Ongoing access requires
+a verified session and an active project participant on every request. Restores
+must preserve revoked participant attribution, packet/target version history,
+terminal actions, discussion order, notification read/delivery state, and the
+nullable client-request provenance reference.
 
 ## SMTP and DNS readiness
 

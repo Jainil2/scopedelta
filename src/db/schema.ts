@@ -243,6 +243,55 @@ export const commercialBasisType = pgEnum("commercial_basis_type", [
   "commercial_decision",
 ]);
 
+export const clientParticipantRole = pgEnum("client_participant_role", [
+  "collaborator",
+  "approver",
+]);
+
+export const clientProjectionTarget = pgEnum("client_projection_target", [
+  "milestone",
+  "deliverable",
+]);
+
+export const clientPacketRequirement = pgEnum("client_packet_requirement", [
+  "informational",
+  "approval",
+]);
+
+export const clientPacketAction = pgEnum("client_packet_action", [
+  "approved",
+  "rejected",
+  "clarification_requested",
+]);
+
+export const clientAcceptanceAction = pgEnum("client_acceptance_action", [
+  "accepted",
+  "needs_changes",
+]);
+
+export const clientDiscussionTarget = pgEnum("client_discussion_target", [
+  "request",
+  "packet",
+  "acceptance_target",
+]);
+
+export const clientNotificationKind = pgEnum("client_notification_kind", [
+  "request_submitted",
+  "clarification_needed",
+  "discussion_added",
+  "packet_published",
+  "packet_actioned",
+  "acceptance_published",
+  "acceptance_actioned",
+]);
+
+export const clientEmailDeliveryState = pgEnum("client_email_delivery_state", [
+  "not_requested",
+  "pending",
+  "sent",
+  "failed",
+]);
+
 export const workItemSubscriptionState = pgEnum(
   "work_item_subscription_state",
   ["watching", "muted"],
@@ -1064,6 +1113,212 @@ export const commercialScopeRevisionAnchors = pgTable(
   ],
 );
 
+export const clientProjectParticipants = pgTable(
+  "client_project_participants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    invitedEmail: text("invited_email").notNull(),
+    role: clientParticipantRole("role").notNull(),
+    activatedAt: timestamp("activated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("client_participants_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    uniqueIndex("client_participants_project_user_uidx").on(
+      table.projectId,
+      table.userId,
+    ),
+    index("client_participants_user_active_idx").on(
+      table.userId,
+      table.revokedAt,
+      table.projectId,
+    ),
+    check(
+      "client_participants_email_length",
+      sql`char_length(btrim(${table.invitedEmail})) between 3 and 320`,
+    ),
+    check(
+      "client_participants_revoked_time",
+      sql`${table.revokedAt} is null or ${table.revokedAt} >= ${table.activatedAt}`,
+    ),
+  ],
+);
+
+export const clientProjectInvitations = pgTable(
+  "client_project_invitations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    email: text("email").notNull(),
+    role: clientParticipantRole("role").notNull(),
+    state: invitationState("state").default("pending").notNull(),
+    tokenHash: text("token_hash"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    invitedByUserId: uuid("invited_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    acceptedParticipantId: uuid("accepted_participant_id"),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    emailDeliveryState: clientEmailDeliveryState("email_delivery_state")
+      .default("not_requested")
+      .notNull(),
+    emailAttemptCount: integer("email_attempt_count").default(0).notNull(),
+    lastEmailAttemptAt: timestamp("last_email_attempt_at", {
+      withTimezone: true,
+    }),
+    ...timestampColumns,
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.acceptedParticipantId, table.projectId],
+      foreignColumns: [
+        clientProjectParticipants.id,
+        clientProjectParticipants.projectId,
+      ],
+      name: "client_invitations_participant_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("client_invitations_token_hash_uidx").on(table.tokenHash),
+    uniqueIndex("client_invitations_project_idempotency_uidx").on(
+      table.projectId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("client_invitations_pending_email_uidx")
+      .on(table.projectId, sql`lower(${table.email})`)
+      .where(sql`${table.state} = 'pending'`),
+    index("client_invitations_project_state_idx").on(
+      table.projectId,
+      table.state,
+      table.expiresAt,
+    ),
+    check(
+      "client_invitations_email_length",
+      sql`char_length(btrim(${table.email})) between 3 and 320`,
+    ),
+    check(
+      "client_invitations_attempt_count",
+      sql`${table.emailAttemptCount} >= 0`,
+    ),
+    check(
+      "client_invitations_lifecycle",
+      sql`(${table.state} = 'pending' and ${table.tokenHash} is not null and ${table.acceptedParticipantId} is null and ${table.acceptedAt} is null and ${table.revokedAt} is null) or (${table.state} = 'accepted' and ${table.tokenHash} is null and ${table.acceptedParticipantId} is not null and ${table.acceptedAt} is not null and ${table.revokedAt} is null) or (${table.state} = 'revoked' and ${table.tokenHash} is null and ${table.acceptedParticipantId} is null and ${table.acceptedAt} is null and ${table.revokedAt} is not null)`,
+    ),
+  ],
+);
+
+export const clientProjectProfiles = pgTable(
+  "client_project_profiles",
+  {
+    projectId: uuid("project_id")
+      .primaryKey()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    summary: text("summary").notNull(),
+    updatedByUserId: uuid("updated_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestampColumns,
+  },
+  (table) => [
+    check(
+      "client_project_profiles_summary_length",
+      sql`char_length(btrim(${table.summary})) between 1 and 2000`,
+    ),
+  ],
+);
+
+export const clientProjectItems = pgTable(
+  "client_project_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    target: clientProjectionTarget("target").notNull(),
+    milestoneId: uuid("milestone_id"),
+    scopeItemRevisionId: uuid("scope_item_revision_id"),
+    clientSummary: text("client_summary").notNull(),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    visibleAt: timestamp("visible_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("client_project_items_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    uniqueIndex("client_project_items_project_idempotency_uidx").on(
+      table.projectId,
+      table.idempotencyKey,
+    ),
+    foreignKey({
+      columns: [table.milestoneId, table.projectId],
+      foreignColumns: [milestones.id, milestones.projectId],
+      name: "client_project_items_milestone_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.scopeItemRevisionId, table.projectId],
+      foreignColumns: [
+        commercialScopeItemRevisions.id,
+        commercialScopeItemRevisions.projectId,
+      ],
+      name: "client_project_items_revision_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("client_project_items_active_milestone_uidx")
+      .on(table.projectId, table.milestoneId)
+      .where(
+        sql`${table.hiddenAt} is null and ${table.milestoneId} is not null`,
+      ),
+    uniqueIndex("client_project_items_active_revision_uidx")
+      .on(table.projectId, table.scopeItemRevisionId)
+      .where(
+        sql`${table.hiddenAt} is null and ${table.scopeItemRevisionId} is not null`,
+      ),
+    index("client_project_items_project_visible_idx").on(
+      table.projectId,
+      table.hiddenAt,
+      table.sortOrder,
+      table.id,
+    ),
+    check(
+      "client_project_items_target_shape",
+      sql`(${table.target} = 'milestone' and ${table.milestoneId} is not null and ${table.scopeItemRevisionId} is null) or (${table.target} = 'deliverable' and ${table.milestoneId} is null and ${table.scopeItemRevisionId} is not null)`,
+    ),
+    check(
+      "client_project_items_summary_length",
+      sql`char_length(btrim(${table.clientSummary})) between 1 and 2000`,
+    ),
+    check(
+      "client_project_items_hidden_time",
+      sql`${table.hiddenAt} is null or ${table.hiddenAt} >= ${table.visibleAt}`,
+    ),
+  ],
+);
+
 export const commercialRequests = pgTable(
   "commercial_requests",
   {
@@ -1076,6 +1331,7 @@ export const commercialRequests = pgTable(
     title: text("title").notNull(),
     requestText: text("request_text").notNull(),
     externalRequester: text("external_requester"),
+    submittedByClientParticipantId: uuid("submitted_by_client_participant_id"),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
     createdByUserId: uuid("created_by_user_id")
       .notNull()
@@ -1087,6 +1343,14 @@ export const commercialRequests = pgTable(
       table.id,
       table.projectId,
     ),
+    foreignKey({
+      columns: [table.submittedByClientParticipantId, table.projectId],
+      foreignColumns: [
+        clientProjectParticipants.id,
+        clientProjectParticipants.projectId,
+      ],
+      name: "commercial_requests_client_participant_project_fk",
+    }).onDelete("restrict"),
     uniqueIndex("commercial_requests_project_idempotency_uidx").on(
       table.projectId,
       table.idempotencyKey,
@@ -1096,6 +1360,10 @@ export const commercialRequests = pgTable(
       table.state,
       table.receivedAt,
       table.id,
+    ),
+    index("commercial_requests_client_participant_idx").on(
+      table.submittedByClientParticipantId,
+      table.receivedAt,
     ),
     check(
       "commercial_requests_title_length",
@@ -1392,6 +1660,541 @@ export const commercialImpactAssessments = pgTable(
     check(
       "commercial_impacts_notes_length",
       sql`${table.notes} is null or char_length(${table.notes}) <= 5000`,
+    ),
+  ],
+);
+
+export const clientCommercialPackets = pgTable(
+  "client_commercial_packets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
+    decisionId: uuid("decision_id").notNull(),
+    impactAssessmentId: uuid("impact_assessment_id"),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    versionNumber: integer("version_number").notNull(),
+    supersedesPacketId: uuid("supersedes_packet_id"),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+    requirement: clientPacketRequirement("requirement").notNull(),
+    title: text("title").notNull(),
+    requestSummary: text("request_summary").notNull(),
+    treatmentSummary: text("treatment_summary").notNull(),
+    scopeSummary: text("scope_summary"),
+    assumptions: text("assumptions"),
+    scheduleDeltaDays: integer("schedule_delta_days"),
+    targetDate: date("target_date"),
+    monetaryAmount: numeric("monetary_amount", { precision: 18, scale: 2 }),
+    currencyCode: text("currency_code"),
+    publishedByUserId: uuid("published_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    publishedAt: timestamp("published_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("client_packets_id_project_unique").on(table.id, table.projectId),
+    foreignKey({
+      columns: [table.requestId, table.projectId],
+      foreignColumns: [commercialRequests.id, commercialRequests.projectId],
+      name: "client_packets_request_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.decisionId, table.projectId],
+      foreignColumns: [commercialDecisions.id, commercialDecisions.projectId],
+      name: "client_packets_decision_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.impactAssessmentId, table.projectId],
+      foreignColumns: [
+        commercialImpactAssessments.id,
+        commercialImpactAssessments.projectId,
+      ],
+      name: "client_packets_impact_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.supersedesPacketId, table.projectId],
+      foreignColumns: [table.id, table.projectId],
+      name: "client_packets_supersedes_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("client_packets_request_version_uidx").on(
+      table.requestId,
+      table.versionNumber,
+    ),
+    uniqueIndex("client_packets_request_idempotency_uidx").on(
+      table.requestId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("client_packets_supersedes_uidx").on(table.supersedesPacketId),
+    uniqueIndex("client_packets_current_request_uidx")
+      .on(table.requestId)
+      .where(sql`${table.supersededAt} is null`),
+    index("client_packets_project_published_idx").on(
+      table.projectId,
+      table.publishedAt,
+      table.id,
+    ),
+    check("client_packets_version_positive", sql`${table.versionNumber} > 0`),
+    check(
+      "client_packets_title_length",
+      sql`char_length(btrim(${table.title})) between 1 and 240`,
+    ),
+    check(
+      "client_packets_request_summary_length",
+      sql`char_length(btrim(${table.requestSummary})) between 1 and 5000`,
+    ),
+    check(
+      "client_packets_treatment_summary_length",
+      sql`char_length(btrim(${table.treatmentSummary})) between 1 and 5000`,
+    ),
+    check(
+      "client_packets_optional_text_length",
+      sql`(${table.scopeSummary} is null or char_length(${table.scopeSummary}) <= 5000) and (${table.assumptions} is null or char_length(${table.assumptions}) <= 5000)`,
+    ),
+    check(
+      "client_packets_money_pair",
+      sql`(${table.monetaryAmount} is null and ${table.currencyCode} is null) or (${table.monetaryAmount} is not null and ${table.currencyCode} ~ '^[A-Z]{3}$')`,
+    ),
+    check(
+      "client_packets_superseded_time",
+      sql`${table.supersededAt} is null or ${table.supersededAt} >= ${table.publishedAt}`,
+    ),
+  ],
+);
+
+export const clientCommercialPacketScopeReferences = pgTable(
+  "client_commercial_packet_scope_references",
+  {
+    packetId: uuid("packet_id").notNull(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    scopeItemRevisionId: uuid("scope_item_revision_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.packetId, table.scopeItemRevisionId] }),
+    foreignKey({
+      columns: [table.packetId, table.projectId],
+      foreignColumns: [
+        clientCommercialPackets.id,
+        clientCommercialPackets.projectId,
+      ],
+      name: "client_packet_scope_refs_packet_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.scopeItemRevisionId, table.projectId],
+      foreignColumns: [
+        commercialScopeItemRevisions.id,
+        commercialScopeItemRevisions.projectId,
+      ],
+      name: "client_packet_scope_refs_revision_project_fk",
+    }).onDelete("restrict"),
+  ],
+);
+
+export const clientCommercialPacketActions = pgTable(
+  "client_commercial_packet_actions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    packetId: uuid("packet_id").notNull(),
+    participantId: uuid("participant_id").notNull(),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    action: clientPacketAction("action").notNull(),
+    comment: text("comment"),
+    actedAt: timestamp("acted_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("client_packet_actions_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.packetId, table.projectId],
+      foreignColumns: [
+        clientCommercialPackets.id,
+        clientCommercialPackets.projectId,
+      ],
+      name: "client_packet_actions_packet_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.participantId, table.projectId],
+      foreignColumns: [
+        clientProjectParticipants.id,
+        clientProjectParticipants.projectId,
+      ],
+      name: "client_packet_actions_participant_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("client_packet_actions_packet_uidx").on(table.packetId),
+    uniqueIndex("client_packet_actions_idempotency_uidx").on(
+      table.packetId,
+      table.idempotencyKey,
+    ),
+    index("client_packet_actions_project_acted_idx").on(
+      table.projectId,
+      table.actedAt,
+      table.id,
+    ),
+    check(
+      "client_packet_actions_comment_length",
+      sql`${table.comment} is null or char_length(${table.comment}) <= 5000`,
+    ),
+  ],
+);
+
+export const clientAcceptanceTargets = pgTable(
+  "client_acceptance_targets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    projectItemId: uuid("project_item_id").notNull(),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    versionNumber: integer("version_number").notNull(),
+    supersedesTargetId: uuid("supersedes_target_id"),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+    snapshotTitle: text("snapshot_title").notNull(),
+    snapshotSummary: text("snapshot_summary").notNull(),
+    snapshotStatus: text("snapshot_status"),
+    snapshotTargetDate: date("snapshot_target_date"),
+    milestoneSourceUpdatedAt: timestamp("milestone_source_updated_at", {
+      withTimezone: true,
+    }),
+    publishedByUserId: uuid("published_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    publishedAt: timestamp("published_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("client_acceptance_targets_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.projectItemId, table.projectId],
+      foreignColumns: [clientProjectItems.id, clientProjectItems.projectId],
+      name: "client_acceptance_targets_item_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.supersedesTargetId, table.projectId],
+      foreignColumns: [table.id, table.projectId],
+      name: "client_acceptance_targets_supersedes_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("client_acceptance_targets_item_version_uidx").on(
+      table.projectItemId,
+      table.versionNumber,
+    ),
+    uniqueIndex("client_acceptance_targets_item_idempotency_uidx").on(
+      table.projectItemId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("client_acceptance_targets_supersedes_uidx").on(
+      table.supersedesTargetId,
+    ),
+    uniqueIndex("client_acceptance_targets_current_item_uidx")
+      .on(table.projectItemId)
+      .where(sql`${table.supersededAt} is null`),
+    index("client_acceptance_targets_project_published_idx").on(
+      table.projectId,
+      table.publishedAt,
+      table.id,
+    ),
+    check(
+      "client_acceptance_targets_version_positive",
+      sql`${table.versionNumber} > 0`,
+    ),
+    check(
+      "client_acceptance_targets_title_length",
+      sql`char_length(btrim(${table.snapshotTitle})) between 1 and 240`,
+    ),
+    check(
+      "client_acceptance_targets_summary_length",
+      sql`char_length(btrim(${table.snapshotSummary})) between 1 and 5000`,
+    ),
+    check(
+      "client_acceptance_targets_status_length",
+      sql`${table.snapshotStatus} is null or char_length(${table.snapshotStatus}) <= 80`,
+    ),
+    check(
+      "client_acceptance_targets_superseded_time",
+      sql`${table.supersededAt} is null or ${table.supersededAt} >= ${table.publishedAt}`,
+    ),
+  ],
+);
+
+export const clientAcceptanceTargetPackets = pgTable(
+  "client_acceptance_target_packets",
+  {
+    acceptanceTargetId: uuid("acceptance_target_id").notNull(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    packetId: uuid("packet_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.acceptanceTargetId, table.packetId] }),
+    foreignKey({
+      columns: [table.acceptanceTargetId, table.projectId],
+      foreignColumns: [
+        clientAcceptanceTargets.id,
+        clientAcceptanceTargets.projectId,
+      ],
+      name: "client_acceptance_target_packets_target_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.packetId, table.projectId],
+      foreignColumns: [
+        clientCommercialPackets.id,
+        clientCommercialPackets.projectId,
+      ],
+      name: "client_acceptance_target_packets_packet_project_fk",
+    }).onDelete("restrict"),
+  ],
+);
+
+export const clientAcceptanceActions = pgTable(
+  "client_acceptance_actions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    acceptanceTargetId: uuid("acceptance_target_id").notNull(),
+    participantId: uuid("participant_id").notNull(),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    action: clientAcceptanceAction("action").notNull(),
+    comment: text("comment"),
+    actedAt: timestamp("acted_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("client_acceptance_actions_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.acceptanceTargetId, table.projectId],
+      foreignColumns: [
+        clientAcceptanceTargets.id,
+        clientAcceptanceTargets.projectId,
+      ],
+      name: "client_acceptance_actions_target_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.participantId, table.projectId],
+      foreignColumns: [
+        clientProjectParticipants.id,
+        clientProjectParticipants.projectId,
+      ],
+      name: "client_acceptance_actions_participant_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("client_acceptance_actions_target_uidx").on(
+      table.acceptanceTargetId,
+    ),
+    uniqueIndex("client_acceptance_actions_idempotency_uidx").on(
+      table.acceptanceTargetId,
+      table.idempotencyKey,
+    ),
+    index("client_acceptance_actions_project_acted_idx").on(
+      table.projectId,
+      table.actedAt,
+      table.id,
+    ),
+    check(
+      "client_acceptance_actions_comment_length",
+      sql`${table.comment} is null or char_length(${table.comment}) <= 5000`,
+    ),
+  ],
+);
+
+export const clientDiscussionMessages = pgTable(
+  "client_discussion_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    target: clientDiscussionTarget("target").notNull(),
+    requestId: uuid("request_id"),
+    packetId: uuid("packet_id"),
+    acceptanceTargetId: uuid("acceptance_target_id"),
+    authorUserId: uuid("author_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    authorParticipantId: uuid("author_participant_id"),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("client_discussion_messages_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.requestId, table.projectId],
+      foreignColumns: [commercialRequests.id, commercialRequests.projectId],
+      name: "client_discussion_messages_request_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.packetId, table.projectId],
+      foreignColumns: [
+        clientCommercialPackets.id,
+        clientCommercialPackets.projectId,
+      ],
+      name: "client_discussion_messages_packet_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.acceptanceTargetId, table.projectId],
+      foreignColumns: [
+        clientAcceptanceTargets.id,
+        clientAcceptanceTargets.projectId,
+      ],
+      name: "client_discussion_messages_acceptance_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.authorParticipantId, table.projectId],
+      foreignColumns: [
+        clientProjectParticipants.id,
+        clientProjectParticipants.projectId,
+      ],
+      name: "client_discussion_messages_participant_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("client_discussion_messages_author_idempotency_uidx").on(
+      table.authorUserId,
+      table.idempotencyKey,
+    ),
+    index("client_discussion_messages_project_created_idx").on(
+      table.projectId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      "client_discussion_messages_target_shape",
+      sql`(${table.target} = 'request' and ${table.requestId} is not null and ${table.packetId} is null and ${table.acceptanceTargetId} is null) or (${table.target} = 'packet' and ${table.requestId} is null and ${table.packetId} is not null and ${table.acceptanceTargetId} is null) or (${table.target} = 'acceptance_target' and ${table.requestId} is null and ${table.packetId} is null and ${table.acceptanceTargetId} is not null)`,
+    ),
+    check(
+      "client_discussion_messages_body_length",
+      sql`char_length(btrim(${table.body})) between 1 and 5000`,
+    ),
+  ],
+);
+
+export const clientCollaborationNotifications = pgTable(
+  "client_collaboration_notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").notNull(),
+    recipientUserId: uuid("recipient_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    recipientParticipantId: uuid("recipient_participant_id"),
+    kind: clientNotificationKind("kind").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    actorParticipantId: uuid("actor_participant_id"),
+    requestId: uuid("request_id"),
+    packetId: uuid("packet_id"),
+    acceptanceTargetId: uuid("acceptance_target_id"),
+    dedupeKey: text("dedupe_key").notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    emailDeliveryState: clientEmailDeliveryState("email_delivery_state")
+      .default("not_requested")
+      .notNull(),
+    emailAttemptCount: integer("email_attempt_count").default(0).notNull(),
+    lastEmailAttemptAt: timestamp("last_email_attempt_at", {
+      withTimezone: true,
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.projectId, table.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: "client_notifications_project_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.recipientParticipantId, table.projectId],
+      foreignColumns: [
+        clientProjectParticipants.id,
+        clientProjectParticipants.projectId,
+      ],
+      name: "client_notifications_recipient_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.actorParticipantId, table.projectId],
+      foreignColumns: [
+        clientProjectParticipants.id,
+        clientProjectParticipants.projectId,
+      ],
+      name: "client_notifications_actor_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.requestId, table.projectId],
+      foreignColumns: [commercialRequests.id, commercialRequests.projectId],
+      name: "client_notifications_request_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.packetId, table.projectId],
+      foreignColumns: [
+        clientCommercialPackets.id,
+        clientCommercialPackets.projectId,
+      ],
+      name: "client_notifications_packet_project_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.acceptanceTargetId, table.projectId],
+      foreignColumns: [
+        clientAcceptanceTargets.id,
+        clientAcceptanceTargets.projectId,
+      ],
+      name: "client_notifications_acceptance_project_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("client_notifications_recipient_dedupe_uidx").on(
+      table.recipientUserId,
+      table.dedupeKey,
+    ),
+    index("client_notifications_recipient_unread_idx").on(
+      table.recipientUserId,
+      table.readAt,
+      table.createdAt,
+      table.id,
+    ),
+    index("client_notifications_project_recipient_idx").on(
+      table.projectId,
+      table.recipientUserId,
+      table.createdAt,
+    ),
+    check(
+      "client_notifications_dedupe_length",
+      sql`char_length(${table.dedupeKey}) between 1 and 200`,
+    ),
+    check(
+      "client_notifications_attempt_count",
+      sql`${table.emailAttemptCount} >= 0`,
+    ),
+    check(
+      "client_notifications_target",
+      sql`${table.requestId} is not null or ${table.packetId} is not null or ${table.acceptanceTargetId} is not null`,
     ),
   ],
 );
@@ -1859,6 +2662,21 @@ export type CommercialImpactConfidence =
   (typeof commercialImpactConfidence.enumValues)[number];
 export type CommercialBasisType =
   (typeof commercialBasisType.enumValues)[number];
+export type ClientParticipantRole =
+  (typeof clientParticipantRole.enumValues)[number];
+export type ClientProjectionTarget =
+  (typeof clientProjectionTarget.enumValues)[number];
+export type ClientPacketRequirement =
+  (typeof clientPacketRequirement.enumValues)[number];
+export type ClientPacketAction = (typeof clientPacketAction.enumValues)[number];
+export type ClientAcceptanceAction =
+  (typeof clientAcceptanceAction.enumValues)[number];
+export type ClientDiscussionTarget =
+  (typeof clientDiscussionTarget.enumValues)[number];
+export type ClientNotificationKind =
+  (typeof clientNotificationKind.enumValues)[number];
+export type ClientEmailDeliveryState =
+  (typeof clientEmailDeliveryState.enumValues)[number];
 export type WorkItemSubscriptionState =
   (typeof workItemSubscriptionState.enumValues)[number];
 export type WorkItemSubscriptionSource =

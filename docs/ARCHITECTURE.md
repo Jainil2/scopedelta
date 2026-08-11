@@ -2,14 +2,16 @@
 
 ## Status
 
-Implemented through SC-006C. The SC-004 production platform kernel now supports
+Implemented through SC-007. The SC-004 production platform kernel now supports
 the client-project delivery foundation plus production board, optional cycle
 planning, authorized cross-project daily execution, and internal project
 collaboration. SC-006A adds the first evidence-backed commercial baseline and
 advisory work provenance. SC-006B adds atomic client requests, explicit
 commercial decisions and impact history, plus decision-backed work provenance.
 SC-006C adds immutable baseline amendments, explicit item lineage, and advisory
-stale-basis review for active delivery.
+stale-basis review for active delivery. SC-007 adds a separately authorized,
+allowlisted client projection with request intake, immutable commercial packet
+and acceptance evidence, external-safe discussion, and durable notifications.
 
 ## System decision
 
@@ -120,6 +122,46 @@ automatically. The lead or a workspace owner/admin manages project lifecycle
 and access; project members manage milestones and backlog work. Removing a
 workspace membership cascades current project access while nullable user
 references retain historical lead and assignee attribution.
+
+External client access is a third, deliberately separate boundary. A verified
+Better Auth account gains access only through an active project-scoped
+`client_project_participants` row; it never receives workspace membership or
+internal project authorization. Internal owner/admin/project-lead authority
+manages participants and publication. External collaborators can submit and
+discuss requests, while only active approvers can take terminal packet or
+acceptance actions. Revocation is soft so attribution remains reconstructable,
+but it blocks the next authorized read or mutation immediately.
+
+## Client collaboration projection
+
+Migration `0010_client_collaboration.sql` implements the SC-007 boundary. A
+shared `ClientProjectProjection` DTO explicitly constructs the safe project
+profile, selected milestone or immutable deliverable revision, client-originated
+requests, published packet and acceptance snapshots, external discussion, and
+external-safe history. Both the client home and internal preview consume that
+same allowlist. Internal backlog, estimates, notes, rationale, drift, evidence,
+audit metadata, AI, Git, and QA records cannot enter the contract by inheritance.
+
+Invitations use expiring, single-use hashed tokens. The URL fragment is staged
+through a same-origin endpoint before acceptance binds the invitation to a
+verified account with a matching identity. Creation always returns a copyable
+URL; SMTP is optional and runs only after the database transaction commits.
+
+Commercial packets and delivery-acceptance targets are immutable version chains.
+Publication copies only manually authored safe text and explicitly selected
+values from a confirmed impact assessment. Packet actions and acceptance actions
+lock the exact version; one terminal action wins, compatible retries return the
+idempotent result, and contradictory concurrency returns `409`. Superseded or
+source-stale versions return a stable stale-version error with the current
+version when available. External action evidence never rewrites the internal
+decision, delivery basis, milestone, or authorization state.
+
+External messages use a separate append-only table rather than internal work-item
+comments or project notes. Client-collaboration notifications store durable
+recipient, dedupe, read, and optional delivery status only; message bodies,
+tokens, provider responses, and customer content are excluded from notification
+metadata and operational logs. See
+`docs/decisions/ADR-009-client-projection-boundary.md`.
 
 ## Client-project delivery model
 
@@ -356,6 +398,11 @@ creation and activation, amendment preparation, paginated baseline history,
 scope revisions and retirement lifecycle, atomic commercial requests,
 request state, decision confirmation/supersession, impact assessments, work
 purpose/basis links, and paginated advisory drift.
+Dedicated `/api/v1/client` routes expose the external project list/projection,
+requests, packets, acceptance, discussion, actions, invitations, and notification
+inbox. Internal management remains workspace/project namespaced. Client pages
+and APIs are private/no-store, no-index/no-follow/no-archive, and no-referrer.
+Client collection pages default to 25 items and cap at 100.
 Successful payloads are `{ data: ... }`; paginated lists include page metadata
 inside `data`. Page size defaults to 50 and is capped at 100. Errors are
 `{ error: { code, message, fieldErrors? } }`. Route handlers parse bounded JSON,

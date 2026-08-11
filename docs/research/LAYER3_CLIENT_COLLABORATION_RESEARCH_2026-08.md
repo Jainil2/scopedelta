@@ -2,7 +2,7 @@
 
 ## Status
 
-**Research checkpoint complete — product scope validated for engineering decomposition.**
+**Research complete — consolidated SC-007 engineering decision accepted and implemented for review.**
 
 This document is the durable Layer-3 product/research source of truth for SC-007. It follows completion of the Layer-2 Commercial Delivery Graph through SC-006A/B/C and PR #35.
 
@@ -48,6 +48,7 @@ Teamwork also provides a separate proof-review flow where external reviewers/app
 Product implication: free client collaboration and approval are already table stakes. ScopeDelta cannot differentiate merely by offering client accounts or an approve button.
 
 Sources:
+
 - https://support.teamwork.com/projects/using-teamwork/working-with-client-users
 - https://support.teamwork.com/projects/proofing/review-and-approve-proofs
 - https://support.teamwork.com/projects/proofing/create-a-proof
@@ -59,6 +60,7 @@ Productive supports free client seats with restricted permissions. Clients can b
 Product implication: “client seat with filtered project access” is mature agency-software behavior. ScopeDelta should avoid competing on generic permission breadth or PSA/budget visibility.
 
 Sources:
+
 - https://help.productive.io/en/articles/2179579-inviting-clients-to-productive
 - https://help.productive.io/en/articles/2179600-what-can-a-client-see-after-joining-productive
 - https://help.productive.io/en/articles/9273131-customizing-client-permissions
@@ -70,6 +72,7 @@ ClickUp allows guests to access only explicitly shared locations/items and suppo
 Product implication: granular guest permissions and client task access are not a unique value proposition. Broad item-level ACL configuration also conflicts with ScopeDelta's “simple by default” product principle.
 
 Sources:
+
 - https://help.clickup.com/hc/en-us/articles/6310022323991-Guest-type-user-roles
 - https://help.clickup.com/hc/en-us/articles/6309221065495-Permissions-in-detail
 - https://help.clickup.com/hc/en-us/articles/6328082117527-How-to-work-with-clients-in-ClickUp
@@ -81,6 +84,7 @@ Bonsai provides a branded client portal where clients can see projects, activity
 Product implication: branded project/status/file/messaging portals are a crowded category. ScopeDelta should not build portal branding, billing or general document sharing as the Layer-3 wedge.
 
 Sources:
+
 - https://help.hellobonsai.com/en/articles/4409019-how-to-use-the-client-portal
 - https://help.hellobonsai.com/en/articles/10003632-sharing-and-managing-tasks-through-your-client-portal
 
@@ -91,6 +95,7 @@ Jira Service Management provides a customer-facing help center/request model. Cu
 Product implication: request intake plus workflow approval is established service-management behavior. ScopeDelta must tie client action specifically to commercial delivery provenance rather than reproduce a generic service desk.
 
 Sources:
+
 - https://support.atlassian.com/jira-service-management-cloud/docs/add-customers-and-learn-how-they-request-help/
 - https://support.atlassian.com/jira-service-management-cloud/docs/what-are-approvals/
 - https://support.atlassian.com/jira-service-management-cloud/docs/set-up-approvals/
@@ -102,6 +107,7 @@ Linear Customer Requests link customer feedback to issues/projects and preserve 
 Product implication: ScopeDelta can be meaningfully different by allowing the client to participate in a tightly controlled version of the request/decision loop while the delivery team retains the internal graph and work detail.
 
 Source:
+
 - https://linear.app/docs/customer-requests
 
 ### Agency-specific portal products
@@ -109,6 +115,7 @@ Source:
 Agency-oriented products such as AgencyHandy already market client portals with service/request intake, project progress, feedback, file review and approvals. This reinforces that “agency portal” is a category, not a USP.
 
 Source:
+
 - https://www.agencyhandy.com/client-portal/
 - https://www.agencyhandy.com/solutions/project-management-software/
 
@@ -338,15 +345,15 @@ Do not automatically expose internal effort estimates, margin, cost, notes or un
 
 ### Default client action by commercial disposition
 
-| Commercial disposition/state | Default client action |
-|---|---|
-| `covered` | Informational; client may request clarification. No approval required by default. |
-| `absorbed` | Informational/goodwill; client may request clarification. No paid-change approval required. |
-| `swap` | Client approve / reject / request clarification before treating the swap as client-accepted. |
-| `paid_change` | Client approve / reject / request clarification before treating the paid change as client-accepted. |
-| `deferred` | Informational; client may request clarification. |
-| `rejected` | Informational; client may request clarification. |
-| request `needs_clarification` | Client supplies clarification/answer; this is not approval. |
+| Commercial disposition/state  | Default client action                                                                               |
+| ----------------------------- | --------------------------------------------------------------------------------------------------- |
+| `covered`                     | Informational; client may request clarification. No approval required by default.                   |
+| `absorbed`                    | Informational/goodwill; client may request clarification. No paid-change approval required.         |
+| `swap`                        | Client approve / reject / request clarification before treating the swap as client-accepted.        |
+| `paid_change`                 | Client approve / reject / request clarification before treating the paid change as client-accepted. |
+| `deferred`                    | Informational; client may request clarification.                                                    |
+| `rejected`                    | Informational; client may request clarification.                                                    |
+| request `needs_clarification` | Client supplies clarification/answer; this is not approval.                                         |
 
 This is a product default, not a claim about legal enforceability. Organizations may later need configurable policy, but custom workflow builders are not Layer-3 scope.
 
@@ -420,18 +427,18 @@ The current runtime matrix over-classifies Layer-3 core capabilities as hybrid/e
 
 The validated model is:
 
-| Capability | Runtime class | Layer-3 decision |
-|---|---|---|
-| External client users/invites | Local/LAN | Account/project participant state and invite tokens are core server behavior; outbound invite email is optional. |
-| Client-safe project portal | Local/LAN | Same ScopeDelta server/domain data. |
-| Client request intake | Local/LAN | Extends existing SC-006B request domain. |
-| Client-safe discussion | Local/LAN | Server-authoritative project data. |
-| Negotiation/change packet | Local/LAN | Versioned projection of Layer-2 records. |
-| Approve/reject/clarify | Local/LAN | Authenticated domain actions. |
-| Milestone/deliverable acceptance | Local/LAN | Authenticated/versioned domain action. |
-| Immutable shared versions | Local/LAN | Core relational/audit state. |
-| Outbound email notifications | Hybrid/optional external | Managed email or customer SMTP; not required for authoritative state. |
-| Public/action links | Local/LAN, deferred by default | Token/link generation can be local, but ongoing client portal uses authenticated accounts initially. |
+| Capability                       | Runtime class                  | Layer-3 decision                                                                                                 |
+| -------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| External client users/invites    | Local/LAN                      | Account/project participant state and invite tokens are core server behavior; outbound invite email is optional. |
+| Client-safe project portal       | Local/LAN                      | Same ScopeDelta server/domain data.                                                                              |
+| Client request intake            | Local/LAN                      | Extends existing SC-006B request domain.                                                                         |
+| Client-safe discussion           | Local/LAN                      | Server-authoritative project data.                                                                               |
+| Negotiation/change packet        | Local/LAN                      | Versioned projection of Layer-2 records.                                                                         |
+| Approve/reject/clarify           | Local/LAN                      | Authenticated domain actions.                                                                                    |
+| Milestone/deliverable acceptance | Local/LAN                      | Authenticated/versioned domain action.                                                                           |
+| Immutable shared versions        | Local/LAN                      | Core relational/audit state.                                                                                     |
+| Outbound email notifications     | Hybrid/optional external       | Managed email or customer SMTP; not required for authoritative state.                                            |
+| Public/action links              | Local/LAN, deferred by default | Token/link generation can be local, but ongoing client portal uses authenticated accounts initially.             |
 
 Layer 3 therefore introduces **no mandatory paid external service**.
 
@@ -470,7 +477,12 @@ Public unauthenticated project portals are explicitly not required for Layer 3.
 
 ## Recommended Layer-3 engineering sequence
 
-### SC-007A — External client boundary, client-safe project home and request intake
+The executable delivery decision supersedes the original three-issue proposal:
+SC-007 is implemented as one engineering issue and one primary PR. The A/B/C
+labels below describe internal phases only; issues #36/#37/#38 are closed as
+superseded by SC-007 / #11.
+
+### Phase A — External client boundary, client-safe project home and request intake
 
 **Outcome:** an agency can invite a client contact into exactly one project; the client sees a deliberately small project surface and can submit/track a request that enters the existing commercial request lifecycle.
 
@@ -488,7 +500,7 @@ Scope:
 
 Why first: this is the minimum closed-loop external surface and validates client adoption without waiting for the most sensitive commercial-action code.
 
-### SC-007B — Immutable commercial publication and client decision actions
+### Phase B — Immutable commercial publication and client decision actions
 
 **Outcome:** internal PM can publish a versioned client-safe commercial response/change packet and an authorized client approver can take the appropriate action on the exact version.
 
@@ -504,7 +516,7 @@ Scope:
 - trace request → decision → publication → client action → commercial/delivery context;
 - client-visible discussion on request/packet if needed for a usable clarification loop.
 
-### SC-007C — Delivery acceptance and client-collaboration hardening
+### Phase C — Delivery acceptance and client-collaboration hardening
 
 **Outcome:** client can formally accept or request changes to a published milestone/deliverable target, with recoverable notifications and complete Layer-3 history.
 
@@ -588,7 +600,8 @@ These are outcome metrics, not a requirement to build a large analytics product 
 13. Core Layer-3 capability is Local/LAN; outbound email is optional Hybrid.
 14. Layer 3 requires no mandatory paid external provider.
 15. Client participants should not consume normal paid internal employee seats; exact plan limits/pricing remain later scope.
-16. Implement SC-007 as three vertical slices: 007A → 007B → 007C.
+16. Implement SC-007 as one engineering issue and primary PR, using A → B → C
+    only as internal sequencing.
 
 ## References
 
@@ -626,4 +639,5 @@ External research sources:
 
 ## Next action
 
-Update product/roadmap/runtime artifacts, convert SC-007 into a research-complete tracking parent, create SC-007A/B/C engineering issues, and mark **only SC-007A** `READY FOR CODEX`.
+Implement and review the consolidated SC-007 / #11 change, then begin SC-008
+research only after the Layer-3 exit criteria and complete engineering gate pass.

@@ -455,6 +455,12 @@ describe("client collaboration domain boundary", () => {
       monetaryAmount: "1200.00",
       currencyCode: "USD",
     });
+    expect(visible.attention).toContainEqual({
+      kind: "packet",
+      targetId: packet.id,
+      label: "Review SSO change",
+      historyPage: 1,
+    });
     expect(JSON.stringify(visible.packets[0])).not.toContain("2400");
     await expect(
       actOnClientCommercialPacket(collaborator, fixture.project.id, packet.id, {
@@ -881,6 +887,16 @@ describe("client collaboration domain boundary", () => {
       fixture.project.id,
       acceptanceInput(item.id, "Concurrent launch v1"),
     );
+    const visible = await getClientProjectProjection(
+      approver,
+      fixture.project.id,
+    );
+    expect(visible.attention).toContainEqual({
+      kind: "acceptance",
+      targetId: firstTarget.id,
+      label: "Accept Concurrent launch v1",
+      historyPage: 1,
+    });
     const milestoneLocked = deferred();
     const releaseMilestone = deferred();
     const changeMilestone = db.transaction(async (transaction) => {

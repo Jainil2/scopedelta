@@ -1991,12 +1991,16 @@ async function buildClientAttention(
   const db = getDb();
   const rankedRequests = db
     .select({
-      id: commercialRequests.id,
-      title: commercialRequests.title,
-      state: commercialRequests.state,
+      requestId: sql<string>`${commercialRequests.id}`.as("request_id"),
+      requestTitle: sql<string>`${commercialRequests.title}`.as(
+        "request_title",
+      ),
+      requestState: sql<string>`${commercialRequests.state}`.as(
+        "request_state",
+      ),
       historyRank:
         sql<number>`(row_number() over (order by ${commercialRequests.receivedAt} desc, ${commercialRequests.id} desc))::int`.as(
-          "history_rank",
+          "request_history_rank",
         ),
     })
     .from(commercialRequests)
@@ -2009,15 +2013,27 @@ async function buildClientAttention(
     .as("ranked_client_attention_requests");
   const rankedPackets = db
     .select({
-      id: clientCommercialPackets.id,
-      title: clientCommercialPackets.title,
-      requirement: clientCommercialPackets.requirement,
-      supersededAt: clientCommercialPackets.supersededAt,
-      decisionSupersededAt: commercialDecisions.supersededAt,
-      actionId: clientCommercialPacketActions.id,
+      packetId: sql<string>`${clientCommercialPackets.id}`.as("packet_id"),
+      packetTitle: sql<string>`${clientCommercialPackets.title}`.as(
+        "packet_title",
+      ),
+      packetRequirement: sql<string>`${clientCommercialPackets.requirement}`.as(
+        "packet_requirement",
+      ),
+      packetSupersededAt:
+        sql<Date | null>`${clientCommercialPackets.supersededAt}`.as(
+          "packet_superseded_at",
+        ),
+      decisionSupersededAt:
+        sql<Date | null>`${commercialDecisions.supersededAt}`.as(
+          "decision_superseded_at",
+        ),
+      packetActionId: sql<
+        string | null
+      >`${clientCommercialPacketActions.id}`.as("packet_action_id"),
       historyRank:
         sql<number>`(row_number() over (order by ${clientCommercialPackets.publishedAt} desc, ${clientCommercialPackets.id} desc))::int`.as(
-          "history_rank",
+          "packet_history_rank",
         ),
     })
     .from(clientCommercialPackets)
@@ -2033,17 +2049,32 @@ async function buildClientAttention(
     .as("ranked_client_attention_packets");
   const rankedAcceptanceTargets = db
     .select({
-      id: clientAcceptanceTargets.id,
-      title: clientAcceptanceTargets.snapshotTitle,
-      supersededAt: clientAcceptanceTargets.supersededAt,
-      milestoneSourceUpdatedAt:
-        clientAcceptanceTargets.milestoneSourceUpdatedAt,
-      currentMilestoneUpdatedAt: milestones.updatedAt,
-      itemHiddenAt: clientProjectItems.hiddenAt,
-      actionId: clientAcceptanceActions.id,
+      acceptanceTargetId: sql<string>`${clientAcceptanceTargets.id}`.as(
+        "acceptance_target_id",
+      ),
+      acceptanceTitle: sql<string>`${clientAcceptanceTargets.snapshotTitle}`.as(
+        "acceptance_title",
+      ),
+      acceptanceTargetSupersededAt:
+        sql<Date | null>`${clientAcceptanceTargets.supersededAt}`.as(
+          "acceptance_target_superseded_at",
+        ),
+      acceptanceTargetMilestoneSourceUpdatedAt:
+        sql<Date | null>`${clientAcceptanceTargets.milestoneSourceUpdatedAt}`.as(
+          "acceptance_target_milestone_source_updated_at",
+        ),
+      sourceMilestoneUpdatedAt: sql<Date | null>`${milestones.updatedAt}`.as(
+        "source_milestone_updated_at",
+      ),
+      sourceItemHiddenAt: sql<Date | null>`${clientProjectItems.hiddenAt}`.as(
+        "source_item_hidden_at",
+      ),
+      acceptanceActionId: sql<string | null>`${clientAcceptanceActions.id}`.as(
+        "acceptance_action_id",
+      ),
       historyRank:
         sql<number>`(row_number() over (order by ${clientAcceptanceTargets.publishedAt} desc, ${clientAcceptanceTargets.id} desc))::int`.as(
-          "history_rank",
+          "acceptance_history_rank",
         ),
     })
     .from(clientAcceptanceTargets)
@@ -2066,28 +2097,28 @@ async function buildClientAttention(
     await Promise.all([
       db
         .select({
-          id: rankedRequests.id,
-          title: rankedRequests.title,
+          id: rankedRequests.requestId,
+          title: rankedRequests.requestTitle,
           historyRank: rankedRequests.historyRank,
         })
         .from(rankedRequests)
-        .where(eq(rankedRequests.state, "needs_clarification"))
+        .where(eq(rankedRequests.requestState, "needs_clarification"))
         .orderBy(asc(rankedRequests.historyRank))
         .limit(CLIENT_ATTENTION_LIMIT),
       participant?.role === "approver"
         ? db
             .select({
-              id: rankedPackets.id,
-              title: rankedPackets.title,
+              id: rankedPackets.packetId,
+              title: rankedPackets.packetTitle,
               historyRank: rankedPackets.historyRank,
             })
             .from(rankedPackets)
             .where(
               and(
-                eq(rankedPackets.requirement, "approval"),
-                isNull(rankedPackets.supersededAt),
+                eq(rankedPackets.packetRequirement, "approval"),
+                isNull(rankedPackets.packetSupersededAt),
                 isNull(rankedPackets.decisionSupersededAt),
-                isNull(rankedPackets.actionId),
+                isNull(rankedPackets.packetActionId),
               ),
             )
             .orderBy(asc(rankedPackets.historyRank))
@@ -2096,22 +2127,21 @@ async function buildClientAttention(
       participant?.role === "approver"
         ? db
             .select({
-              id: rankedAcceptanceTargets.id,
-              title: rankedAcceptanceTargets.title,
+              id: rankedAcceptanceTargets.acceptanceTargetId,
+              title: rankedAcceptanceTargets.acceptanceTitle,
               historyRank: rankedAcceptanceTargets.historyRank,
             })
             .from(rankedAcceptanceTargets)
             .where(
               and(
-                isNull(rankedAcceptanceTargets.supersededAt),
-                isNull(rankedAcceptanceTargets.itemHiddenAt),
-                isNull(rankedAcceptanceTargets.actionId),
+                isNull(rankedAcceptanceTargets.acceptanceTargetSupersededAt),
+                isNull(rankedAcceptanceTargets.sourceItemHiddenAt),
+                isNull(rankedAcceptanceTargets.acceptanceActionId),
                 or(
-                  isNull(rankedAcceptanceTargets.milestoneSourceUpdatedAt),
-                  eq(
-                    rankedAcceptanceTargets.currentMilestoneUpdatedAt,
-                    rankedAcceptanceTargets.milestoneSourceUpdatedAt,
+                  isNull(
+                    rankedAcceptanceTargets.acceptanceTargetMilestoneSourceUpdatedAt,
                   ),
+                  sql`date_trunc('milliseconds', ${rankedAcceptanceTargets.sourceMilestoneUpdatedAt}) = date_trunc('milliseconds', ${rankedAcceptanceTargets.acceptanceTargetMilestoneSourceUpdatedAt})`,
                 ),
               ),
             )

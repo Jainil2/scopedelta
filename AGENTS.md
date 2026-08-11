@@ -38,18 +38,33 @@ When splitting, record the reason in the parent/child issues. The goal is not sm
 
 ## Testing and CI efficiency
 
-Quality gates remain mandatory, but avoid redundant full-suite execution during iterative development.
+Quality gates remain mandatory. Optimize **when** expensive validation runs rather than reducing coverage.
 
-During implementation:
+### Development and review-candidate loop
 
 1. Run the smallest relevant unit/integration tests for the code being changed.
 2. Use focused browser/E2E coverage for the journey currently under construction.
-3. Do not repeatedly run the full E2E + production build + Docker/container suite after every small edit unless the change specifically affects those boundaries.
-4. Run the complete required migration/lint/typecheck/unit/integration/E2E/build/container gate when the PR is genuinely ready for review.
-5. After review feedback, first run focused regression coverage for the fix; when the fix set is complete, run one final full hosted gate before merge.
+3. Run focused lint/typecheck/build checks when the touched boundary warrants them.
+4. Do not repeatedly run the complete hosted E2E + production build + smoke + Docker/container gate after every edit or review fix unless the specific change requires broad early confidence.
+5. Push a review candidate once focused regression evidence is strong enough for CEO/product review; **a full hosted gate is not a prerequisite for CEO review**.
+
+### CEO/product review
+
+1. CEO reviews the exact PR head against the issue, diff, authorization/privacy boundaries, and focused test evidence.
+2. If blockers are found, Codex fixes them in the same PR and reruns targeted regression checks first.
+3. Repeat focused fix → review cycles without paying for the full hosted gate each time.
+4. Broader early validation is appropriate when a change materially affects migrations, authentication/authorization, deployment/runtime boundaries, or another area where targeted checks cannot provide enough confidence.
+
+### Final merge gate
+
+1. When CEO reports **no remaining product/security blockers**, treat the PR as **functionally approved pending final merge gate** and freeze ordinary feature scope.
+2. Run the complete required hosted migration/lint/typecheck/unit/integration/E2E/build/smoke/container gate once on the exact merge-candidate head.
+3. Do not merge without that final gate passing.
+4. If the final gate exposes a real defect, fix it, run targeted regression first, then rerun the necessary final hosted gate on the new code head.
+5. Any source-code change after the final green gate must be revalidated before merge; do not rely on a green result from an older SHA.
 6. Do not weaken, skip, or suppress the final merge-quality gate merely to save time.
 
-Prefer fewer meaningful pushes/full CI cycles over many tiny pushes that each trigger the entire pipeline when the work can be validated locally/focused first.
+Prefer fewer meaningful pushes and full-CI cycles. The goal is **fast review feedback plus one authoritative pre-merge validation**, not repeated 12–15 minute validation before every product review.
 
 ## Before implementing an issue
 

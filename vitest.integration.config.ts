@@ -16,5 +16,16 @@ export default defineConfig({
     fileParallelism: false,
     testTimeout: 20_000,
     hookTimeout: 20_000,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov"],
+      reportsDirectory: "coverage/integration",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/**/*.test.{ts,tsx}",
+        "src/**/*.integration.test.{ts,tsx}",
+        "src/test/**",
+      ],
+    },
   },
 });

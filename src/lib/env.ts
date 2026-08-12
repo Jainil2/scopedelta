@@ -59,3 +59,49 @@ export function getSmtpConfig(): SmtpConfig {
 
   return { host, port, secure, user, password, from };
 }
+
+export type GitHubAppConfig = {
+  appId: string;
+  privateKey: string;
+  webhookSecret: string;
+  slug: string;
+};
+
+export function getGitHubAppConfig(): GitHubAppConfig {
+  const appId = process.env.GITHUB_APP_ID?.trim();
+  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY?.replace(
+    /\\n/g,
+    "\n",
+  ).trim();
+  const webhookSecret = process.env.GITHUB_APP_WEBHOOK_SECRET?.trim();
+  const slug = process.env.GITHUB_APP_SLUG?.trim();
+  if (
+    !appId ||
+    !/^\d+$/.test(appId) ||
+    !privateKey ||
+    !webhookSecret ||
+    !slug
+  ) {
+    throw new Error("github_app_unconfigured");
+  }
+  if (webhookSecret.length < 24 || !/^[A-Za-z0-9-]+$/.test(slug)) {
+    throw new Error("github_app_unconfigured");
+  }
+  return { appId, privateKey, webhookSecret, slug };
+}
+
+export function getGitHubAppInstallUrl() {
+  const slug = process.env.GITHUB_APP_SLUG?.trim();
+  return slug && /^[A-Za-z0-9-]+$/.test(slug)
+    ? `https://github.com/apps/${slug}/installations/new`
+    : null;
+}
+
+export function isGitHubAppConfigured() {
+  try {
+    getGitHubAppConfig();
+    return true;
+  } catch {
+    return false;
+  }
+}

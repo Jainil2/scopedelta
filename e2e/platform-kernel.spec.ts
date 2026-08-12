@@ -1290,6 +1290,118 @@ test("client collaboration keeps one commercial truth across internal and extern
   await clientContext.close();
 });
 
+test("local engineering QA evidence and defects stay traceable without GitHub", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000);
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const email = `engineering-${suffix}@example.test`;
+  const password = "test-password-123";
+  await signUpAndVerify(page, request, email, password, "/onboarding");
+  await page.getByLabel(/Workspace name/).fill("Engineering Evidence");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await page.getByText("New client").click();
+  await page.getByLabel("Client name").fill("Delivery Evidence Client");
+  await page.getByRole("button", { name: "Create client" }).click();
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
+  await page.getByText("New project").click();
+  await page.getByLabel("Project key").fill("ENG");
+  await page.getByLabel("Project name").fill("Engineering QA loop");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await page.getByRole("link", { name: /Engineering QA loop/ }).click();
+  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByText("New work item").click();
+  const workForm = page.locator("form.work-form").filter({
+    has: page.getByRole("button", { name: "Create work item" }),
+  });
+  await workForm.getByLabel("Title").fill("Deliver accessible account shell");
+  await workForm.getByLabel("Status").selectOption("in_progress");
+  await workForm
+    .getByLabel("Acceptance criteria")
+    .fill("Keyboard users retain a visible focus indicator.");
+  await workForm.getByRole("button", { name: "Create work item" }).click();
+  await page
+    .getByRole("button", { name: /Deliver accessible account shell/ })
+    .click();
+  await page
+    .getByRole("link", { name: "Open discussion and activity" })
+    .click();
+  await page.getByLabel("Work purpose").selectOption("client_delivery");
+  await page.getByRole("button", { name: "Update classification" }).click();
+
+  const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
+  await page.goto(`/app/${workspaceSlug}/projects/ENG/engineering`);
+  await expect(
+    page.getByRole("heading", { name: "Engineering & QA evidence" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "No GitHub repository is connected. Local QA, defects, and readiness remain available.",
+    ),
+  ).toBeVisible();
+  const verificationForm = page.locator("form").filter({
+    has: page.getByRole("button", { name: "Record verification" }),
+  });
+  await verificationForm.getByLabel("Work item").selectOption({ index: 1 });
+  await verificationForm.getByLabel("Result").selectOption("passed");
+  await verificationForm.getByLabel("Category").fill("Keyboard regression");
+  await verificationForm
+    .getByLabel("Concise notes")
+    .fill("Tab order and focus visibility verified manually.");
+  await verificationForm
+    .getByRole("button", { name: "Record verification" })
+    .click();
+  await expect(
+    page.getByText("Keyboard regression", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("passed", { exact: true })).toBeVisible();
+
+  const defectForm = page.locator("form").filter({
+    has: page.getByRole("button", { name: "Record defect" }),
+  });
+  await defectForm.getByLabel("Title").fill("Focus ring clips at narrow width");
+  await defectForm.getByLabel("Severity").selectOption("high");
+  await defectForm.getByLabel("Work item").selectOption({ index: 1 });
+  await defectForm
+    .getByLabel("Verification evidence")
+    .selectOption({ label: "Keyboard regression · passed" });
+  await defectForm.getByRole("button", { name: "Record defect" }).click();
+  await expect(page.getByText("DEF-1 · high", { exact: true })).toBeVisible();
+  const readiness = page.getByLabel("Release readiness gaps");
+  await expect(readiness.getByText("Open defects")).toBeVisible();
+  await expect(
+    readiness.locator("div").filter({ hasText: "Open defects" }).getByText("1"),
+  ).toBeVisible();
+
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1200 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-008-engineering-qa-desktop.png",
+      fullPage: true,
+    });
+  }
+
+  await page.getByRole("button", { name: "Resolve defect" }).click();
+  await expect(page.getByText("resolved", { exact: true })).toBeVisible();
+  await page
+    .getByRole("link", { name: /ENG-1 · Deliver accessible account shell/ })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "ENG-1 delivery trace" }),
+  ).toBeVisible();
+  await expect(page.getByText("Keyboard regression · passed")).toBeVisible();
+  await expect(
+    page.getByText(
+      /DEF-1 · Focus ring clips at narrow width · high · resolved/,
+    ),
+  ).toBeVisible();
+});
+
 async function signUpAndVerify(
   page: Page,
   request: APIRequestContext,

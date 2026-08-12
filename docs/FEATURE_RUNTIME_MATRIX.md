@@ -2,7 +2,7 @@
 
 ## Status
 
-Planning baseline, updated 2026-08-10 after the Layer-3 Client Collaboration & Negotiation research checkpoint. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
+Planning baseline, updated 2026-08-12 after the Layer-4 Engineering & QA Delivery Loop research checkpoint and SC-008 implementation. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
 
 ## Current capability count
 
@@ -15,7 +15,7 @@ Planning baseline, updated 2026-08-10 after the Layer-3 Client Collaboration & N
 
 The Layer-3 review reclassifies the core client portal/request/approval capabilities from Hybrid to Local/LAN. Client identity, project-safe projection, request intake, commercial packet publication/actions and delivery acceptance are all server-authoritative ScopeDelta behavior and do not inherently require ScopeDelta Cloud or another SaaS provider. Outbound email is Hybrid/optional external: ScopeDelta Cloud may manage it while self-host customers can supply SMTP/local mail infrastructure or distribute invitation/action links manually.
 
-Layer 3 therefore introduces **no mandatory paid external service dependency**.
+Layer 3 therefore introduces **no mandatory paid external service dependency**. Layer 4 preserves that local core for QA, defects, traceability and readiness; the implemented GitHub evidence connection is an explicitly selected external provider dependency. GitLab remains deferred and classified Hybrid because a future adapter could target self-hosted or hosted GitLab.
 
 ### Runtime meaning
 
@@ -115,11 +115,11 @@ Layer-2 runtime rules:
 
 ## Layer 3 — Client Collaboration & Negotiation
 
-Layer-3 research is complete. See `docs/research/LAYER3_CLIENT_COLLABORATION_RESEARCH_2026-08.md`.
+Layer 3 is complete. See `docs/research/LAYER3_CLIENT_COLLABORATION_RESEARCH_2026-08.md`.
 
 The validated architecture is **one commercial truth, two projections**: internal delivery users operate the authoritative project/Commercial Delivery Graph, while external clients receive a deliberately smaller project/request/decision/acceptance projection from the same server-side records.
 
-| Capability | Runtime class | Planned slice |
+| Capability | Runtime class | Delivered slice |
 |---|---|---|
 | External client users/invites | Local/LAN | SC-007 |
 | Client-safe project portal | Local/LAN | SC-007 |
@@ -143,17 +143,27 @@ Layer-3 runtime rules:
 
 ## Layer 4 — Engineering & QA Delivery Loop
 
-| Capability | Runtime class |
-|---|---|
-| GitHub repository integration | External API/service |
-| GitLab integration | Hybrid/optional external |
-| Branch/commit/PR links | Hybrid/optional external |
-| CI/check status | Hybrid/optional external |
-| Webhook reconciliation | Hybrid/optional external |
-| Defect/bug model | Local/LAN |
-| QA verification/checklists | Local/LAN |
-| Requirement/test coverage | Local/LAN |
-| Release readiness | Local/LAN |
+Layer-4 research and SC-008 are complete for review. See `docs/research/LAYER4_ENGINEERING_QA_DELIVERY_LOOP_RESEARCH_2026-08.md`.
+
+| Capability | Runtime class | Delivered slice |
+|---|---|---|
+| GitHub repository integration | External API/service | SC-008; read-only GitHub App, explicit repository grants |
+| GitLab integration | Hybrid/optional external | Deferred; provider boundary only |
+| Branch/commit/PR links | Hybrid/optional external | SC-008 implements PR/head metadata and local manual/auto work links |
+| CI/check status | Hybrid/optional external | SC-008 stores provider-reported rollups; ScopeDelta does not execute CI |
+| Webhook reconciliation | Hybrid/optional external | SC-008 signed/deduplicated delivery plus bounded reconciliation |
+| Defect/bug model | Local/LAN | SC-008 |
+| QA verification/checklists | Local/LAN | SC-008 lightweight verification records; no test-management suite |
+| Requirement/test coverage | Local/LAN | SC-008 factual evidence gaps and trace drill-down |
+| Release readiness | Local/LAN | SC-008 factual project/milestone gap aggregation; no score |
+
+Layer-4 runtime rules:
+
+- Local/LAN QA verification, defects, evidence trace and readiness operate without GitHub.
+- GitHub metadata is fetched only for an explicitly installed and granted repository; installation tokens and source/code/diff/log content are not persisted.
+- Provider outage, revocation or disconnect preserves historical evidence and surfaces staleness.
+- GitLab is not implemented by SC-008. Its Hybrid classification preserves the distinction between future self-hosted GitLab and GitLab.com.
+- Layer-4 records are strictly internal and are not added to the SC-007 client-safe projection.
 
 ## Layer 5 — AI-Native Delivery Intelligence
 
@@ -233,7 +243,7 @@ The initial plan should minimize mandatory paid external dependencies. The unavo
 - optional SSO/directory providers for organizations using external identity systems;
 - managed observability/backups/storage for ScopeDelta Cloud.
 
-Commercial document parsing, the Commercial Delivery Graph, and Layer-3 client project/request/approval/acceptance state are deliberately **not** added to this unavoidable-external list. They must work on customer-controlled infrastructure.
+Commercial document parsing, the Commercial Delivery Graph, Layer-3 client project/request/approval/acceptance state, and Layer-4 local QA/defect/readiness state are deliberately **not** added to this unavoidable-external list. They must work on customer-controlled infrastructure.
 
 ## Cost principle
 

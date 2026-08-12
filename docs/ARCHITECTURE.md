@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented through SC-007. The SC-004 production platform kernel now supports
+Implemented through SC-008. The SC-004 production platform kernel now supports
 the client-project delivery foundation plus production board, optional cycle
 planning, authorized cross-project daily execution, and internal project
 collaboration. SC-006A adds the first evidence-backed commercial baseline and
@@ -12,6 +12,11 @@ SC-006C adds immutable baseline amendments, explicit item lineage, and advisory
 stale-basis review for active delivery. SC-007 adds a separately authorized,
 allowlisted client projection with request intake, immutable commercial packet
 and acceptance evidence, external-safe discussion, and durable notifications.
+SC-008 adds an internal-only engineering evidence projection: explicitly
+granted read-only GitHub repository metadata, normalized pull-request state and
+immutable snapshots, project-scoped work links, append-only QA verification,
+lightweight defects, and factual readiness/trace queries. The local QA and
+readiness core does not require a provider connection.
 
 ## System decision
 
@@ -39,6 +44,7 @@ Browser
   └─ Next.js UI/API
        ├─ /api/auth/* ───────────────> Better Auth
        ├─ /api/v1/* ────────────────> tenant-aware domain services
+       ├─ signed GitHub webhook ────> normalized engineering evidence
        ├─ Server Components ─────────> the same domain services
        ├─ node-postgres/Drizzle ─────> PostgreSQL
        └─ Next after() + Nodemailer ─> SMTP
@@ -162,6 +168,49 @@ recipient, dedupe, read, and optional delivery status only; message bodies,
 tokens, provider responses, and customer content are excluded from notification
 metadata and operational logs. See
 `docs/decisions/ADR-009-client-projection-boundary.md`.
+
+## Engineering and QA evidence boundary
+
+Migration `0011_engineering_qa_delivery_evidence.sql` implements SC-008. A
+provider installation belongs to one workspace, and a connected repository is
+bound to one project through composite workspace/project foreign keys. The
+GitHub App requests read-only access and connects only after ScopeDelta verifies
+the installation and explicitly granted repository. Installation access tokens
+are short-lived and never stored.
+
+`implementation_artifacts` is the provider-neutral current projection for a
+pull request: identity, URL/title, branch/head, base, author reference, state,
+review/check rollups, merge identity and provider timestamp.
+`implementation_artifact_snapshots` is database-enforced immutable history of
+meaningful state fingerprints. ScopeDelta stores no Git objects, source,
+patches/diffs, review bodies, CI logs or provider payloads.
+
+Many-to-many `work_implementation_links` support bounded project-key matching
+from PR title/head plus explicit manual links. Composite project foreign keys
+make cross-project references invalid. A removed automatic link leaves a
+tombstone so reconciliation does not recreate a relationship a human rejected.
+
+The webhook endpoint validates the raw-body HMAC before parsing, caps request
+size, deduplicates stable delivery IDs and stores only safe delivery identity
+and state. A bounded reconciliation path repairs missed/out-of-order delivery.
+Older PR timestamps cannot overwrite newer state, while equal timestamps may
+refresh check reruns. Provider errors, revocation and disconnect mark current
+evidence stale and preserve snapshots for later reconstruction.
+
+`verification_records` is append-only and captures the tested work-content
+fingerprint and artifact head. Content or head changes make evidence stale
+without rewriting it. `defects` is a lightweight project-numbered record that
+may link to commercial, delivery, implementation, verification and acceptance
+nodes; defect status never changes client acceptance. Readiness aggregates
+explicit missing/open/failing/stale facts with bounded pagination and no score.
+Work detail reconstructs commercial basis → implementation → QA/defects →
+milestone acceptance history.
+
+All reads and mutations pass internal workspace/project authorization.
+Connection management additionally requires project-manager authority.
+Engineering and QA records are absent from the allowlisted SC-007 client
+projection by construction. See
+`docs/decisions/ADR-010-engineering-evidence-boundary.md`.
 
 ## Client-project delivery model
 
@@ -428,15 +477,18 @@ numbering, subtask/dependency rules, commercial revision/link history, request
 and decision idempotency, all six commercial outcomes, impact supersession,
 current-work contradictions, amendment lineage, stale-basis relinking,
 concurrent activation, parser failure isolation, cross-project graph rejection,
-pagination, and safe audit metadata. Playwright verifies identity and
-workspace journeys plus client-project backlog creation/editing and the
-evidence-to-work commercial path on desktop and mobile.
+pagination, safe audit metadata, provider replay/out-of-order transitions,
+force-push/reopen/merge/check-rerun snapshots, scoped linking, disconnect
+preservation, append-only verification, defects and evidence gaps. Playwright
+verifies identity and workspace journeys plus client-project backlog
+creation/editing and the evidence-to-work commercial path on desktop and mobile.
 CI runs the full suite plus production and container builds.
 
 ## Deployment and privacy boundaries
 
-`APP_URL`, database URLs, `BETTER_AUTH_SECRET`, and SMTP configuration are
-server-only. `DATABASE_URL` is a least-privilege Netlify runtime value;
+`APP_URL`, database URLs, `BETTER_AUTH_SECRET`, SMTP configuration, and GitHub
+App ID/slug/private key/webhook secret are server-only. `DATABASE_URL` is a
+least-privilege Netlify runtime value;
 `DATABASE_MIGRATION_URL` exists only in a GitHub migration step or a
 self-host operator environment. `NEXT_PUBLIC_` remains reserved for deliberately
 public values. Database URLs, cookies, tokens, credentials, names, emails, lead
@@ -482,3 +534,5 @@ and does not rely on source secrecy for security.
   outbound audit webhooks. The commercial graph stores bounded evidence and
   version history in PostgreSQL; it does not add OCR, semantic extraction, AI,
   e-signature, CRM, billing, or automated change-order generation.
+- SC-008 integrates read-only provider evidence instead of adding Git hosting,
+  GitLab, CI execution, a code-review/diff surface or a test-management system.

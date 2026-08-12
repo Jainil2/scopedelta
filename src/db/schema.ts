@@ -269,6 +269,68 @@ export const clientAcceptanceAction = pgEnum("client_acceptance_action", [
   "needs_changes",
 ]);
 
+export const engineeringProvider = pgEnum("engineering_provider", ["github"]);
+
+export const engineeringConnectionState = pgEnum(
+  "engineering_connection_state",
+  ["active", "disconnected", "revoked"],
+);
+
+export const implementationArtifactKind = pgEnum(
+  "implementation_artifact_kind",
+  ["pull_request"],
+);
+
+export const implementationArtifactState = pgEnum(
+  "implementation_artifact_state",
+  ["open", "draft", "closed", "merged"],
+);
+
+export const implementationReviewRollup = pgEnum(
+  "implementation_review_rollup",
+  ["pending", "approved", "changes_requested", "unknown"],
+);
+
+export const implementationCheckRollup = pgEnum("implementation_check_rollup", [
+  "pending",
+  "passing",
+  "failing",
+  "unknown",
+]);
+
+export const implementationLinkProvenance = pgEnum(
+  "implementation_link_provenance",
+  ["manual", "provider_key"],
+);
+
+export const verificationMethod = pgEnum("verification_method", [
+  "manual",
+  "automated_reference",
+]);
+
+export const verificationResult = pgEnum("verification_result", [
+  "pending",
+  "passed",
+  "failed",
+  "blocked",
+]);
+
+export const defectStatus = pgEnum("defect_status", ["open", "resolved"]);
+
+export const defectSeverity = pgEnum("defect_severity", [
+  "low",
+  "medium",
+  "high",
+  "critical",
+]);
+
+export const providerDeliveryState = pgEnum("provider_delivery_state", [
+  "processing",
+  "processed",
+  "ignored",
+  "failed",
+]);
+
 export const clientDiscussionTarget = pgEnum("client_discussion_target", [
   "request",
   "packet",
@@ -457,6 +519,7 @@ export const projects = pgTable(
     startDate: date("start_date"),
     targetDate: date("target_date"),
     nextWorkItemNumber: integer("next_work_item_number").default(1).notNull(),
+    nextDefectNumber: integer("next_defect_number").default(1).notNull(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestampColumns,
@@ -478,6 +541,7 @@ export const projects = pgTable(
       "projects_next_work_item_positive",
       sql`${table.nextWorkItemNumber} > 0`,
     ),
+    check("projects_next_defect_positive", sql`${table.nextDefectNumber} > 0`),
   ],
 );
 
@@ -2632,6 +2696,529 @@ export const notifications = pgTable(
   ],
 );
 
+export const engineeringProviderInstallations = pgTable(
+  "engineering_provider_installations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    provider: engineeringProvider("provider").notNull(),
+    providerInstallationId: text("provider_installation_id").notNull(),
+    accountId: text("account_id").notNull(),
+    accountLogin: text("account_login").notNull(),
+    state: engineeringConnectionState("state").default("active").notNull(),
+    connectedByUserId: uuid("connected_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    disconnectedByUserId: uuid("disconnected_by_user_id").references(
+      () => users.id,
+      { onDelete: "restrict" },
+    ),
+    disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("engineering_installations_id_workspace_unique").on(
+      table.id,
+      table.workspaceId,
+    ),
+    uniqueIndex("engineering_installations_provider_identity_uidx").on(
+      table.provider,
+      table.providerInstallationId,
+    ),
+    index("engineering_installations_workspace_state_idx").on(
+      table.workspaceId,
+      table.state,
+      table.id,
+    ),
+    check(
+      "engineering_installations_disconnect_consistency",
+      sql`(${table.state} = 'active' and ${table.disconnectedAt} is null and ${table.disconnectedByUserId} is null) or (${table.state} <> 'active' and ${table.disconnectedAt} is not null)`,
+    ),
+  ],
+);
+
+export const engineeringRepositories = pgTable(
+  "engineering_repositories",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    installationId: uuid("installation_id").notNull(),
+    provider: engineeringProvider("provider").notNull(),
+    providerRepositoryId: text("provider_repository_id").notNull(),
+    owner: text("owner").notNull(),
+    name: text("name").notNull(),
+    fullName: text("full_name").notNull(),
+    url: text("url").notNull(),
+    defaultBranch: text("default_branch").notNull(),
+    private: boolean("private").notNull(),
+    state: engineeringConnectionState("state").default("active").notNull(),
+    connectedByUserId: uuid("connected_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    staleAt: timestamp("stale_at", { withTimezone: true }),
+    lastSyncErrorCode: text("last_sync_error_code"),
+    disconnectedByUserId: uuid("disconnected_by_user_id").references(
+      () => users.id,
+      { onDelete: "restrict" },
+    ),
+    disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("engineering_repositories_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    unique("engineering_repositories_id_workspace_unique").on(
+      table.id,
+      table.workspaceId,
+    ),
+    foreignKey({
+      columns: [table.projectId, table.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: "engineering_repositories_project_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.installationId, table.workspaceId],
+      foreignColumns: [
+        engineeringProviderInstallations.id,
+        engineeringProviderInstallations.workspaceId,
+      ],
+      name: "engineering_repositories_installation_workspace_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("engineering_repositories_project_provider_uidx").on(
+      table.projectId,
+      table.provider,
+      table.providerRepositoryId,
+    ),
+    index("engineering_repositories_workspace_provider_idx").on(
+      table.workspaceId,
+      table.provider,
+      table.providerRepositoryId,
+    ),
+    index("engineering_repositories_project_state_idx").on(
+      table.projectId,
+      table.state,
+      table.id,
+    ),
+    check(
+      "engineering_repositories_disconnect_consistency",
+      sql`(${table.state} = 'active' and ${table.disconnectedAt} is null and ${table.disconnectedByUserId} is null) or (${table.state} <> 'active' and ${table.disconnectedAt} is not null)`,
+    ),
+  ],
+);
+
+export const implementationArtifacts = pgTable(
+  "implementation_artifacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id").notNull(),
+    provider: engineeringProvider("provider").notNull(),
+    kind: implementationArtifactKind("kind").notNull(),
+    providerArtifactId: text("provider_artifact_id").notNull(),
+    number: integer("number").notNull(),
+    url: text("url").notNull(),
+    title: text("title").notNull(),
+    state: implementationArtifactState("state").notNull(),
+    headRef: text("head_ref"),
+    headSha: text("head_sha"),
+    baseBranch: text("base_branch").notNull(),
+    authorRef: text("author_ref"),
+    reviewRollup: implementationReviewRollup("review_rollup").notNull(),
+    approvalsCount: integer("approvals_count").default(0).notNull(),
+    changesRequestedCount: integer("changes_requested_count")
+      .default(0)
+      .notNull(),
+    checkRollup: implementationCheckRollup("check_rollup").notNull(),
+    mergedAt: timestamp("merged_at", { withTimezone: true }),
+    mergeCommitSha: text("merge_commit_sha"),
+    providerUpdatedAt: timestamp("provider_updated_at", {
+      withTimezone: true,
+    }).notNull(),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    staleAt: timestamp("stale_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("implementation_artifacts_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.repositoryId, table.projectId],
+      foreignColumns: [
+        engineeringRepositories.id,
+        engineeringRepositories.projectId,
+      ],
+      name: "implementation_artifacts_repository_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("implementation_artifacts_repository_provider_uidx").on(
+      table.repositoryId,
+      table.providerArtifactId,
+    ),
+    index("implementation_artifacts_project_updated_idx").on(
+      table.projectId,
+      table.providerUpdatedAt,
+      table.id,
+    ),
+    check("implementation_artifacts_number_positive", sql`${table.number} > 0`),
+    check(
+      "implementation_artifacts_review_counts_nonnegative",
+      sql`${table.approvalsCount} >= 0 and ${table.changesRequestedCount} >= 0`,
+    ),
+  ],
+);
+
+export const implementationArtifactSnapshots = pgTable(
+  "implementation_artifact_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    artifactId: uuid("artifact_id").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    state: implementationArtifactState("state").notNull(),
+    headSha: text("head_sha"),
+    reviewRollup: implementationReviewRollup("review_rollup").notNull(),
+    approvalsCount: integer("approvals_count").notNull(),
+    changesRequestedCount: integer("changes_requested_count").notNull(),
+    checkRollup: implementationCheckRollup("check_rollup").notNull(),
+    mergedAt: timestamp("merged_at", { withTimezone: true }),
+    mergeCommitSha: text("merge_commit_sha"),
+    providerUpdatedAt: timestamp("provider_updated_at", {
+      withTimezone: true,
+    }).notNull(),
+    capturedAt: timestamp("captured_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("implementation_snapshots_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.artifactId, table.projectId],
+      foreignColumns: [
+        implementationArtifacts.id,
+        implementationArtifacts.projectId,
+      ],
+      name: "implementation_snapshots_artifact_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("implementation_snapshots_artifact_fingerprint_uidx").on(
+      table.artifactId,
+      table.fingerprint,
+    ),
+    index("implementation_snapshots_artifact_captured_idx").on(
+      table.artifactId,
+      table.capturedAt,
+      table.id,
+    ),
+  ],
+);
+
+export const workImplementationLinks = pgTable(
+  "work_implementation_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    workItemId: uuid("work_item_id").notNull(),
+    artifactId: uuid("artifact_id").notNull(),
+    provenance: implementationLinkProvenance("provenance").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    removedByUserId: uuid("removed_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.workItemId, table.projectId],
+      foreignColumns: [workItems.id, workItems.projectId],
+      name: "work_implementation_links_work_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.artifactId, table.projectId],
+      foreignColumns: [
+        implementationArtifacts.id,
+        implementationArtifacts.projectId,
+      ],
+      name: "work_implementation_links_artifact_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("work_implementation_links_pair_uidx").on(
+      table.workItemId,
+      table.artifactId,
+    ),
+    index("work_implementation_links_project_artifact_idx").on(
+      table.projectId,
+      table.artifactId,
+    ),
+    check(
+      "work_implementation_links_actor_consistency",
+      sql`(${table.provenance} = 'manual' and ${table.createdByUserId} is not null) or ${table.provenance} = 'provider_key'`,
+    ),
+    check(
+      "work_implementation_links_removed_consistency",
+      sql`(${table.removedAt} is null and ${table.removedByUserId} is null) or (${table.removedAt} is not null and ${table.removedByUserId} is not null)`,
+    ),
+  ],
+);
+
+export const verificationRecords = pgTable(
+  "verification_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    workItemId: uuid("work_item_id"),
+    scopeItemRevisionId: uuid("scope_item_revision_id"),
+    artifactId: uuid("artifact_id"),
+    milestoneId: uuid("milestone_id"),
+    acceptanceTargetId: uuid("acceptance_target_id"),
+    method: verificationMethod("method").notNull(),
+    category: text("category").notNull(),
+    result: verificationResult("result").notNull(),
+    referenceUrl: text("reference_url"),
+    notes: text("notes"),
+    subjectFingerprint: text("subject_fingerprint"),
+    artifactHeadSha: text("artifact_head_sha"),
+    recordedByUserId: uuid("recorded_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("verification_records_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.workItemId, table.projectId],
+      foreignColumns: [workItems.id, workItems.projectId],
+      name: "verification_records_work_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.scopeItemRevisionId, table.projectId],
+      foreignColumns: [
+        commercialScopeItemRevisions.id,
+        commercialScopeItemRevisions.projectId,
+      ],
+      name: "verification_records_scope_revision_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.artifactId, table.projectId],
+      foreignColumns: [
+        implementationArtifacts.id,
+        implementationArtifacts.projectId,
+      ],
+      name: "verification_records_artifact_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.milestoneId, table.projectId],
+      foreignColumns: [milestones.id, milestones.projectId],
+      name: "verification_records_milestone_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.acceptanceTargetId, table.projectId],
+      foreignColumns: [
+        clientAcceptanceTargets.id,
+        clientAcceptanceTargets.projectId,
+      ],
+      name: "verification_records_acceptance_project_fk",
+    }).onDelete("restrict"),
+    index("verification_records_project_recorded_idx").on(
+      table.projectId,
+      table.recordedAt,
+      table.id,
+    ),
+    index("verification_records_work_recorded_idx").on(
+      table.workItemId,
+      table.recordedAt,
+      table.id,
+    ),
+    check(
+      "verification_records_target_required",
+      sql`num_nonnulls(${table.workItemId}, ${table.scopeItemRevisionId}, ${table.artifactId}, ${table.milestoneId}, ${table.acceptanceTargetId}) > 0`,
+    ),
+    check(
+      "verification_records_category_length",
+      sql`char_length(btrim(${table.category})) between 1 and 80`,
+    ),
+    check(
+      "verification_records_notes_length",
+      sql`${table.notes} is null or char_length(${table.notes}) <= 5000`,
+    ),
+  ],
+);
+
+export const defects = pgTable(
+  "defects",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    number: integer("number").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    status: defectStatus("status").default("open").notNull(),
+    severity: defectSeverity("severity").notNull(),
+    workItemId: uuid("work_item_id"),
+    scopeItemRevisionId: uuid("scope_item_revision_id"),
+    commercialRequestId: uuid("commercial_request_id"),
+    commercialDecisionId: uuid("commercial_decision_id"),
+    artifactId: uuid("artifact_id"),
+    verificationId: uuid("verification_id"),
+    milestoneId: uuid("milestone_id"),
+    acceptanceTargetId: uuid("acceptance_target_id"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    detectedAt: timestamp("detected_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    resolvedByUserId: uuid("resolved_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("defects_id_project_unique").on(table.id, table.projectId),
+    uniqueIndex("defects_project_number_uidx").on(
+      table.projectId,
+      table.number,
+    ),
+    foreignKey({
+      columns: [table.workItemId, table.projectId],
+      foreignColumns: [workItems.id, workItems.projectId],
+      name: "defects_work_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.scopeItemRevisionId, table.projectId],
+      foreignColumns: [
+        commercialScopeItemRevisions.id,
+        commercialScopeItemRevisions.projectId,
+      ],
+      name: "defects_scope_revision_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.commercialRequestId, table.projectId],
+      foreignColumns: [commercialRequests.id, commercialRequests.projectId],
+      name: "defects_request_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.commercialDecisionId, table.projectId],
+      foreignColumns: [commercialDecisions.id, commercialDecisions.projectId],
+      name: "defects_decision_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.artifactId, table.projectId],
+      foreignColumns: [
+        implementationArtifacts.id,
+        implementationArtifacts.projectId,
+      ],
+      name: "defects_artifact_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.verificationId, table.projectId],
+      foreignColumns: [verificationRecords.id, verificationRecords.projectId],
+      name: "defects_verification_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.milestoneId, table.projectId],
+      foreignColumns: [milestones.id, milestones.projectId],
+      name: "defects_milestone_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.acceptanceTargetId, table.projectId],
+      foreignColumns: [
+        clientAcceptanceTargets.id,
+        clientAcceptanceTargets.projectId,
+      ],
+      name: "defects_acceptance_project_fk",
+    }).onDelete("restrict"),
+    index("defects_project_status_detected_idx").on(
+      table.projectId,
+      table.status,
+      table.detectedAt,
+      table.id,
+    ),
+    check("defects_number_positive", sql`${table.number} > 0`),
+    check(
+      "defects_title_length",
+      sql`char_length(btrim(${table.title})) between 1 and 240`,
+    ),
+    check(
+      "defects_description_length",
+      sql`${table.description} is null or char_length(${table.description}) <= 10000`,
+    ),
+    check(
+      "defects_resolution_consistency",
+      sql`(${table.status} = 'open' and ${table.resolvedAt} is null and ${table.resolvedByUserId} is null) or (${table.status} = 'resolved' and ${table.resolvedAt} is not null and ${table.resolvedByUserId} is not null)`,
+    ),
+  ],
+);
+
+export const providerWebhookDeliveries = pgTable(
+  "provider_webhook_deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    provider: engineeringProvider("provider").notNull(),
+    deliveryId: text("delivery_id").notNull(),
+    eventName: text("event_name").notNull(),
+    repositoryId: uuid("repository_id").references(
+      () => engineeringRepositories.id,
+      { onDelete: "restrict" },
+    ),
+    state: providerDeliveryState("state").default("processing").notNull(),
+    errorCode: text("error_code"),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("provider_webhook_deliveries_identity_uidx").on(
+      table.provider,
+      table.deliveryId,
+    ),
+    index("provider_webhook_deliveries_received_idx").on(
+      table.provider,
+      table.receivedAt,
+      table.id,
+    ),
+    check(
+      "provider_webhook_deliveries_processed_consistency",
+      sql`(${table.state} = 'processing' and ${table.processedAt} is null) or (${table.state} <> 'processing' and ${table.processedAt} is not null)`,
+    ),
+  ],
+);
+
 export type WorkspaceRole = (typeof workspaceRole.enumValues)[number];
 export type ClientLifecycle = (typeof clientLifecycle.enumValues)[number];
 export type ProjectLifecycle = (typeof projectLifecycle.enumValues)[number];
@@ -2671,6 +3258,26 @@ export type ClientPacketRequirement =
 export type ClientPacketAction = (typeof clientPacketAction.enumValues)[number];
 export type ClientAcceptanceAction =
   (typeof clientAcceptanceAction.enumValues)[number];
+export type EngineeringProvider =
+  (typeof engineeringProvider.enumValues)[number];
+export type EngineeringConnectionState =
+  (typeof engineeringConnectionState.enumValues)[number];
+export type ImplementationArtifactKind =
+  (typeof implementationArtifactKind.enumValues)[number];
+export type ImplementationArtifactState =
+  (typeof implementationArtifactState.enumValues)[number];
+export type ImplementationReviewRollup =
+  (typeof implementationReviewRollup.enumValues)[number];
+export type ImplementationCheckRollup =
+  (typeof implementationCheckRollup.enumValues)[number];
+export type ImplementationLinkProvenance =
+  (typeof implementationLinkProvenance.enumValues)[number];
+export type VerificationMethod = (typeof verificationMethod.enumValues)[number];
+export type VerificationResult = (typeof verificationResult.enumValues)[number];
+export type DefectStatus = (typeof defectStatus.enumValues)[number];
+export type DefectSeverity = (typeof defectSeverity.enumValues)[number];
+export type ProviderDeliveryState =
+  (typeof providerDeliveryState.enumValues)[number];
 export type ClientDiscussionTarget =
   (typeof clientDiscussionTarget.enumValues)[number];
 export type ClientNotificationKind =

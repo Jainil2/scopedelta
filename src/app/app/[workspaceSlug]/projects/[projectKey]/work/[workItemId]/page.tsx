@@ -20,6 +20,8 @@ import { getProjectByKey, getWorkItem } from "@/server/delivery";
 import { getDeliveryEvidenceTrace } from "@/server/engineering-delivery";
 import { getWorkspaceBySlug } from "@/server/workspaces";
 
+type SearchParamValue = string | string[] | undefined;
+
 export default async function WorkCollaborationPage({
   params,
   searchParams,
@@ -29,7 +31,7 @@ export default async function WorkCollaborationPage({
     projectKey: string;
     workItemId: string;
   }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+  searchParams: Promise<Record<string, SearchParamValue>>;
 }>) {
   const session = await requireSession();
   const actor = { userId: session.user.id, email: session.user.email };

@@ -61,23 +61,20 @@ const MAX_PROJECT_EVIDENCE = 5_000;
 
 async function auditEngineeringEvent(
   transaction: Transaction,
-  workspaceId: string,
-  actorType: "human" | "integration",
-  actorId: string | null,
-  eventType: string,
-  targetType: string,
-  targetId: string,
-  metadata: Record<string, string | string[]> = {},
+  event: {
+    workspaceId: string;
+    actorType: "human" | "integration";
+    actorId: string | null;
+    eventType: string;
+    targetType: string;
+    targetId: string;
+    metadata?: Record<string, string | string[]>;
+  },
 ) {
   await transaction.insert(auditEvents).values({
     id: randomUUID(),
-    workspaceId,
-    actorType,
-    actorId,
-    eventType,
-    targetType,
-    targetId,
-    metadata,
+    ...event,
+    metadata: event.metadata ?? {},
   });
 }
 
@@ -256,9 +253,8 @@ export async function upsertProviderEvidence(
         )
         .limit(1);
       if (
-        existing[0] &&
-        existing[0].providerUpdatedAt.getTime() >
-          item.providerUpdatedAt.getTime()
+        (existing[0]?.providerUpdatedAt.getTime() ?? Number.NEGATIVE_INFINITY) >
+        item.providerUpdatedAt.getTime()
       ) {
         continue;
       }
@@ -334,16 +330,15 @@ export async function upsertProviderEvidence(
         updatedAt: new Date(),
       })
       .where(eq(engineeringRepositories.id, repository.id));
-    await auditEngineeringEvent(
-      transaction,
-      repository.workspaceId,
+    await auditEngineeringEvent(transaction, {
+      workspaceId: repository.workspaceId,
       actorType,
       actorId,
-      "engineering.repository.reconciled.v1",
-      "engineering_repository",
-      repository.id,
-      { artifactCount: String(evidence.length) },
-    );
+      eventType: "engineering.repository.reconciled.v1",
+      targetType: "engineering_repository",
+      targetId: repository.id,
+      metadata: { artifactCount: String(evidence.length) },
+    });
   });
 }
 
@@ -389,7 +384,7 @@ async function repositoryProviderContext(repositoryId: string) {
     )
     .where(eq(engineeringRepositories.id, repositoryId))
     .limit(1);
-  if (!rows[0] || rows[0].state !== "active") throw notFound();
+  if (rows[0]?.state !== "active") throw notFound();
   return rows[0];
 }
 
@@ -559,16 +554,15 @@ export async function connectGitHubRepository(
         connectedByUserId: actor.userId,
       });
     }
-    await auditEngineeringEvent(
-      transaction,
+    await auditEngineeringEvent(transaction, {
       workspaceId,
-      "human",
-      actor.userId,
-      "engineering.repository.connected.v1",
-      "engineering_repository",
-      id,
-      { provider: "github", projectId },
-    );
+      actorType: "human",
+      actorId: actor.userId,
+      eventType: "engineering.repository.connected.v1",
+      targetType: "engineering_repository",
+      targetId: id,
+      metadata: { provider: "github", projectId },
+    });
     return id;
   });
 
@@ -617,16 +611,15 @@ export async function disconnectEngineeringRepository(
       .update(implementationArtifacts)
       .set({ staleAt: now, updatedAt: now })
       .where(eq(implementationArtifacts.repositoryId, repositoryId));
-    await auditEngineeringEvent(
-      transaction,
+    await auditEngineeringEvent(transaction, {
       workspaceId,
-      "human",
-      actor.userId,
-      "engineering.repository.disconnected.v1",
-      "engineering_repository",
-      repositoryId,
-      { projectId },
-    );
+      actorType: "human",
+      actorId: actor.userId,
+      eventType: "engineering.repository.disconnected.v1",
+      targetType: "engineering_repository",
+      targetId: repositoryId,
+      metadata: { projectId },
+    });
   });
 }
 
@@ -717,16 +710,15 @@ export async function linkImplementationEvidence(
           removedAt: null,
         },
       });
-    await auditEngineeringEvent(
-      transaction,
+    await auditEngineeringEvent(transaction, {
       workspaceId,
-      "human",
-      actor.userId,
-      "engineering.implementation.linked.v1",
-      "implementation_artifact",
-      input.artifactId,
-      { workItemId: input.workItemId, provenance: "manual" },
-    );
+      actorType: "human",
+      actorId: actor.userId,
+      eventType: "engineering.implementation.linked.v1",
+      targetType: "implementation_artifact",
+      targetId: input.artifactId,
+      metadata: { workItemId: input.workItemId, provenance: "manual" },
+    });
   });
   return { id };
 }
@@ -759,16 +751,15 @@ export async function unlinkImplementationEvidence(
       .update(workImplementationLinks)
       .set({ removedByUserId: actor.userId, removedAt: new Date() })
       .where(eq(workImplementationLinks.id, linkId));
-    await auditEngineeringEvent(
-      transaction,
+    await auditEngineeringEvent(transaction, {
       workspaceId,
-      "human",
-      actor.userId,
-      "engineering.implementation.unlinked.v1",
-      "implementation_artifact",
-      rows[0].artifactId,
-      { workItemId: rows[0].workItemId },
-    );
+      actorType: "human",
+      actorId: actor.userId,
+      eventType: "engineering.implementation.unlinked.v1",
+      targetType: "implementation_artifact",
+      targetId: rows[0].artifactId,
+      metadata: { workItemId: rows[0].workItemId },
+    });
   });
 }
 
@@ -941,16 +932,15 @@ export async function createVerificationRecord(
       artifactHeadSha: artifactRows[0]?.headSha ?? null,
       recordedByUserId: actor.userId,
     });
-    await auditEngineeringEvent(
-      transaction,
+    await auditEngineeringEvent(transaction, {
       workspaceId,
-      "human",
-      actor.userId,
-      "engineering.verification.recorded.v1",
-      "verification_record",
-      id,
-      { method: input.method, result: input.result, projectId },
-    );
+      actorType: "human",
+      actorId: actor.userId,
+      eventType: "engineering.verification.recorded.v1",
+      targetType: "verification_record",
+      targetId: id,
+      metadata: { method: input.method, result: input.result, projectId },
+    });
   });
   return { id };
 }
@@ -987,16 +977,15 @@ export async function createDefect(
       ...input,
       createdByUserId: actor.userId,
     });
-    await auditEngineeringEvent(
-      transaction,
+    await auditEngineeringEvent(transaction, {
       workspaceId,
-      "human",
-      actor.userId,
-      "engineering.defect.created.v1",
-      "defect",
-      id,
-      { severity: input.severity, projectId },
-    );
+      actorType: "human",
+      actorId: actor.userId,
+      eventType: "engineering.defect.created.v1",
+      targetType: "defect",
+      targetId: id,
+      metadata: { severity: input.severity, projectId },
+    });
   });
   return { id, number };
 }
@@ -1026,16 +1015,15 @@ export async function setDefectStatus(
           updatedAt: new Date(),
         })
         .where(eq(defects.id, defectId));
-      await auditEngineeringEvent(
-        transaction,
+      await auditEngineeringEvent(transaction, {
         workspaceId,
-        "human",
-        actor.userId,
-        "engineering.defect.status_updated.v1",
-        "defect",
-        defectId,
-        { from: rows[0].status, to: status },
-      );
+        actorType: "human",
+        actorId: actor.userId,
+        eventType: "engineering.defect.status_updated.v1",
+        targetType: "defect",
+        targetId: defectId,
+        metadata: { from: rows[0].status, to: status },
+      });
     }
   });
 }

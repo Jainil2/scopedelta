@@ -232,7 +232,7 @@ export async function upsertProviderEvidence(
     .where(eq(engineeringRepositories.id, repositoryId))
     .limit(1);
   const repository = repositoryRows[0];
-  if (!repository || repository.state !== "active") throw notFound();
+  if (repository?.state !== "active") throw notFound();
 
   await db.transaction(async (transaction) => {
     for (const item of evidence) {
@@ -1311,12 +1311,14 @@ function implementationCoverageGaps(artifacts: CoverageArtifact[]) {
   if (artifacts.some((artifact) => artifact.state !== "merged")) {
     gaps.push("open_implementation");
   }
-  const checks = artifacts.map((artifact) =>
-    artifact.staleAt ? "unknown" : artifact.checkRollup,
+  const checks = new Set(
+    artifacts.map((artifact) =>
+      artifact.staleAt ? "unknown" : artifact.checkRollup,
+    ),
   );
-  if (checks.includes("failing")) gaps.push("failing_checks");
-  if (checks.includes("pending")) gaps.push("pending_checks");
-  if (checks.includes("unknown")) gaps.push("unknown_checks");
+  if (checks.has("failing")) gaps.push("failing_checks");
+  if (checks.has("pending")) gaps.push("pending_checks");
+  if (checks.has("unknown")) gaps.push("unknown_checks");
   return gaps;
 }
 

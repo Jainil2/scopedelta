@@ -69,8 +69,8 @@ export type GitHubAppConfig = {
 
 export function getGitHubAppConfig(): GitHubAppConfig {
   const appId = process.env.GITHUB_APP_ID?.trim();
-  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY?.replace(
-    /\\n/g,
+  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY?.replaceAll(
+    "\\n",
     "\n",
   ).trim();
   const webhookSecret = process.env.GITHUB_APP_WEBHOOK_SECRET?.trim();

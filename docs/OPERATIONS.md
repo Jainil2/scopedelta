@@ -110,13 +110,23 @@ application containers.
 
 ## Migration release procedure
 
-Before merging:
+The durable CI/security contract and exact-SHA merge-candidate procedure are in
+`docs/QUALITY_GATES.md`. CEO/product review may happen after focused validation;
+it does not require the complete hosted gate first.
+
+Before merging the functionally approved exact head:
 
 1. Review generated SQL and verify it contains only the approved schema change.
-2. Run `pnpm db:check`.
-3. Apply migrations twice to a fresh disposable database; both runs must pass.
-4. Run integration/browser tests against that migrated database.
-5. For future non-additive changes, document the expand/backfill/contract
+2. Freeze ordinary feature scope and apply the `merge-candidate` label to the PR.
+   The resulting PR event captures its exact 40-character head SHA and produces
+   the branch-protection-compatible final check.
+3. Require the full hosted gate to run `pnpm db:check` and apply the complete
+   migration chain twice to a fresh disposable database.
+4. Require integration/browser tests against migrated PostgreSQL, plus the
+   production build, HTTP smoke, and container build.
+5. Confirm `Full merge gate`, Sonar, GitGuardian, and both fast checks are green
+   on the latest PR head. Any new commit invalidates the prior validation.
+6. For future non-additive changes, document the expand/backfill/contract
    releases and restoration implications in the PR.
 
 For managed production, the workflow maps `DATABASE_MIGRATION_URL` only into

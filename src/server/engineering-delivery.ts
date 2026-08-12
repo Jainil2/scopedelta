@@ -158,7 +158,7 @@ function workNumbersFromEvidence(
     (character) => `${backslash}${character}`,
   );
   const pattern = new RegExp(
-    `(?:^|[^A-Z0-9])${escaped}-(\\d+)(?=$|[^0-9])`,
+    String.raw`(?:^|[^A-Z0-9])${escaped}-(\d+)(?=$|[^0-9])`,
     "gi",
   );
   const numbers = new Set<number>();

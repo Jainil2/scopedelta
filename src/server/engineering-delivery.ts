@@ -1408,6 +1408,22 @@ type CoverageVerification = {
   artifactId: string | null;
 };
 
+type VerificationArtifactState = Pick<CoverageArtifact, "headSha" | "staleAt">;
+
+function isVerificationStale(
+  work: CoverageWork,
+  verification: CoverageVerification,
+  artifact: VerificationArtifactState | null | undefined,
+) {
+  const subjectChanged =
+    Boolean(verification.subjectFingerprint) &&
+    verification.subjectFingerprint !== workFingerprint(work);
+  const implementationChanged =
+    Boolean(verification.artifactHeadSha && artifact) &&
+    verification.artifactHeadSha !== artifact?.headSha;
+  return Boolean(subjectChanged || implementationChanged || artifact?.staleAt);
+}
+
 function implementationCoverageGaps(artifacts: CoverageArtifact[]) {
   const gaps: string[] = [];
   if (!artifacts.length) gaps.push("missing_implementation");
@@ -1438,13 +1454,7 @@ function verificationCoverageGaps(
   const artifact = verification.artifactId
     ? artifactsById.get(verification.artifactId)
     : null;
-  const subjectChanged =
-    Boolean(verification.subjectFingerprint) &&
-    verification.subjectFingerprint !== workFingerprint(work);
-  const implementationChanged =
-    Boolean(verification.artifactHeadSha && artifact) &&
-    verification.artifactHeadSha !== artifact?.headSha;
-  if (subjectChanged || implementationChanged || artifact?.staleAt) {
+  if (isVerificationStale(work, verification, artifact)) {
     gaps.push("stale_verification");
   }
   return gaps;
@@ -1582,14 +1592,56 @@ export async function getEngineeringCoverage(
         desc(verificationRecords.id),
       )
       .limit(MAX_COVERAGE_WORK + 1),
-    db
-      .select({ workItemId: defects.workItemId })
-      .from(defects)
-      .where(and(eq(defects.projectId, projectId), eq(defects.status, "open")))
-      .limit(MAX_PROJECT_EVIDENCE + 1),
+    db.execute<{ workItemId: string }>(sql`
+      select distinct affected.work_item_id as "workItemId"
+      from (
+        select defect.work_item_id
+        from defects defect
+        where defect.project_id = ${projectId}
+          and defect.status = 'open'
+        union
+        select artifact_link.work_item_id
+        from defects defect
+        inner join work_implementation_links artifact_link
+          on artifact_link.artifact_id = defect.artifact_id
+          and artifact_link.project_id = defect.project_id
+          and artifact_link.removed_at is null
+        where defect.project_id = ${projectId}
+          and defect.status = 'open'
+        union
+        select verification.work_item_id
+        from defects defect
+        inner join verification_records verification
+          on verification.id = defect.verification_id
+          and verification.project_id = defect.project_id
+        where defect.project_id = ${projectId}
+          and defect.status = 'open'
+        union
+        select verification_link.work_item_id
+        from defects defect
+        inner join verification_records verification
+          on verification.id = defect.verification_id
+          and verification.project_id = defect.project_id
+        inner join work_implementation_links verification_link
+          on verification_link.artifact_id = verification.artifact_id
+          and verification_link.project_id = verification.project_id
+          and verification_link.removed_at is null
+        where defect.project_id = ${projectId}
+          and defect.status = 'open'
+      ) affected
+      where affected.work_item_id is not null
+      limit ${MAX_PROJECT_EVIDENCE + 1}
+    `),
     db
       .select({
+        projectItemId: clientProjectItems.id,
+        target: clientProjectItems.target,
         milestoneId: clientProjectItems.milestoneId,
+        acceptanceTargetId: clientAcceptanceTargets.id,
+        title: clientAcceptanceTargets.snapshotTitle,
+        milestoneSourceUpdatedAt:
+          clientAcceptanceTargets.milestoneSourceUpdatedAt,
+        currentMilestoneUpdatedAt: milestones.updatedAt,
         action: clientAcceptanceActions.action,
       })
       .from(clientProjectItems)
@@ -1607,10 +1659,10 @@ export async function getEngineeringCoverage(
           clientAcceptanceTargets.id,
         ),
       )
+      .leftJoin(milestones, eq(milestones.id, clientProjectItems.milestoneId))
       .where(
         and(
           eq(clientProjectItems.projectId, projectId),
-          eq(clientProjectItems.target, "milestone"),
           isNull(clientProjectItems.hiddenAt),
         ),
       )
@@ -1621,7 +1673,7 @@ export async function getEngineeringCoverage(
     linkRows.length > MAX_PROJECT_EVIDENCE ||
     artifactRows.length > MAX_PROJECT_EVIDENCE ||
     verificationRows.length > MAX_COVERAGE_WORK ||
-    defectRows.length > MAX_PROJECT_EVIDENCE;
+    defectRows.rows.length > MAX_PROJECT_EVIDENCE;
   const boundedWork = workRows.slice(0, MAX_COVERAGE_WORK);
   const artifactsById = new Map(
     artifactRows.slice(0, MAX_PROJECT_EVIDENCE).map((item) => [item.id, item]),
@@ -1640,14 +1692,19 @@ export async function getEngineeringCoverage(
       ),
   );
   const workWithDefects = new Set(
-    defectRows
+    defectRows.rows
       .slice(0, MAX_PROJECT_EVIDENCE)
-      .flatMap((item) => (item.workItemId ? [item.workItemId] : [])),
+      .map((item) => item.workItemId),
   );
   const acceptanceByMilestone = new Map(
-    acceptanceRows.flatMap((item) =>
-      item.milestoneId ? [[item.milestoneId, item.action] as const] : [],
-    ),
+    acceptanceRows.flatMap((item) => {
+      if (!item.milestoneId) return [];
+      const milestoneFresh =
+        !item.milestoneSourceUpdatedAt ||
+        item.currentMilestoneUpdatedAt?.getTime() ===
+          item.milestoneSourceUpdatedAt.getTime();
+      return [[item.milestoneId, milestoneFresh ? item.action : null] as const];
+    }),
   );
   const items = boundedWork.map((work) =>
     buildCoverageItem(
@@ -1659,6 +1716,22 @@ export async function getEngineeringCoverage(
       workWithDefects,
       acceptanceByMilestone,
     ),
+  );
+  const deliverableAcceptanceItems: CoverageItem[] = acceptanceRows.flatMap(
+    (item) =>
+      item.target === "deliverable" &&
+      item.acceptanceTargetId &&
+      item.action !== "accepted"
+        ? [
+            {
+              workItemId: null,
+              identifier: "Client deliverable",
+              title: item.title ?? "Published deliverable",
+              milestoneId: null,
+              gaps: ["pending_acceptance"],
+            },
+          ]
+        : [],
   );
 
   const requirementResult = await db.execute<{
@@ -1691,6 +1764,12 @@ export async function getEngineeringCoverage(
         inner join commercial_basis_links basis
           on basis.scope_item_revision_id = related_revision.id
           and basis.project_id = related_scope.project_id
+        inner join work_items planned_work
+          on planned_work.id = basis.work_item_id
+          and planned_work.project_id = basis.project_id
+          and planned_work.purpose = 'client_delivery'
+          and planned_work.archived_at is null
+          and planned_work.status <> 'canceled'
         where related_scope.project_id = current_scope.project_id
           and related_scope.material_basis_scope_item_id = current_scope.material_basis_scope_item_id
       )
@@ -1706,7 +1785,7 @@ export async function getEngineeringCoverage(
       milestoneId: null,
       gaps: ["missing_planned_work"],
     }));
-  const allItems = [...requirements, ...items];
+  const allItems = [...requirements, ...items, ...deliverableAcceptanceItems];
   const countGap = (gap: string) =>
     allItems.filter((item) => item.gaps.includes(gap)).length;
   const start = (filters.page - 1) * filters.pageSize;
@@ -1751,6 +1830,8 @@ export async function getDeliveryEvidenceTrace(
       id: workItems.id,
       number: workItems.number,
       title: workItems.title,
+      description: workItems.description,
+      acceptanceCriteria: workItems.acceptanceCriteria,
       purpose: workItems.purpose,
       status: workItems.status,
       milestoneId: workItems.milestoneId,
@@ -1819,8 +1900,31 @@ export async function getDeliveryEvidenceTrace(
           ),
         ),
       db
-        .select()
+        .select({
+          id: verificationRecords.id,
+          projectId: verificationRecords.projectId,
+          workItemId: verificationRecords.workItemId,
+          scopeItemRevisionId: verificationRecords.scopeItemRevisionId,
+          artifactId: verificationRecords.artifactId,
+          milestoneId: verificationRecords.milestoneId,
+          acceptanceTargetId: verificationRecords.acceptanceTargetId,
+          method: verificationRecords.method,
+          category: verificationRecords.category,
+          result: verificationRecords.result,
+          referenceUrl: verificationRecords.referenceUrl,
+          notes: verificationRecords.notes,
+          subjectFingerprint: verificationRecords.subjectFingerprint,
+          artifactHeadSha: verificationRecords.artifactHeadSha,
+          recordedByUserId: verificationRecords.recordedByUserId,
+          recordedAt: verificationRecords.recordedAt,
+          currentArtifactHeadSha: implementationArtifacts.headSha,
+          currentArtifactStaleAt: implementationArtifacts.staleAt,
+        })
         .from(verificationRecords)
+        .leftJoin(
+          implementationArtifacts,
+          eq(implementationArtifacts.id, verificationRecords.artifactId),
+        )
         .where(
           and(
             eq(verificationRecords.projectId, projectId),
@@ -1835,7 +1939,34 @@ export async function getDeliveryEvidenceTrace(
         .where(
           and(
             eq(defects.projectId, projectId),
-            eq(defects.workItemId, workItemId),
+            sql`(
+              ${defects.workItemId} = ${workItemId}
+              or exists (
+                select 1
+                from work_implementation_links artifact_link
+                where artifact_link.project_id = ${projectId}
+                  and artifact_link.work_item_id = ${workItemId}
+                  and artifact_link.artifact_id = ${defects.artifactId}
+                  and artifact_link.removed_at is null
+              )
+              or exists (
+                select 1
+                from verification_records defect_verification
+                where defect_verification.project_id = ${projectId}
+                  and defect_verification.id = ${defects.verificationId}
+                  and (
+                    defect_verification.work_item_id = ${workItemId}
+                    or exists (
+                      select 1
+                      from work_implementation_links verification_link
+                      where verification_link.project_id = ${projectId}
+                        and verification_link.work_item_id = ${workItemId}
+                        and verification_link.artifact_id = defect_verification.artifact_id
+                        and verification_link.removed_at is null
+                    )
+                  )
+              )
+            )`,
           ),
         )
         .orderBy(desc(defects.detectedAt))
@@ -1879,7 +2010,15 @@ export async function getDeliveryEvidenceTrace(
     },
     commercialBasis: basis,
     implementation,
-    verification,
+    verification: verification.map(
+      ({ currentArtifactHeadSha, currentArtifactStaleAt, ...record }) => ({
+        ...record,
+        stale: isVerificationStale(workRows[0], record, {
+          headSha: currentArtifactHeadSha,
+          staleAt: currentArtifactStaleAt,
+        }),
+      }),
+    ),
     defects: defect,
     acceptance,
   };

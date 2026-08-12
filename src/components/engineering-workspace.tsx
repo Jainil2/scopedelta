@@ -870,6 +870,7 @@ type DeliveryEvidenceTrace = {
     notes: string | null;
     referenceUrl: string | null;
     recordedAt: DateValue;
+    stale: boolean;
   }>;
   defects: Array<{
     id: string;
@@ -919,6 +920,7 @@ export function WorkEngineeringPanel({
             <p key={verification.id}>
               {verification.category} · {verification.result} ·{" "}
               {formatDate(verification.recordedAt)}
+              {verification.stale ? " · stale" : ""}
               {verification.referenceUrl ? (
                 <>
                   {" · "}

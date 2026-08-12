@@ -608,6 +608,24 @@ describe("engineering and QA delivery evidence boundary", () => {
         acceptanceTargetId: null,
       },
     );
+    const projectDefect = await createDefect(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        title: "Project-level release blocker",
+        description: null,
+        severity: "critical",
+        workItemId: null,
+        scopeItemRevisionId: null,
+        commercialRequestId: null,
+        commercialDecisionId: null,
+        artifactId: null,
+        verificationId: null,
+        milestoneId: null,
+        acceptanceTargetId: null,
+      },
+    );
 
     const coverage = await getEngineeringCoverage(
       fixture.owner,
@@ -618,7 +636,14 @@ describe("engineering and QA delivery evidence boundary", () => {
     expect(
       coverage.items.find((item) => item.workItemId === work.id)?.gaps,
     ).toContain("unresolved_defect");
-    expect(coverage.summary.unresolvedDefects).toBe(1);
+    expect(coverage.summary.unresolvedDefects).toBe(3);
+    expect(coverage.items).toContainEqual(
+      expect.objectContaining({
+        identifier: `DEF-${projectDefect.number}`,
+        title: "Project-level release blocker",
+        gaps: ["unresolved_defect"],
+      }),
+    );
 
     const trace = await getDeliveryEvidenceTrace(
       fixture.owner,
@@ -629,11 +654,175 @@ describe("engineering and QA delivery evidence boundary", () => {
     expect(trace.defects.map((item) => item.id)).toEqual(
       expect.arrayContaining([artifactDefect.id, verificationDefect.id]),
     );
+    expect(trace.verification).toContainEqual(
+      expect.objectContaining({
+        id: verification.id,
+        result: "failed",
+      }),
+    );
+  });
+
+  it("requires QA evidence for the current linked implementation set", async () => {
+    const fixture = await createFixture("MULTI");
+    const work = await createWork(fixture, "Multiple implementation PRs");
+    const repositoryId = await seedRepository(fixture);
+    await upsertProviderEvidence(
+      repositoryId,
+      [
+        evidence({
+          providerArtifactId: "multi-pr-a",
+          number: 41,
+          title: "MULTI-1 implementation A",
+          headRef: "multi-1-a",
+          headSha: "multi-head-a",
+        }),
+        evidence({
+          providerArtifactId: "multi-pr-b",
+          number: 42,
+          title: "MULTI-1 implementation B",
+          headRef: "multi-1-b",
+          headSha: "multi-head-b",
+        }),
+      ],
+      "integration",
+      null,
+    );
+    const artifacts = await db
+      .select({
+        id: implementationArtifacts.id,
+        providerArtifactId: implementationArtifacts.providerArtifactId,
+      })
+      .from(implementationArtifacts)
+      .where(eq(implementationArtifacts.projectId, fixture.project.id));
+    const artifactA = artifacts.find(
+      (artifact) => artifact.providerArtifactId === "multi-pr-a",
+    )!;
+    const artifactVerification = await createVerificationRecord(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        workItemId: null,
+        scopeItemRevisionId: null,
+        artifactId: artifactA.id,
+        milestoneId: null,
+        acceptanceTargetId: null,
+        method: "automated_reference",
+        category: "PR A checks",
+        result: "passed",
+        referenceUrl: null,
+        notes: null,
+      },
+    );
+
+    let coverage = await getEngineeringCoverage(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { page: 1, pageSize: 50 },
+    );
+    expect(
+      coverage.items.find((item) => item.workItemId === work.id)?.gaps,
+    ).toContain("missing_verification");
+    let trace = await getDeliveryEvidenceTrace(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      work.id,
+    );
+    expect(trace.verification).toContainEqual(
+      expect.objectContaining({
+        id: artifactVerification.id,
+        result: "passed",
+      }),
+    );
+
+    const workVerification = await createVerificationRecord(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        workItemId: work.id,
+        scopeItemRevisionId: null,
+        artifactId: null,
+        milestoneId: null,
+        acceptanceTargetId: null,
+        method: "manual",
+        category: "Whole implementation set",
+        result: "passed",
+        referenceUrl: null,
+        notes: null,
+      },
+    );
+    coverage = await getEngineeringCoverage(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { page: 1, pageSize: 50 },
+    );
+    expect(
+      coverage.items.find((item) => item.workItemId === work.id)?.gaps,
+    ).not.toContain("missing_verification");
+
+    await upsertProviderEvidence(
+      repositoryId,
+      [
+        evidence({
+          providerArtifactId: "multi-pr-c",
+          number: 43,
+          title: "MULTI-1 implementation C",
+          headRef: "multi-1-c",
+          headSha: "multi-head-c",
+          providerUpdatedAt: new Date("2026-08-12T11:00:00.000Z"),
+        }),
+      ],
+      "integration",
+      null,
+    );
+    coverage = await getEngineeringCoverage(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { page: 1, pageSize: 50 },
+    );
+    const gaps =
+      coverage.items.find((item) => item.workItemId === work.id)?.gaps ?? [];
+    expect(gaps).toEqual(
+      expect.arrayContaining(["missing_verification", "stale_verification"]),
+    );
+    trace = await getDeliveryEvidenceTrace(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      work.id,
+    );
+    expect(trace.verification).toContainEqual(
+      expect.objectContaining({
+        id: workVerification.id,
+        category: "Whole implementation set",
+        stale: true,
+      }),
+    );
+    const engineeringWorkspace = await listEngineeringWorkspace(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+    );
+    expect(engineeringWorkspace.verifications).toContainEqual(
+      expect.objectContaining({
+        id: workVerification.id,
+        stale: true,
+      }),
+    );
   });
 
   it("counts deliverable acceptance and invalidates accepted milestones after edits", async () => {
     const fixture = await createFixture("ACCEPT");
     const work = await createWork(fixture, "Accepted milestone delivery");
+    const secondWork = await createWork(
+      fixture,
+      "Second accepted milestone delivery",
+    );
     const milestoneId = randomUUID();
     const milestoneSourceUpdatedAt = new Date("2026-08-12T10:00:00.000Z");
     await db.insert(milestones).values({
@@ -642,12 +831,16 @@ describe("engineering and QA delivery evidence boundary", () => {
       name: "Release candidate",
       updatedAt: milestoneSourceUpdatedAt,
     });
-    await updateWorkItem(
-      fixture.owner,
-      fixture.workspace.id,
-      fixture.project.id,
-      work.id,
-      { milestoneId },
+    await Promise.all(
+      [work, secondWork].map((item) =>
+        updateWorkItem(
+          fixture.owner,
+          fixture.workspace.id,
+          fixture.project.id,
+          item.id,
+          { milestoneId },
+        ),
+      ),
     );
     const deliverable = await createDraftScopeItem(
       fixture,
@@ -746,6 +939,9 @@ describe("engineering and QA delivery evidence boundary", () => {
     expect(coverage.summary.pendingAcceptance).toBe(2);
     expect(
       coverage.items.find((item) => item.workItemId === work.id)?.gaps,
+    ).toContain("pending_acceptance");
+    expect(
+      coverage.items.find((item) => item.workItemId === secondWork.id)?.gaps,
     ).toContain("pending_acceptance");
   });
 

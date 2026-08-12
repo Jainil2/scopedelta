@@ -3003,6 +3003,7 @@ export const verificationRecords = pgTable(
     referenceUrl: text("reference_url"),
     notes: text("notes"),
     subjectFingerprint: text("subject_fingerprint"),
+    implementationSetFingerprint: text("implementation_set_fingerprint"),
     artifactHeadSha: text("artifact_head_sha"),
     recordedByUserId: uuid("recorded_by_user_id")
       .notNull()

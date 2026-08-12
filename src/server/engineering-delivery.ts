@@ -154,6 +154,20 @@ function workFingerprint(work: {
     .digest("hex");
 }
 
+function implementationSetFingerprint(
+  artifacts: Array<{ id: string; headSha: string | null }>,
+) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify(
+        artifacts
+          .map((artifact) => [artifact.id, artifact.headSha] as const)
+          .sort(([left], [right]) => left.localeCompare(right)),
+      ),
+    )
+    .digest("hex");
+}
+
 function workNumbersFromEvidence(
   projectKey: string,
   evidence: ProviderPullRequestEvidence,
@@ -1008,31 +1022,57 @@ export async function createVerificationRecord(
   await getDb().transaction(async (transaction) => {
     await assertWritableProject(transaction, actor, workspaceId, projectId);
     await targetContext(transaction, projectId, input);
-    const [workRows, artifactRows] = await Promise.all([
-      input.workItemId
-        ? transaction
-            .select({
-              title: workItems.title,
-              description: workItems.description,
-              acceptanceCriteria: workItems.acceptanceCriteria,
-            })
-            .from(workItems)
-            .where(eq(workItems.id, input.workItemId))
-            .limit(1)
-        : Promise.resolve([]),
-      input.artifactId
-        ? transaction
-            .select({ headSha: implementationArtifacts.headSha })
-            .from(implementationArtifacts)
-            .where(eq(implementationArtifacts.id, input.artifactId))
-            .limit(1)
-        : Promise.resolve([]),
-    ]);
+    const [workRows, artifactRows, linkedImplementationRows] =
+      await Promise.all([
+        input.workItemId
+          ? transaction
+              .select({
+                title: workItems.title,
+                description: workItems.description,
+                acceptanceCriteria: workItems.acceptanceCriteria,
+              })
+              .from(workItems)
+              .where(eq(workItems.id, input.workItemId))
+              .limit(1)
+          : Promise.resolve([]),
+        input.artifactId
+          ? transaction
+              .select({ headSha: implementationArtifacts.headSha })
+              .from(implementationArtifacts)
+              .where(eq(implementationArtifacts.id, input.artifactId))
+              .limit(1)
+          : Promise.resolve([]),
+        input.workItemId
+          ? transaction
+              .select({
+                id: implementationArtifacts.id,
+                headSha: implementationArtifacts.headSha,
+              })
+              .from(workImplementationLinks)
+              .innerJoin(
+                implementationArtifacts,
+                eq(
+                  implementationArtifacts.id,
+                  workImplementationLinks.artifactId,
+                ),
+              )
+              .where(
+                and(
+                  eq(workImplementationLinks.projectId, projectId),
+                  eq(workImplementationLinks.workItemId, input.workItemId),
+                  isNull(workImplementationLinks.removedAt),
+                ),
+              )
+          : Promise.resolve([]),
+      ]);
     await transaction.insert(verificationRecords).values({
       id,
       projectId,
       ...input,
       subjectFingerprint: workRows[0] ? workFingerprint(workRows[0]) : null,
+      implementationSetFingerprint: workRows[0]
+        ? implementationSetFingerprint(linkedImplementationRows)
+        : null,
       artifactHeadSha: artifactRows[0]?.headSha ?? null,
       recordedByUserId: actor.userId,
     });
@@ -1241,6 +1281,8 @@ export async function listEngineeringWorkspace(
         referenceUrl: verificationRecords.referenceUrl,
         notes: verificationRecords.notes,
         subjectFingerprint: verificationRecords.subjectFingerprint,
+        implementationSetFingerprint:
+          verificationRecords.implementationSetFingerprint,
         artifactHeadSha: verificationRecords.artifactHeadSha,
         recordedByName: users.name,
         recordedAt: verificationRecords.recordedAt,
@@ -1334,6 +1376,15 @@ export async function listEngineeringWorkspace(
       .orderBy(desc(clientAcceptanceTargets.publishedAt))
       .limit(100),
   ]);
+  const artifactsById = new Map(
+    artifactRows.map((artifact) => [artifact.id, artifact]),
+  );
+  const artifactIdsByWork = new Map<string, string[]>();
+  for (const link of linkRows) {
+    const artifactIds = artifactIdsByWork.get(link.workItemId) ?? [];
+    artifactIds.push(link.artifactId);
+    artifactIdsByWork.set(link.workItemId, artifactIds);
+  }
   const verifications = verificationRows.map((record) => {
     const currentFingerprint = record.currentWorkTitle
       ? workFingerprint({
@@ -1342,6 +1393,21 @@ export async function listEngineeringWorkspace(
           acceptanceCriteria: record.currentAcceptanceCriteria,
         })
       : null;
+    const linkedArtifactIds = record.workItemId
+      ? (artifactIdsByWork.get(record.workItemId) ?? [])
+      : [];
+    const linkedArtifacts = linkedArtifactIds.flatMap((artifactId) => {
+      const artifact = artifactsById.get(artifactId);
+      return artifact ? [{ id: artifact.id, headSha: artifact.headSha }] : [];
+    });
+    const implementationSetChanged = Boolean(
+      record.workItemId &&
+      (linkedArtifacts.length !== linkedArtifactIds.length ||
+        (record.implementationSetFingerprint === null
+          ? linkedArtifacts.length > 0
+          : record.implementationSetFingerprint !==
+            implementationSetFingerprint(linkedArtifacts))),
+    );
     return {
       ...record,
       stale:
@@ -1353,6 +1419,7 @@ export async function listEngineeringWorkspace(
           record.artifactHeadSha &&
           record.currentArtifactHeadSha !== record.artifactHeadSha,
         ) ||
+        implementationSetChanged ||
         Boolean(record.artifactStaleAt),
     };
   });
@@ -1402,10 +1469,14 @@ type CoverageArtifact = {
 };
 
 type CoverageVerification = {
+  id: string;
+  workItemId: string | null;
   result: string;
   subjectFingerprint: string | null;
+  implementationSetFingerprint: string | null;
   artifactHeadSha: string | null;
   artifactId: string | null;
+  recordedAt: Date;
 };
 
 type VerificationArtifactState = Pick<CoverageArtifact, "headSha" | "staleAt">;
@@ -1414,6 +1485,7 @@ function isVerificationStale(
   work: CoverageWork,
   verification: CoverageVerification,
   artifact: VerificationArtifactState | null | undefined,
+  currentImplementationSetFingerprint?: string,
 ) {
   const subjectChanged =
     Boolean(verification.subjectFingerprint) &&
@@ -1421,7 +1493,18 @@ function isVerificationStale(
   const implementationChanged =
     Boolean(verification.artifactHeadSha && artifact) &&
     verification.artifactHeadSha !== artifact?.headSha;
-  return Boolean(subjectChanged || implementationChanged || artifact?.staleAt);
+  const implementationSetChanged =
+    currentImplementationSetFingerprint !== undefined &&
+    (verification.implementationSetFingerprint === null
+      ? currentImplementationSetFingerprint !== implementationSetFingerprint([])
+      : verification.implementationSetFingerprint !==
+        currentImplementationSetFingerprint);
+  return Boolean(
+    subjectChanged ||
+    implementationChanged ||
+    implementationSetChanged ||
+    artifact?.staleAt,
+  );
 }
 
 function implementationCoverageGaps(artifacts: CoverageArtifact[]) {
@@ -1443,18 +1526,80 @@ function implementationCoverageGaps(artifacts: CoverageArtifact[]) {
 
 function verificationCoverageGaps(
   work: CoverageWork,
-  verification: CoverageVerification | undefined,
+  verifications: CoverageVerification[],
   artifactsById: Map<string, CoverageArtifact>,
+  artifactIds: string[],
 ) {
-  if (!verification) return ["missing_verification"];
   const gaps: string[] = [];
-  if (verification.result !== "passed") {
-    gaps.push(`${verification.result}_verification`);
+  const artifactIdSet = new Set(artifactIds);
+  const latestDirect = verifications.find(
+    (verification) => verification.workItemId === work.id,
+  );
+  const latestByArtifact = new Map<string, CoverageVerification>();
+  for (const verification of verifications) {
+    if (
+      verification.artifactId &&
+      artifactIdSet.has(verification.artifactId) &&
+      !latestByArtifact.has(verification.artifactId)
+    ) {
+      latestByArtifact.set(verification.artifactId, verification);
+    }
   }
-  const artifact = verification.artifactId
-    ? artifactsById.get(verification.artifactId)
-    : null;
-  if (isVerificationStale(work, verification, artifact)) {
+  const currentImplementationSetFingerprint = implementationSetFingerprint(
+    artifactIds.flatMap((id) => {
+      const artifact = artifactsById.get(id);
+      return artifact ? [{ id, headSha: artifact.headSha }] : [];
+    }),
+  );
+  const latestRelevant = new Map<string, CoverageVerification>();
+  if (latestDirect) latestRelevant.set(latestDirect.id, latestDirect);
+  for (const verification of latestByArtifact.values()) {
+    latestRelevant.set(verification.id, verification);
+  }
+  for (const verification of latestRelevant.values()) {
+    if (verification.result !== "passed") {
+      const gap = `${verification.result}_verification`;
+      if (!gaps.includes(gap)) gaps.push(gap);
+    }
+  }
+  const directIsCurrent = Boolean(
+    latestDirect &&
+    latestDirect.result === "passed" &&
+    !isVerificationStale(
+      work,
+      latestDirect,
+      latestDirect.artifactId
+        ? artifactsById.get(latestDirect.artifactId)
+        : null,
+      currentImplementationSetFingerprint,
+    ),
+  );
+  const artifactsAreCurrent =
+    artifactIds.length > 0 &&
+    artifactIds.every((artifactId) => {
+      const verification = latestByArtifact.get(artifactId);
+      return Boolean(
+        verification &&
+        verification.result === "passed" &&
+        !isVerificationStale(work, verification, artifactsById.get(artifactId)),
+      );
+    });
+  if (!directIsCurrent && !artifactsAreCurrent) {
+    gaps.push("missing_verification");
+  }
+  const staleRelevant = [...latestRelevant.values()].some((verification) =>
+    isVerificationStale(
+      work,
+      verification,
+      verification.artifactId
+        ? artifactsById.get(verification.artifactId)
+        : null,
+      verification.workItemId === work.id
+        ? currentImplementationSetFingerprint
+        : undefined,
+    ),
+  );
+  if (staleRelevant && !artifactsAreCurrent) {
     gaps.push("stale_verification");
   }
   return gaps;
@@ -1465,7 +1610,7 @@ function buildCoverageItem(
   projectKey: string,
   artifactsById: Map<string, CoverageArtifact>,
   artifactIdsByWork: Map<string, string[]>,
-  latestVerification: Map<string, CoverageVerification>,
+  verificationsByWork: Map<string, CoverageVerification[]>,
   workWithDefects: Set<string>,
   acceptanceByMilestone: Map<string, string | null>,
 ): CoverageItem {
@@ -1479,8 +1624,9 @@ function buildCoverageItem(
     ...implementationCoverageGaps(linkedArtifacts),
     ...verificationCoverageGaps(
       work,
-      latestVerification.get(work.id),
+      verificationsByWork.get(work.id) ?? [],
       artifactsById,
+      artifactIds,
     ),
   ];
   if (workWithDefects.has(work.id)) gaps.push("unresolved_defect");
@@ -1531,6 +1677,7 @@ export async function getEngineeringCoverage(
     artifactRows,
     verificationRows,
     defectRows,
+    defectWorkRows,
     acceptanceRows,
   ] = await Promise.all([
     db
@@ -1572,35 +1719,45 @@ export async function getEngineeringCoverage(
       .where(eq(implementationArtifacts.projectId, projectId))
       .limit(MAX_PROJECT_EVIDENCE + 1),
     db
-      .selectDistinctOn([verificationRecords.workItemId], {
+      .select({
+        id: verificationRecords.id,
         workItemId: verificationRecords.workItemId,
         result: verificationRecords.result,
         subjectFingerprint: verificationRecords.subjectFingerprint,
+        implementationSetFingerprint:
+          verificationRecords.implementationSetFingerprint,
         artifactHeadSha: verificationRecords.artifactHeadSha,
         artifactId: verificationRecords.artifactId,
+        recordedAt: verificationRecords.recordedAt,
       })
       .from(verificationRecords)
-      .where(
-        and(
-          eq(verificationRecords.projectId, projectId),
-          sql`${verificationRecords.workItemId} is not null`,
-        ),
-      )
+      .where(eq(verificationRecords.projectId, projectId))
       .orderBy(
-        verificationRecords.workItemId,
         desc(verificationRecords.recordedAt),
         desc(verificationRecords.id),
       )
-      .limit(MAX_COVERAGE_WORK + 1),
-    db.execute<{ workItemId: string }>(sql`
-      select distinct affected.work_item_id as "workItemId"
+      .limit(MAX_PROJECT_EVIDENCE + 1),
+    db
+      .select({
+        id: defects.id,
+        number: defects.number,
+        title: defects.title,
+      })
+      .from(defects)
+      .where(and(eq(defects.projectId, projectId), eq(defects.status, "open")))
+      .orderBy(desc(defects.detectedAt), desc(defects.id))
+      .limit(MAX_PROJECT_EVIDENCE + 1),
+    db.execute<{ defectId: string; workItemId: string }>(sql`
+      select distinct affected.defect_id as "defectId",
+        affected.work_item_id as "workItemId"
       from (
-        select defect.work_item_id
+        select defect.id as defect_id, defect.work_item_id
         from defects defect
         where defect.project_id = ${projectId}
           and defect.status = 'open'
+          and defect.work_item_id is not null
         union
-        select artifact_link.work_item_id
+        select defect.id as defect_id, artifact_link.work_item_id
         from defects defect
         inner join work_implementation_links artifact_link
           on artifact_link.artifact_id = defect.artifact_id
@@ -1609,7 +1766,7 @@ export async function getEngineeringCoverage(
         where defect.project_id = ${projectId}
           and defect.status = 'open'
         union
-        select verification.work_item_id
+        select defect.id as defect_id, verification.work_item_id
         from defects defect
         inner join verification_records verification
           on verification.id = defect.verification_id
@@ -1617,7 +1774,7 @@ export async function getEngineeringCoverage(
         where defect.project_id = ${projectId}
           and defect.status = 'open'
         union
-        select verification_link.work_item_id
+        select defect.id as defect_id, verification_link.work_item_id
         from defects defect
         inner join verification_records verification
           on verification.id = defect.verification_id
@@ -1629,7 +1786,6 @@ export async function getEngineeringCoverage(
         where defect.project_id = ${projectId}
           and defect.status = 'open'
       ) affected
-      where affected.work_item_id is not null
       limit ${MAX_PROJECT_EVIDENCE + 1}
     `),
     db
@@ -1672,27 +1828,47 @@ export async function getEngineeringCoverage(
     workRows.length > MAX_COVERAGE_WORK ||
     linkRows.length > MAX_PROJECT_EVIDENCE ||
     artifactRows.length > MAX_PROJECT_EVIDENCE ||
-    verificationRows.length > MAX_COVERAGE_WORK ||
-    defectRows.rows.length > MAX_PROJECT_EVIDENCE;
+    verificationRows.length > MAX_PROJECT_EVIDENCE ||
+    defectRows.length > MAX_PROJECT_EVIDENCE ||
+    defectWorkRows.rows.length > MAX_PROJECT_EVIDENCE;
   const boundedWork = workRows.slice(0, MAX_COVERAGE_WORK);
   const artifactsById = new Map(
     artifactRows.slice(0, MAX_PROJECT_EVIDENCE).map((item) => [item.id, item]),
   );
   const artifactIdsByWork = new Map<string, string[]>();
+  const workIdsByArtifact = new Map<string, string[]>();
   for (const link of linkRows.slice(0, MAX_PROJECT_EVIDENCE)) {
     const values = artifactIdsByWork.get(link.workItemId) ?? [];
     values.push(link.artifactId);
     artifactIdsByWork.set(link.workItemId, values);
+    const workIds = workIdsByArtifact.get(link.artifactId) ?? [];
+    workIds.push(link.workItemId);
+    workIdsByArtifact.set(link.artifactId, workIds);
   }
-  const latestVerification = new Map(
-    verificationRows
-      .slice(0, MAX_COVERAGE_WORK)
-      .flatMap((item) =>
-        item.workItemId ? [[item.workItemId, item] as const] : [],
-      ),
-  );
+  const verificationsByWork = new Map<string, CoverageVerification[]>();
+  const addVerification = (
+    workItemId: string,
+    verification: CoverageVerification,
+  ) => {
+    const existing = verificationsByWork.get(workItemId) ?? [];
+    if (!existing.some((item) => item.id === verification.id)) {
+      existing.push(verification);
+      verificationsByWork.set(workItemId, existing);
+    }
+  };
+  for (const verification of verificationRows.slice(0, MAX_PROJECT_EVIDENCE)) {
+    if (verification.workItemId) {
+      addVerification(verification.workItemId, verification);
+    }
+    if (verification.artifactId) {
+      for (const workItemId of workIdsByArtifact.get(verification.artifactId) ??
+        []) {
+        addVerification(workItemId, verification);
+      }
+    }
+  }
   const workWithDefects = new Set(
-    defectRows.rows
+    defectWorkRows.rows
       .slice(0, MAX_PROJECT_EVIDENCE)
       .map((item) => item.workItemId),
   );
@@ -1712,11 +1888,32 @@ export async function getEngineeringCoverage(
       projectRows[0].key,
       artifactsById,
       artifactIdsByWork,
-      latestVerification,
+      verificationsByWork,
       workWithDefects,
       acceptanceByMilestone,
     ),
   );
+  const visibleWorkIds = new Set(boundedWork.map((work) => work.id));
+  const defectIdsWithVisibleWork = new Set(
+    defectWorkRows.rows.flatMap((item) =>
+      visibleWorkIds.has(item.workItemId) ? [item.defectId] : [],
+    ),
+  );
+  const projectDefectItems: CoverageItem[] = defectRows
+    .slice(0, MAX_PROJECT_EVIDENCE)
+    .flatMap((defect) =>
+      defectIdsWithVisibleWork.has(defect.id)
+        ? []
+        : [
+            {
+              workItemId: null,
+              identifier: `DEF-${defect.number}`,
+              title: defect.title,
+              milestoneId: null,
+              gaps: ["unresolved_defect"],
+            },
+          ],
+    );
   const deliverableAcceptanceItems: CoverageItem[] = acceptanceRows.flatMap(
     (item) =>
       item.target === "deliverable" &&
@@ -1785,7 +1982,12 @@ export async function getEngineeringCoverage(
       milestoneId: null,
       gaps: ["missing_planned_work"],
     }));
-  const allItems = [...requirements, ...items, ...deliverableAcceptanceItems];
+  const allItems = [
+    ...requirements,
+    ...items,
+    ...deliverableAcceptanceItems,
+    ...projectDefectItems,
+  ];
   const countGap = (gap: string) =>
     allItems.filter((item) => item.gaps.includes(gap)).length;
   const start = (filters.page - 1) * filters.pageSize;
@@ -1803,8 +2005,19 @@ export async function getEngineeringCoverage(
       blockedVerification: countGap("blocked_verification"),
       pendingVerification: countGap("pending_verification"),
       staleVerification: countGap("stale_verification"),
-      unresolvedDefects: countGap("unresolved_defect"),
-      pendingAcceptance: countGap("pending_acceptance"),
+      unresolvedDefects: defectRows.slice(0, MAX_PROJECT_EVIDENCE).length,
+      pendingAcceptance: new Set(
+        acceptanceRows.flatMap((item) => {
+          if (!item.acceptanceTargetId) return [];
+          const milestoneFresh =
+            !item.milestoneSourceUpdatedAt ||
+            item.currentMilestoneUpdatedAt?.getTime() ===
+              item.milestoneSourceUpdatedAt.getTime();
+          return item.action === "accepted" && milestoneFresh
+            ? []
+            : [item.acceptanceTargetId];
+        }),
+      ).size,
     },
     items: allItems.slice(start, start + filters.pageSize),
     page: {
@@ -1914,6 +2127,8 @@ export async function getDeliveryEvidenceTrace(
           referenceUrl: verificationRecords.referenceUrl,
           notes: verificationRecords.notes,
           subjectFingerprint: verificationRecords.subjectFingerprint,
+          implementationSetFingerprint:
+            verificationRecords.implementationSetFingerprint,
           artifactHeadSha: verificationRecords.artifactHeadSha,
           recordedByUserId: verificationRecords.recordedByUserId,
           recordedAt: verificationRecords.recordedAt,
@@ -1928,7 +2143,17 @@ export async function getDeliveryEvidenceTrace(
         .where(
           and(
             eq(verificationRecords.projectId, projectId),
-            eq(verificationRecords.workItemId, workItemId),
+            sql`(
+              ${verificationRecords.workItemId} = ${workItemId}
+              or exists (
+                select 1
+                from work_implementation_links verification_link
+                where verification_link.project_id = ${projectId}
+                  and verification_link.work_item_id = ${workItemId}
+                  and verification_link.artifact_id = ${verificationRecords.artifactId}
+                  and verification_link.removed_at is null
+              )
+            )`,
           ),
         )
         .orderBy(desc(verificationRecords.recordedAt))
@@ -2003,6 +2228,12 @@ export async function getDeliveryEvidenceTrace(
             .limit(100)
         : Promise.resolve([]),
     ]);
+  const currentImplementationSetFingerprint = implementationSetFingerprint(
+    implementation.map((artifact) => ({
+      id: artifact.artifactId,
+      headSha: artifact.headSha,
+    })),
+  );
   return {
     work: {
       ...workRows[0],
@@ -2013,10 +2244,17 @@ export async function getDeliveryEvidenceTrace(
     verification: verification.map(
       ({ currentArtifactHeadSha, currentArtifactStaleAt, ...record }) => ({
         ...record,
-        stale: isVerificationStale(workRows[0], record, {
-          headSha: currentArtifactHeadSha,
-          staleAt: currentArtifactStaleAt,
-        }),
+        stale: isVerificationStale(
+          workRows[0],
+          record,
+          {
+            headSha: currentArtifactHeadSha,
+            staleAt: currentArtifactStaleAt,
+          },
+          record.workItemId === workItemId
+            ? currentImplementationSetFingerprint
+            : undefined,
+        ),
       }),
     ),
     defects: defect,

@@ -39,31 +39,37 @@ SHA cannot authorize a newer head.
    full gate as the inner development loop.
 5. After functional approval, freeze feature scope and record the full
    40-character lowercase PR head SHA.
-6. Dispatch `.github/workflows/ci.yml` against the PR branch and enter
-   that exact SHA. With GitHub CLI, the equivalent is:
+6. Apply the `merge-candidate` label to the PR. The label event is an explicit
+   maintainer-controlled trigger, and GitHub binds the resulting PR workflow to
+   the current head SHA. With GitHub CLI, the equivalent is:
 
    ```bash
-   gh workflow run ci.yml --ref <pr-branch> -f expected_sha=<40-character-head-sha>
+   gh pr edit <pr-number> --repo <owner/repository> --remove-label merge-candidate
+   gh pr edit <pr-number> --repo <owner/repository> --add-label merge-candidate
    ```
 
-7. The exact-SHA guard rejects tags, malformed SHAs, stale input, or a branch
-   that no longer resolves to the approved commit. The full jobs then run in
-   parallel:
+   Removing the label first is only needed when rerunning the gate on a changed
+   head. Removing it does not start CI; adding it starts exactly one full run.
+
+7. The exact-SHA guard checks out and verifies the head captured by the label
+   event. A newer push cancels that run and moves branch protection to the new
+   SHA. The full jobs then run in parallel:
    - deploy guard, migration definition check, format, lint, typecheck, unit
      tests, and unit coverage;
    - migrations twice, PostgreSQL integration tests, and integration coverage;
    - migrations plus all Playwright browser journeys;
    - production build, production HTTP smoke, and production container build.
-8. `Full merge gate` succeeds only when every job succeeds and the validated SHA
-   still matches the approved input. Merge only while all required checks are
-   green on that latest head.
+8. `Full merge gate` is emitted by that PR-associated run only when every job
+   succeeds. This association is required so GitHub branch protection recognizes
+   the check; a manually dispatched commit check is not an authoritative merge
+   signal. Merge only while all required checks are green on that latest head.
 
 Pushing another commit after a green full gate makes the old check irrelevant
-to branch protection because it belongs to the previous SHA. A newer dispatch
-on the same branch also cancels the superseded expensive run. If a full-gate
-failure exposes a real defect, remove the freeze only for that defect, prove the
-focused regression first, obtain any required re-review, and dispatch the full
-gate again for the changed SHA.
+to branch protection because it belongs to the previous SHA, and the new push
+cancels any superseded expensive run. If a full-gate failure exposes a real
+defect, remove the freeze only for that defect, prove the focused regression
+first, obtain any required re-review, then remove and reapply the label to run
+the full gate again for the changed SHA.
 
 ## Coverage signal
 

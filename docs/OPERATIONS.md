@@ -110,15 +110,16 @@ application containers.
 
 ## Migration release procedure
 
-The durable CI/security contract and exact-SHA dispatch procedure are in
+The durable CI/security contract and exact-SHA merge-candidate procedure are in
 `docs/QUALITY_GATES.md`. CEO/product review may happen after focused validation;
 it does not require the complete hosted gate first.
 
 Before merging the functionally approved exact head:
 
 1. Review generated SQL and verify it contains only the approved schema change.
-2. Freeze ordinary feature scope and manually dispatch the `CI` workflow against
-   the PR branch with its exact 40-character head SHA.
+2. Freeze ordinary feature scope and apply the `merge-candidate` label to the PR.
+   The resulting PR event captures its exact 40-character head SHA and produces
+   the branch-protection-compatible final check.
 3. Require the full hosted gate to run `pnpm db:check` and apply the complete
    migration chain twice to a fresh disposable database.
 4. Require integration/browser tests against migrated PostgreSQL, plus the

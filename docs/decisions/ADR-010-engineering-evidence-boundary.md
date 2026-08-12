@@ -15,7 +15,11 @@ revoked. It must never cross tenant, project or client-projection boundaries.
 ## Decision
 
 - Use a least-privilege read-only GitHub App and explicit repository grants.
-  Never persist installation tokens.
+  Never persist installation or user access tokens. Bind setup to an expiring,
+  signed workspace/project/user state, and require a GitHub user token to prove
+  repository-administrator authority for the exact repository through the
+  installation before connecting it;
+  a raw installation ID is not authorization.
 - Normalize bounded pull-request/head/review/check/merge metadata behind a
   provider-neutral adapter. Do not store source, diffs, review text, CI logs or
   webhook payloads.

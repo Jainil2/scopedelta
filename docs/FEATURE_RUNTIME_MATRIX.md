@@ -147,7 +147,7 @@ Layer-4 research and SC-008 are complete for review. See `docs/research/LAYER4_E
 
 | Capability | Runtime class | Delivered slice |
 |---|---|---|
-| GitHub repository integration | External API/service | SC-008; read-only GitHub App, explicit repository grants |
+| GitHub repository integration | External API/service | SC-008; read-only GitHub App, signed tenant/user setup state, GitHub user-verified repository-admin grant |
 | GitLab integration | Hybrid/optional external | Deferred; provider boundary only |
 | Branch/commit/PR links | Hybrid/optional external | SC-008 implements PR/head metadata and local manual/auto work links |
 | CI/check status | Hybrid/optional external | SC-008 stores provider-reported rollups; ScopeDelta does not execute CI |
@@ -160,7 +160,7 @@ Layer-4 research and SC-008 are complete for review. See `docs/research/LAYER4_E
 Layer-4 runtime rules:
 
 - Local/LAN QA verification, defects, evidence trace and readiness operate without GitHub.
-- GitHub metadata is fetched only for an explicitly installed and granted repository; installation tokens and source/code/diff/log content are not persisted.
+- GitHub metadata is fetched only after signed ScopeDelta setup state and GitHub user authorization prove repository-admin authority for an explicitly installed and granted repository; user/installation tokens and source/code/diff/log content are not persisted.
 - Provider outage, revocation or disconnect preserves historical evidence and surfaces staleness.
 - GitLab is not implemented by SC-008. Its Hybrid classification preserves the distinction between future self-hosted GitLab and GitLab.com.
 - Layer-4 records are strictly internal and are not added to the SC-007 client-safe projection.

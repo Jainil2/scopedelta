@@ -27,25 +27,34 @@ import {
   verificationRecords,
   workImplementationLinks,
   workItems,
+  workspaces,
   type ImplementationCheckRollup,
 } from "@/db/schema";
 import type {
-  ConnectGitHubRepositoryInput,
   CreateDefectInput,
   CreateVerificationInput,
   EngineeringCoverageFilters,
   ManualImplementationLinkInput,
 } from "@/lib/engineering-validation";
-import { getGitHubAppInstallUrl, isGitHubAppConfigured } from "@/lib/env";
+import {
+  getGitHubAppAuthorizeUrl,
+  getGitHubAppInstallUrl,
+  isGitHubAppConfigured,
+} from "@/lib/env";
 import { notFound, PlatformError } from "@/lib/platform-errors";
 import {
+  exchangeGitHubUserCode,
   getGitHubInstallation,
   getGitHubPullRequestEvidence,
-  getGrantedGitHubRepository,
+  getGitHubUserInstallationRepository,
   listGitHubPullRequestEvidence,
   type GitHubRepository,
   type ProviderPullRequestEvidence,
 } from "@/server/github-provider";
+import {
+  createGitHubInstallationState,
+  verifyGitHubInstallationState,
+} from "@/server/github-installation-state";
 import {
   assertProjectManager,
   assertWritableProject,
@@ -432,26 +441,121 @@ async function reconcileRepositoryById(
   }
 }
 
-export async function connectGitHubRepository(
+export async function createGitHubRepositoryInstallationUrl(
   actor: UserActor,
   workspaceId: string,
   projectId: string,
-  input: ConnectGitHubRepositoryInput,
+  repositoryFullName: string,
 ) {
-  await requireProjectManager(getDb(), actor, workspaceId, projectId);
+  const access = await requireProjectManager(
+    getDb(),
+    actor,
+    workspaceId,
+    projectId,
+  );
+  const workspaceRows = await getDb()
+    .select({ slug: workspaces.slug })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  if (!workspaceRows[0]) throw notFound();
+  const returnPath = `/app/${workspaceRows[0].slug}/projects/${access.key}/engineering`;
+  const state = createGitHubInstallationState({
+    phase: "setup",
+    workspaceId,
+    projectId,
+    userId: actor.userId,
+    repositoryFullName,
+    returnPath,
+    installationId: null,
+  });
+  return getGitHubAppInstallUrl(state);
+}
+
+export async function continueGitHubRepositoryInstallation(
+  actor: UserActor,
+  stateValue: string,
+  installationId: string,
+) {
+  const state = verifyGitHubInstallationState(
+    stateValue,
+    "setup",
+    actor.userId,
+  );
+  await requireProjectManager(
+    getDb(),
+    actor,
+    state.workspaceId,
+    state.projectId,
+  );
+  const oauthState = createGitHubInstallationState({
+    ...state,
+    phase: "oauth",
+    installationId,
+  });
+  return getGitHubAppAuthorizeUrl(oauthState);
+}
+
+export async function completeGitHubRepositoryInstallation(
+  actor: UserActor,
+  stateValue: string,
+  code: string,
+) {
+  const state = verifyGitHubInstallationState(
+    stateValue,
+    "oauth",
+    actor.userId,
+  );
+  if (!state.installationId) throw notFound();
+  await requireProjectManager(
+    getDb(),
+    actor,
+    state.workspaceId,
+    state.projectId,
+  );
   let installation: Awaited<ReturnType<typeof getGitHubInstallation>>;
   let providerRepository: GitHubRepository;
   try {
-    [installation, providerRepository] = await Promise.all([
-      getGitHubInstallation(input.installationId),
-      getGrantedGitHubRepository(
-        input.installationId,
-        input.repositoryFullName,
-      ),
-    ]);
+    const userAccessToken = await exchangeGitHubUserCode(code);
+    providerRepository = await getGitHubUserInstallationRepository(
+      userAccessToken,
+      state.installationId,
+      state.repositoryFullName,
+    );
+    installation = await getGitHubInstallation(state.installationId);
   } catch (error) {
+    const code = providerErrorCode(error);
+    if (
+      code === "provider_access_revoked" ||
+      code === "provider_resource_unavailable"
+    ) {
+      throw notFound();
+    }
     throw providerUnavailable(error);
   }
+  await connectAuthorizedGitHubRepository(
+    actor,
+    state.workspaceId,
+    state.projectId,
+    {
+      installationId: state.installationId,
+      repositoryFullName: state.repositoryFullName,
+    },
+    installation,
+    providerRepository,
+  );
+  return { returnPath: state.returnPath };
+}
+
+async function connectAuthorizedGitHubRepository(
+  actor: UserActor,
+  workspaceId: string,
+  projectId: string,
+  input: { installationId: string; repositoryFullName: string },
+  installation: Awaited<ReturnType<typeof getGitHubInstallation>>,
+  providerRepository: GitHubRepository,
+) {
+  await requireProjectManager(getDb(), actor, workspaceId, projectId);
   if (
     providerRepository.full_name.toLowerCase() !==
     input.repositoryFullName.toLowerCase()
@@ -1255,7 +1359,6 @@ export async function listEngineeringWorkspace(
   return {
     configuration: {
       githubConfigured: isGitHubAppConfigured(),
-      githubInstallUrl: getGitHubAppInstallUrl(),
     },
     canManageConnections:
       access.workspaceRole !== "member" || access.leadUserId === actor.userId,

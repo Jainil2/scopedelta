@@ -248,7 +248,7 @@ Durable research: `docs/research/LAYER4_ENGINEERING_QA_DELIVERY_LOOP_RESEARCH_20
 
 ### Validated Layer-4 boundary
 
-- a least-privilege read-only GitHub App connects only explicitly granted repositories;
+- a least-privilege read-only GitHub App connects only explicitly granted repositories after a signed ScopeDelta setup state and GitHub user authorization prove the initiating user has repository-administrator authority for that exact installation repository;
 - provider-neutral normalized pull-request evidence stores bounded metadata, review/check rollups and immutable state snapshots, not code, diffs or logs;
 - title/branch project keys can link evidence automatically within the same project, while manual many-to-many linking remains authoritative and removable;
 - signed, deduplicated webhooks update evidence, bounded reconciliation repairs missed/out-of-order delivery, and disconnect/outage preserves history as stale;

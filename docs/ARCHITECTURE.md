@@ -175,8 +175,14 @@ Migration `0011_engineering_qa_delivery_evidence.sql` implements SC-008. A
 provider installation belongs to one workspace, and a connected repository is
 bound to one project through composite workspace/project foreign keys. The
 GitHub App requests read-only access and connects only after ScopeDelta verifies
-the installation and explicitly granted repository. Installation access tokens
-are short-lived and never stored.
+the installation and explicitly granted repository. A signed, expiring setup
+state binds the flow to the initiating ScopeDelta workspace, project and user;
+the callback then exchanges a one-time GitHub user authorization code and
+verifies that user has repository-administrator authority for the exact
+repository through that installation.
+Raw browser-supplied installation IDs are never accepted as authorization.
+User tokens are discarded immediately, installation tokens are short-lived,
+and neither is stored.
 
 `implementation_artifacts` is the provider-neutral current projection for a
 pull request: identity, URL/title, branch/head, base, author reference, state,
@@ -487,7 +493,7 @@ CI runs the full suite plus production and container builds.
 ## Deployment and privacy boundaries
 
 `APP_URL`, database URLs, `BETTER_AUTH_SECRET`, SMTP configuration, and GitHub
-App ID/slug/private key/webhook secret are server-only. `DATABASE_URL` is a
+App ID/slug/client credentials/private key/webhook secret are server-only. `DATABASE_URL` is a
 least-privilege Netlify runtime value;
 `DATABASE_MIGRATION_URL` exists only in a GitHub migration step or a
 self-host operator environment. `NEXT_PUBLIC_` remains reserved for deliberately

@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHmac, createSign, timingSafeEqual } from "node:crypto";
 
-import { getGitHubAppConfig } from "@/lib/env";
+import { getGitHubAppCallbackUrl, getGitHubAppConfig } from "@/lib/env";
 import type {
   ImplementationArtifactState,
   ImplementationCheckRollup,
@@ -26,6 +26,7 @@ export type GitHubRepository = {
   private: boolean;
   default_branch: string;
   owner: { login: string };
+  permissions?: { admin?: boolean };
 };
 
 type GitHubPullRequest = {
@@ -138,6 +139,56 @@ export async function getGrantedGitHubRepository(
 ) {
   const token = await installationToken(installationId);
   return githubJson<GitHubRepository>(`/repos/${fullName}`, token);
+}
+
+export async function exchangeGitHubUserCode(code: string) {
+  const { clientId, clientSecret } = getGitHubAppConfig();
+  const response = await fetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": USER_AGENT,
+    },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+      redirect_uri: getGitHubAppCallbackUrl(),
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const payload = (await response.json()) as {
+    access_token?: string;
+    error?: string;
+  };
+  if (!response.ok || !payload.access_token || payload.error) {
+    throw new Error(`github_oauth_${response.status}`);
+  }
+  return payload.access_token;
+}
+
+export async function getGitHubUserInstallationRepository(
+  userAccessToken: string,
+  installationId: string,
+  repositoryFullName: string,
+) {
+  const expected = repositoryFullName.toLowerCase();
+  for (let page = 1; page <= 10; page += 1) {
+    const result = await githubJson<{
+      repositories: GitHubRepository[];
+    }>(
+      `/user/installations/${encodeURIComponent(installationId)}/repositories?per_page=100&page=${page}`,
+      userAccessToken,
+    );
+    const repository = result.repositories.find(
+      (item) => item.full_name.toLowerCase() === expected,
+    );
+    if (repository?.permissions?.admin) return repository;
+    if (repository) throw new Error("github_provider_403");
+    if (result.repositories.length < 100) break;
+  }
+  throw new Error("github_provider_404");
 }
 
 function aggregateReviewRollup(

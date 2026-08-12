@@ -12,7 +12,6 @@ type DateValue = string | Date | null;
 type EngineeringData = {
   configuration: {
     githubConfigured: boolean;
-    githubInstallUrl: string | null;
   };
   canManageConnections: boolean;
   repositories: Array<{
@@ -149,16 +148,13 @@ export function EngineeringWorkspace({
 
   async function connectRepository(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    const response = await apiRequest(base, "POST", {
-      installationId: data.get("installationId"),
-      repositoryFullName: data.get("repositoryFullName"),
-    });
-    if (response.ok) {
-      form.reset();
-      refresh("GitHub repository connected and reconciliation requested.");
-    } else setMessage(response.message);
+    const repositoryFullName = new FormData(event.currentTarget).get(
+      "repositoryFullName",
+    );
+    if (typeof repositoryFullName !== "string") return;
+    const url = new URL(`${base}/github/install`, window.location.origin);
+    url.searchParams.set("repositoryFullName", repositoryFullName);
+    window.location.assign(url);
   }
 
   async function repositoryAction(
@@ -331,31 +327,20 @@ export function EngineeringWorkspace({
         {engineering.canManageConnections ? (
           <details className="project-editor">
             <summary>Connect an explicitly granted repository</summary>
-            {engineering.configuration.githubInstallUrl ? (
-              <p>
-                <a
-                  href={engineering.configuration.githubInstallUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Install or configure the ScopeDelta GitHub App
-                </a>{" "}
-                and then confirm the installation and granted repository below.
-              </p>
-            ) : (
+            {!engineering.configuration.githubConfigured ? (
               <p>
                 Configure the server-side GitHub App environment before
                 connecting.
               </p>
-            )}
+            ) : null}
+            <p>
+              GitHub will ask you to install or configure the app, then verify
+              that your GitHub user can access this exact granted repository.
+            </p>
             <form
               className="delivery-form delivery-form-grid"
               onSubmit={connectRepository}
             >
-              <label>
-                <span>Installation ID</span>
-                <input name="installationId" inputMode="numeric" required />
-              </label>
               <label>
                 <span>Granted repository</span>
                 <input
@@ -370,7 +355,7 @@ export function EngineeringWorkspace({
                   !engineering.configuration.githubConfigured || pending
                 }
               >
-                Connect repository
+                Authorize repository with GitHub
               </button>
             </form>
           </details>

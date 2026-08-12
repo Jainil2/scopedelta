@@ -11,11 +11,7 @@ const optionalText = (maximum: number) =>
     .nullable()
     .transform((value) => value || null);
 
-export const connectGitHubRepositorySchema = z.object({
-  installationId: z
-    .string()
-    .trim()
-    .regex(/^\d{1,30}$/),
+export const githubRepositoryInstallSchema = z.object({
   repositoryFullName: z
     .string()
     .trim()
@@ -83,8 +79,8 @@ export const engineeringCoverageFiltersSchema = z.object({
   milestoneId: z.string().uuid().optional(),
 });
 
-export type ConnectGitHubRepositoryInput = z.output<
-  typeof connectGitHubRepositorySchema
+export type GitHubRepositoryInstallInput = z.output<
+  typeof githubRepositoryInstallSchema
 >;
 export type ManualImplementationLinkInput = z.output<
   typeof manualImplementationLinkSchema

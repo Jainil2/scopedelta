@@ -241,7 +241,7 @@ Durable research: `docs/research/LAYER4_ENGINEERING_QA_DELIVERY_LOOP_RESEARCH_20
 
 Connect delivery planning with engineering evidence without rebuilding source-control infrastructure:
 
-- read-only GitHub App repository integration through a provider-neutral evidence boundary;
+- read-only GitHub App repository integration through a provider-neutral evidence boundary, with a signed workspace/user setup state and GitHub user authorization proving repository-administrator authority for the exact installation repository;
 - manual and project-key links between work and pull-request evidence;
 - current pull-request, head, review and check rollups plus immutable historical snapshots;
 - lightweight manual/automated-reference QA verification and project defects;

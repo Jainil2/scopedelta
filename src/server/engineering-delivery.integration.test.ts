@@ -22,6 +22,7 @@ import {
   updateWorkItem,
 } from "@/server/delivery";
 import {
+  completeGitHubRepositoryInstallation,
   createDefect,
   createVerificationRecord,
   disconnectEngineeringRepository,
@@ -34,6 +35,7 @@ import {
   upsertProviderEvidence,
 } from "@/server/engineering-delivery";
 import type { ProviderPullRequestEvidence } from "@/server/github-provider";
+import { createGitHubInstallationState } from "@/server/github-installation-state";
 import { createWorkspace } from "@/server/workspaces";
 
 const databaseUrl =
@@ -514,6 +516,41 @@ describe("engineering and QA delivery evidence boundary", () => {
       expect(gapsFor(work.id)).not.toContain("incomplete_material_work");
     }
     expect(coverage.summary.incompleteMaterialWork).toBe(0);
+  });
+
+  it("rejects a cross-workspace claim even when installation and repository identities are known", async () => {
+    const authorized = await createFixture("AUTH", "authorized");
+    const attacker = await createFixture("EVIL", "attacker");
+    const installationId = "4242424242";
+    const repositoryFullName = "customer/private-delivery";
+    const state = createGitHubInstallationState({
+      phase: "oauth",
+      workspaceId: authorized.workspace.id,
+      projectId: authorized.project.id,
+      userId: authorized.owner.userId,
+      repositoryFullName,
+      returnPath: `/app/${authorized.workspace.slug}/projects/AUTH/engineering`,
+      installationId,
+    });
+
+    await expect(
+      completeGitHubRepositoryInstallation(
+        attacker.owner,
+        state,
+        "attacker-supplied-code",
+      ),
+    ).rejects.toMatchObject({ code: "not_found" });
+    await expect(
+      db
+        .select()
+        .from(engineeringProviderInstallations)
+        .where(
+          eq(
+            engineeringProviderInstallations.providerInstallationId,
+            installationId,
+          ),
+        ),
+    ).resolves.toHaveLength(0);
   });
 });
 

@@ -140,6 +140,16 @@ export async function getGrantedGitHubRepository(
   return githubJson<GitHubRepository>(`/repos/${fullName}`, token);
 }
 
+function aggregateReviewRollup(
+  approvalsCount: number,
+  changesRequestedCount: number,
+  hasReviewActivity: boolean,
+): ImplementationReviewRollup {
+  if (changesRequestedCount) return "changes_requested";
+  if (approvalsCount) return "approved";
+  return hasReviewActivity ? "pending" : "unknown";
+}
+
 async function reviewRollup(
   repository: GitHubRepository,
   pullNumber: number,
@@ -177,14 +187,11 @@ async function reviewRollup(
       changesRequestedCount += 1;
     }
   }
-  let rollup: ImplementationReviewRollup = "unknown";
-  if (changesRequestedCount) {
-    rollup = "changes_requested";
-  } else if (approvalsCount) {
-    rollup = "approved";
-  } else if (reviews.length || requestedReviewCount) {
-    rollup = "pending";
-  }
+  const rollup = aggregateReviewRollup(
+    approvalsCount,
+    changesRequestedCount,
+    Boolean(reviews.length || requestedReviewCount),
+  );
   return { rollup, approvalsCount, changesRequestedCount };
 }
 

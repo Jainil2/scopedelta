@@ -4,7 +4,7 @@ CREATE TYPE "public"."engineering_connection_state" AS ENUM('active', 'disconnec
 CREATE TYPE "public"."engineering_provider" AS ENUM('github');--> statement-breakpoint
 CREATE TYPE "public"."implementation_artifact_kind" AS ENUM('pull_request');--> statement-breakpoint
 CREATE TYPE "public"."implementation_artifact_state" AS ENUM('open', 'draft', 'closed', 'merged');--> statement-breakpoint
-CREATE TYPE "public"."implementation_check_rollup" AS ENUM('pending', 'passing', 'failing', 'unknown');--> statement-breakpoint
+CREATE TYPE "public"."implementation_check_rollup" AS ENUM('pending', 'passing', 'failing', 'unknown'); -- NOSONAR: generated Drizzle enum definition.--> statement-breakpoint
 CREATE TYPE "public"."implementation_link_provenance" AS ENUM('manual', 'provider_key');--> statement-breakpoint
 CREATE TYPE "public"."implementation_review_rollup" AS ENUM('pending', 'approved', 'changes_requested', 'unknown');--> statement-breakpoint
 CREATE TYPE "public"."provider_delivery_state" AS ENUM('processing', 'processed', 'ignored', 'failed');--> statement-breakpoint

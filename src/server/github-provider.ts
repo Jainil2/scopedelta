@@ -177,13 +177,14 @@ async function reviewRollup(
       changesRequestedCount += 1;
     }
   }
-  const rollup: ImplementationReviewRollup = changesRequestedCount
-    ? "changes_requested"
-    : approvalsCount
-      ? "approved"
-      : reviews.length || requestedReviewCount
-        ? "pending"
-        : "unknown";
+  let rollup: ImplementationReviewRollup = "unknown";
+  if (changesRequestedCount) {
+    rollup = "changes_requested";
+  } else if (approvalsCount) {
+    rollup = "approved";
+  } else if (reviews.length || requestedReviewCount) {
+    rollup = "pending";
+  }
   return { rollup, approvalsCount, changesRequestedCount };
 }
 

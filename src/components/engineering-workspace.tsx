@@ -110,6 +110,20 @@ type Coverage = {
   truncated: boolean;
 };
 
+function EngineeringStatusMessages({
+  message,
+  pending,
+}: Readonly<{ message: string; pending: boolean }>) {
+  return (
+    <>
+      {message ? (
+        <output className="commercial-message">{message}</output>
+      ) : null}
+      {pending ? <output>Refreshing delivery evidence…</output> : null}
+    </>
+  );
+}
+
 export function EngineeringWorkspace({
   workspaceId,
   workspaceSlug,
@@ -261,12 +275,7 @@ export function EngineeringWorkspace({
         />
       </header>
 
-      {message ? (
-        <p className="commercial-message" role="status">
-          {message}
-        </p>
-      ) : null}
-      {pending ? <p role="status">Refreshing delivery evidence…</p> : null}
+      <EngineeringStatusMessages message={message} pending={pending} />
 
       <section
         className="engineering-status-strip"
@@ -344,11 +353,11 @@ export function EngineeringWorkspace({
               onSubmit={connectRepository}
             >
               <label>
-                Installation ID
+                <span>Installation ID</span>
                 <input name="installationId" inputMode="numeric" required />
               </label>
               <label>
-                Granted repository
+                <span>Granted repository</span>
                 <input
                   name="repositoryFullName"
                   placeholder="owner/repository"
@@ -428,7 +437,7 @@ export function EngineeringWorkspace({
           </div>
           <form className="engineering-inline-form" onSubmit={linkEvidence}>
             <label>
-              Work item
+              <span>Work item</span>
               <select name="workItemId" required defaultValue="">
                 <option value="" disabled>
                   Choose work
@@ -441,7 +450,7 @@ export function EngineeringWorkspace({
               </select>
             </label>
             <label>
-              Pull request
+              <span>Pull request</span>
               <select name="artifactId" required defaultValue="">
                 <option value="" disabled>
                   Choose evidence
@@ -549,7 +558,7 @@ export function EngineeringWorkspace({
               onSubmit={recordVerification}
             >
               <label>
-                Work item
+                <span>Work item</span>
                 <select name="workItemId" required defaultValue="">
                   <option value="" disabled>
                     Choose work
@@ -562,7 +571,7 @@ export function EngineeringWorkspace({
                 </select>
               </label>
               <label>
-                Implementation version
+                <span>Implementation version</span>
                 <select name="artifactId" defaultValue="">
                   <option value="">No provider evidence</option>
                   {engineering.artifacts.map((artifact) => (
@@ -574,7 +583,7 @@ export function EngineeringWorkspace({
                 </select>
               </label>
               <label>
-                Method
+                <span>Method</span>
                 <select name="method" defaultValue="manual">
                   <option value="manual">Manual QA</option>
                   <option value="automated_reference">
@@ -583,7 +592,7 @@ export function EngineeringWorkspace({
                 </select>
               </label>
               <label>
-                Result
+                <span>Result</span>
                 <select name="result" defaultValue="pending">
                   <option value="pending">Pending</option>
                   <option value="passed">Passed</option>
@@ -592,7 +601,7 @@ export function EngineeringWorkspace({
                 </select>
               </label>
               <label>
-                Category
+                <span>Category</span>
                 <input
                   name="category"
                   placeholder="Regression, acceptance, security…"
@@ -601,11 +610,11 @@ export function EngineeringWorkspace({
                 />
               </label>
               <label>
-                Evidence URL
+                <span>Evidence URL</span>
                 <input name="referenceUrl" type="url" />
               </label>
               <label className="form-span">
-                Concise notes
+                <span>Concise notes</span>
                 <textarea name="notes" rows={3} maxLength={5000} />
               </label>
               <button type="submit">Record verification</button>
@@ -680,11 +689,11 @@ export function EngineeringWorkspace({
               onSubmit={recordDefect}
             >
               <label className="form-span">
-                Title
+                <span>Title</span>
                 <input name="title" required maxLength={240} />
               </label>
               <label>
-                Severity
+                <span>Severity</span>
                 <select name="severity" defaultValue="medium">
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -693,7 +702,7 @@ export function EngineeringWorkspace({
                 </select>
               </label>
               <label>
-                Work item
+                <span>Work item</span>
                 <select name="workItemId" defaultValue="">
                   <option value="">Project-level defect</option>
                   {engineering.workItems.map((work) => (
@@ -704,7 +713,7 @@ export function EngineeringWorkspace({
                 </select>
               </label>
               <label>
-                Implementation evidence
+                <span>Implementation evidence</span>
                 <select name="artifactId" defaultValue="">
                   <option value="">None</option>
                   {engineering.artifacts.map((artifact) => (
@@ -715,7 +724,7 @@ export function EngineeringWorkspace({
                 </select>
               </label>
               <label>
-                Verification evidence
+                <span>Verification evidence</span>
                 <select name="verificationId" defaultValue="">
                   <option value="">None</option>
                   {engineering.verifications.map((verification) => (
@@ -726,7 +735,7 @@ export function EngineeringWorkspace({
                 </select>
               </label>
               <label className="form-span">
-                Description
+                <span>Description</span>
                 <textarea name="description" rows={3} maxLength={10000} />
               </label>
               <button type="submit">Record defect</button>

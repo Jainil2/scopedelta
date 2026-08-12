@@ -412,6 +412,109 @@ describe("engineering and QA delivery evidence boundary", () => {
       cause: { message: expect.stringMatching(/immutable/) },
     });
   });
+
+  it("keeps done work in evidence readiness without calling it incomplete", async () => {
+    const fixture = await createFixture("DONE");
+    const missingWork = await createWork(fixture, "Missing delivery evidence");
+    const failingWork = await createWork(fixture, "Failing delivery checks");
+    const staleWork = await createWork(fixture, "Stale delivery verification");
+    const repositoryId = await seedRepository(fixture);
+
+    await upsertProviderEvidence(
+      repositoryId,
+      [
+        evidence({
+          providerArtifactId: "done-failing-pr",
+          number: 21,
+          title: "DONE-2 failing delivery checks",
+          headRef: "done-2-failing-checks",
+          state: "merged",
+          checkRollup: "failing",
+          mergedAt: new Date("2026-08-12T09:00:00.000Z"),
+          providerUpdatedAt: new Date("2026-08-12T09:00:00.000Z"),
+        }),
+        evidence({
+          providerArtifactId: "done-stale-pr",
+          number: 22,
+          title: "DONE-3 stale delivery verification",
+          headRef: "done-3-stale-verification",
+          state: "merged",
+          checkRollup: "passing",
+          mergedAt: new Date("2026-08-12T09:01:00.000Z"),
+          providerUpdatedAt: new Date("2026-08-12T09:01:00.000Z"),
+        }),
+      ],
+      "integration",
+      null,
+    );
+    const staleArtifacts = await db
+      .select({ id: implementationArtifacts.id })
+      .from(implementationArtifacts)
+      .where(eq(implementationArtifacts.providerArtifactId, "done-stale-pr"));
+    await createVerificationRecord(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        workItemId: staleWork.id,
+        scopeItemRevisionId: null,
+        artifactId: staleArtifacts[0]!.id,
+        milestoneId: null,
+        acceptanceTargetId: null,
+        method: "automated_reference",
+        category: "Done-work regression",
+        result: "passed",
+        referenceUrl: null,
+        notes: "Evidence matched before the work definition changed.",
+      },
+    );
+
+    await Promise.all([
+      updateWorkItem(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        missingWork.id,
+        { status: "done" },
+      ),
+      updateWorkItem(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        failingWork.id,
+        { status: "done" },
+      ),
+      updateWorkItem(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        staleWork.id,
+        { status: "done", description: "Changed after verification." },
+      ),
+    ]);
+
+    const coverage = await getEngineeringCoverage(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { page: 1, pageSize: 50 },
+    );
+    const gapsFor = (workItemId: string) =>
+      coverage.items.find((item) => item.workItemId === workItemId)?.gaps ?? [];
+
+    expect(gapsFor(missingWork.id)).toEqual(
+      expect.arrayContaining([
+        "missing_implementation",
+        "missing_verification",
+      ]),
+    );
+    expect(gapsFor(failingWork.id)).toContain("failing_checks");
+    expect(gapsFor(staleWork.id)).toContain("stale_verification");
+    for (const work of [missingWork, failingWork, staleWork]) {
+      expect(gapsFor(work.id)).not.toContain("incomplete_material_work");
+    }
+    expect(coverage.summary.incompleteMaterialWork).toBe(0);
+  });
 });
 
 type Fixture = Awaited<ReturnType<typeof createFixture>>;

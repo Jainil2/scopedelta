@@ -152,7 +152,11 @@ function workNumbersFromEvidence(
   projectKey: string,
   evidence: ProviderPullRequestEvidence,
 ) {
-  const escaped = projectKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const backslash = String.fromCodePoint(92);
+  const escaped = projectKey.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    (character) => `${backslash}${character}`,
+  );
   const pattern = new RegExp(
     `(?:^|[^A-Z0-9])${escaped}-(\\d+)(?=$|[^0-9])`,
     "gi",
@@ -1288,6 +1292,114 @@ type CoverageItem = {
   gaps: string[];
 };
 
+type CoverageWork = {
+  id: string;
+  number: number;
+  title: string;
+  description: string | null;
+  acceptanceCriteria: string | null;
+  status: string;
+  milestoneId: string | null;
+};
+
+type CoverageArtifact = {
+  id: string;
+  state: string;
+  headSha: string | null;
+  checkRollup: string;
+  staleAt: Date | null;
+};
+
+type CoverageVerification = {
+  result: string;
+  subjectFingerprint: string | null;
+  artifactHeadSha: string | null;
+  artifactId: string | null;
+};
+
+function implementationCoverageGaps(artifacts: CoverageArtifact[]) {
+  const gaps: string[] = [];
+  if (!artifacts.length) gaps.push("missing_implementation");
+  if (artifacts.some((artifact) => artifact.state !== "merged")) {
+    gaps.push("open_implementation");
+  }
+  const checks = artifacts.map((artifact) =>
+    artifact.staleAt ? "unknown" : artifact.checkRollup,
+  );
+  if (checks.includes("failing")) gaps.push("failing_checks");
+  if (checks.includes("pending")) gaps.push("pending_checks");
+  if (checks.includes("unknown")) gaps.push("unknown_checks");
+  return gaps;
+}
+
+function verificationCoverageGaps(
+  work: CoverageWork,
+  verification: CoverageVerification | undefined,
+  artifactsById: Map<string, CoverageArtifact>,
+) {
+  if (!verification) return ["missing_verification"];
+  const gaps: string[] = [];
+  if (verification.result !== "passed") {
+    gaps.push(`${verification.result}_verification`);
+  }
+  const artifact = verification.artifactId
+    ? artifactsById.get(verification.artifactId)
+    : null;
+  const subjectChanged =
+    Boolean(verification.subjectFingerprint) &&
+    verification.subjectFingerprint !== workFingerprint(work);
+  const implementationChanged =
+    Boolean(verification.artifactHeadSha && artifact) &&
+    verification.artifactHeadSha !== artifact?.headSha;
+  if (subjectChanged || implementationChanged || artifact?.staleAt) {
+    gaps.push("stale_verification");
+  }
+  return gaps;
+}
+
+function buildCoverageItem(
+  work: CoverageWork,
+  projectKey: string,
+  artifactsById: Map<string, CoverageArtifact>,
+  artifactIdsByWork: Map<string, string[]>,
+  latestVerification: Map<string, CoverageVerification>,
+  workWithDefects: Set<string>,
+  acceptanceByMilestone: Map<string, string | null>,
+): CoverageItem {
+  const artifactIds = artifactIdsByWork.get(work.id) ?? [];
+  const linkedArtifacts = artifactIds.flatMap((id) => {
+    const artifact = artifactsById.get(id);
+    return artifact ? [artifact] : [];
+  });
+  const gaps = [
+    ...(work.status === "done" ? [] : ["incomplete_material_work"]),
+    ...implementationCoverageGaps(linkedArtifacts),
+    ...verificationCoverageGaps(
+      work,
+      latestVerification.get(work.id),
+      artifactsById,
+    ),
+  ];
+  if (workWithDefects.has(work.id)) gaps.push("unresolved_defect");
+  const acceptance = work.milestoneId
+    ? acceptanceByMilestone.get(work.milestoneId)
+    : null;
+  if (
+    work.milestoneId &&
+    acceptanceByMilestone.has(work.milestoneId) &&
+    acceptance !== "accepted"
+  ) {
+    gaps.push("pending_acceptance");
+  }
+  return {
+    workItemId: work.id,
+    identifier: `${projectKey}-${work.number}`,
+    title: work.title,
+    milestoneId: work.milestoneId,
+    gaps,
+  };
+}
+
 export async function getEngineeringCoverage(
   actor: UserActor,
   workspaceId: string,
@@ -1306,7 +1418,7 @@ export async function getEngineeringCoverage(
     eq(workItems.projectId, projectId),
     eq(workItems.purpose, "client_delivery"),
     isNull(workItems.archivedAt),
-    sql`${workItems.status} not in ('done', 'canceled')`,
+    sql`${workItems.status} <> 'canceled'`,
   ];
   if (filters.milestoneId)
     workConditions.push(eq(workItems.milestoneId, filters.milestoneId));
@@ -1444,63 +1556,17 @@ export async function getEngineeringCoverage(
       item.milestoneId ? [[item.milestoneId, item.action] as const] : [],
     ),
   );
-  const items: CoverageItem[] = boundedWork.map((work) => {
-    const gaps: string[] = ["incomplete_material_work"];
-    const artifactIds = artifactIdsByWork.get(work.id) ?? [];
-    const linkedArtifacts = artifactIds.flatMap((id) => {
-      const artifact = artifactsById.get(id);
-      return artifact ? [artifact] : [];
-    });
-    if (!linkedArtifacts.length) gaps.push("missing_implementation");
-    if (linkedArtifacts.some((artifact) => artifact.state !== "merged")) {
-      gaps.push("open_implementation");
-    }
-    const checks = linkedArtifacts.map((artifact) =>
-      artifact.staleAt ? "unknown" : artifact.checkRollup,
-    );
-    if (checks.some((state) => state === "failing"))
-      gaps.push("failing_checks");
-    if (checks.some((state) => state === "pending"))
-      gaps.push("pending_checks");
-    if (checks.some((state) => state === "unknown"))
-      gaps.push("unknown_checks");
-    const verification = latestVerification.get(work.id);
-    if (!verification) {
-      gaps.push("missing_verification");
-    } else {
-      if (verification.result !== "passed")
-        gaps.push(`${verification.result}_verification`);
-      const fingerprint = workFingerprint(work);
-      const artifact = verification.artifactId
-        ? artifactsById.get(verification.artifactId)
-        : null;
-      if (
-        (verification.subjectFingerprint &&
-          verification.subjectFingerprint !== fingerprint) ||
-        (verification.artifactHeadSha &&
-          artifact &&
-          verification.artifactHeadSha !== artifact.headSha) ||
-        artifact?.staleAt
-      ) {
-        gaps.push("stale_verification");
-      }
-    }
-    if (workWithDefects.has(work.id)) gaps.push("unresolved_defect");
-    if (
-      work.milestoneId &&
-      acceptanceByMilestone.has(work.milestoneId) &&
-      acceptanceByMilestone.get(work.milestoneId) !== "accepted"
-    ) {
-      gaps.push("pending_acceptance");
-    }
-    return {
-      workItemId: work.id,
-      identifier: `${projectRows[0].key}-${work.number}`,
-      title: work.title,
-      milestoneId: work.milestoneId,
-      gaps,
-    };
-  });
+  const items = boundedWork.map((work) =>
+    buildCoverageItem(
+      work,
+      projectRows[0].key,
+      artifactsById,
+      artifactIdsByWork,
+      latestVerification,
+      workWithDefects,
+      acceptanceByMilestone,
+    ),
+  );
 
   const requirementResult = await db.execute<{
     id: string;
@@ -1726,6 +1792,48 @@ export async function getDeliveryEvidenceTrace(
   };
 }
 
+type GitHubWebhookPayload = {
+  repository?: { id?: number };
+  pull_request?: { number?: number };
+  check_run?: { pull_requests?: Array<{ number?: number }> };
+  check_suite?: { pull_requests?: Array<{ number?: number }> };
+};
+
+function webhookPullNumbers(payload: GitHubWebhookPayload) {
+  const pullNumbers = new Set<number>();
+  if (payload.pull_request?.number) {
+    pullNumbers.add(payload.pull_request.number);
+  }
+  for (const pull of payload.check_run?.pull_requests ?? []) {
+    if (pull.number) pullNumbers.add(pull.number);
+  }
+  for (const pull of payload.check_suite?.pull_requests ?? []) {
+    if (pull.number) pullNumbers.add(pull.number);
+  }
+  return [...pullNumbers].slice(0, 10);
+}
+
+async function reconcileWebhookRepositories(
+  repositoryIds: string[],
+  pullNumbers: number[],
+  eventName: string,
+) {
+  for (const repositoryId of repositoryIds) {
+    if (pullNumbers.length) {
+      for (const pullNumber of pullNumbers) {
+        await reconcileRepositoryById(
+          repositoryId,
+          "integration",
+          null,
+          pullNumber,
+        );
+      }
+    } else if (["push", "status"].includes(eventName)) {
+      await reconcileRepositoryById(repositoryId, "integration", null);
+    }
+  }
+}
+
 export async function processGitHubWebhookDelivery(
   deliveryId: string,
   eventName: string,
@@ -1745,12 +1853,7 @@ export async function processGitHubWebhookDelivery(
   if (!inserted[0]) return { duplicate: true, processed: 0 };
   let repositoryIds: string[] = [];
   try {
-    const payload = JSON.parse(rawBody) as {
-      repository?: { id?: number };
-      pull_request?: { number?: number };
-      check_run?: { pull_requests?: Array<{ number?: number }> };
-      check_suite?: { pull_requests?: Array<{ number?: number }> };
-    };
+    const payload = JSON.parse(rawBody) as GitHubWebhookPayload;
     const providerRepositoryId = payload.repository?.id
       ? String(payload.repository.id)
       : null;
@@ -1783,29 +1886,11 @@ export async function processGitHubWebhookDelivery(
         .where(eq(providerWebhookDeliveries.id, inserted[0].id));
       return { duplicate: false, processed: 0 };
     }
-    const pullNumbers = new Set<number>();
-    if (payload.pull_request?.number)
-      pullNumbers.add(payload.pull_request.number);
-    for (const pull of payload.check_run?.pull_requests ?? []) {
-      if (pull.number) pullNumbers.add(pull.number);
-    }
-    for (const pull of payload.check_suite?.pull_requests ?? []) {
-      if (pull.number) pullNumbers.add(pull.number);
-    }
-    for (const repositoryId of repositoryIds) {
-      if (pullNumbers.size) {
-        for (const pullNumber of [...pullNumbers].slice(0, 10)) {
-          await reconcileRepositoryById(
-            repositoryId,
-            "integration",
-            null,
-            pullNumber,
-          );
-        }
-      } else if (["push", "status"].includes(eventName)) {
-        await reconcileRepositoryById(repositoryId, "integration", null);
-      }
-    }
+    await reconcileWebhookRepositories(
+      repositoryIds,
+      webhookPullNumbers(payload),
+      eventName,
+    );
     await db
       .update(providerWebhookDeliveries)
       .set({ state: "processed", processedAt: new Date() })

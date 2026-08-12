@@ -1628,42 +1628,56 @@ function projectDirectoryHref(
   return `/app/${workspaceSlug}/projects?${query.toString()}`;
 }
 
-export function CommercialProvenanceBadge({
-  item,
-}: Readonly<{
-  item: Pick<
-    WorkItem,
-    | "purpose"
-    | "status"
-    | "archivedAt"
-    | "commercialBasisCount"
-    | "commercialHistoricalBasisCount"
-    | "commercialStaleBasisCount"
-  >;
-}>) {
+type CommercialProvenanceItem = Pick<
+  WorkItem,
+  | "purpose"
+  | "status"
+  | "archivedAt"
+  | "commercialBasisCount"
+  | "commercialHistoricalBasisCount"
+  | "commercialStaleBasisCount"
+>;
+
+function commercialProvenanceState(
+  item: CommercialProvenanceItem,
+): [string, string] {
   const historicalWork =
     item.status === "done" ||
     item.status === "canceled" ||
     Boolean(item.archivedAt);
-  const state =
-    item.purpose === "unclassified"
-      ? ["commercial-needs-classification", "Needs classification"]
-      : item.purpose === "client_delivery" &&
-          historicalWork &&
-          (item.commercialHistoricalBasisCount ?? 0) > 0
-        ? ["commercial-historical", "Historically authorized"]
-        : item.purpose === "client_delivery" &&
-            item.commercialBasisCount === 0 &&
-            (item.commercialStaleBasisCount ?? 0) > 0
-          ? ["commercial-stale", "Stale commercial basis"]
-          : item.purpose === "client_delivery" &&
-              item.commercialBasisCount === 0
-            ? ["commercial-unlinked", "Commercially unlinked"]
-            : item.purpose === "client_delivery"
-              ? ["commercial-linked", "Baseline linked"]
-              : item.purpose === "delivery_support"
-                ? ["commercial-support", "Delivery support"]
-                : ["commercial-internal", "Internal"];
+  if (item.purpose === "unclassified") {
+    return ["commercial-needs-classification", "Needs classification"];
+  }
+  if (
+    item.purpose === "client_delivery" &&
+    historicalWork &&
+    (item.commercialHistoricalBasisCount ?? 0) > 0
+  ) {
+    return ["commercial-historical", "Historically authorized"];
+  }
+  if (
+    item.purpose === "client_delivery" &&
+    item.commercialBasisCount === 0 &&
+    (item.commercialStaleBasisCount ?? 0) > 0
+  ) {
+    return ["commercial-stale", "Stale commercial basis"];
+  }
+  if (item.purpose === "client_delivery" && item.commercialBasisCount === 0) {
+    return ["commercial-unlinked", "Commercially unlinked"];
+  }
+  if (item.purpose === "client_delivery") {
+    return ["commercial-linked", "Baseline linked"];
+  }
+  if (item.purpose === "delivery_support") {
+    return ["commercial-support", "Delivery support"];
+  }
+  return ["commercial-internal", "Internal"];
+}
+
+export function CommercialProvenanceBadge({
+  item,
+}: Readonly<{ item: CommercialProvenanceItem }>) {
+  const state = commercialProvenanceState(item);
   return <span className={`commercial-badge ${state[0]}`}>{state[1]}</span>;
 }
 

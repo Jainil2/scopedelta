@@ -1524,17 +1524,11 @@ function implementationCoverageGaps(artifacts: CoverageArtifact[]) {
   return gaps;
 }
 
-function verificationCoverageGaps(
-  work: CoverageWork,
+function latestArtifactVerifications(
   verifications: CoverageVerification[],
-  artifactsById: Map<string, CoverageArtifact>,
   artifactIds: string[],
 ) {
-  const gaps: string[] = [];
   const artifactIdSet = new Set(artifactIds);
-  const latestDirect = verifications.find(
-    (verification) => verification.workItemId === work.id,
-  );
   const latestByArtifact = new Map<string, CoverageVerification>();
   for (const verification of verifications) {
     if (
@@ -1545,6 +1539,49 @@ function verificationCoverageGaps(
       latestByArtifact.set(verification.artifactId, verification);
     }
   }
+  return latestByArtifact;
+}
+
+function verificationResultGaps(verifications: Iterable<CoverageVerification>) {
+  const gaps = new Set<string>();
+  for (const verification of verifications) {
+    if (verification.result !== "passed") {
+      gaps.add(`${verification.result}_verification`);
+    }
+  }
+  return [...gaps];
+}
+
+function verificationIsCurrent(
+  work: CoverageWork,
+  verification: CoverageVerification | undefined,
+  artifact: VerificationArtifactState | null | undefined,
+  currentImplementationSetFingerprint?: string,
+) {
+  return Boolean(
+    verification?.result === "passed" &&
+    !isVerificationStale(
+      work,
+      verification,
+      artifact,
+      currentImplementationSetFingerprint,
+    ),
+  );
+}
+
+function verificationCoverageGaps(
+  work: CoverageWork,
+  verifications: CoverageVerification[],
+  artifactsById: Map<string, CoverageArtifact>,
+  artifactIds: string[],
+) {
+  const latestDirect = verifications.find(
+    (verification) => verification.workItemId === work.id,
+  );
+  const latestByArtifact = latestArtifactVerifications(
+    verifications,
+    artifactIds,
+  );
   const currentImplementationSetFingerprint = implementationSetFingerprint(
     artifactIds.flatMap((id) => {
       const artifact = artifactsById.get(id);
@@ -1556,32 +1593,23 @@ function verificationCoverageGaps(
   for (const verification of latestByArtifact.values()) {
     latestRelevant.set(verification.id, verification);
   }
-  for (const verification of latestRelevant.values()) {
-    if (verification.result !== "passed") {
-      const gap = `${verification.result}_verification`;
-      if (!gaps.includes(gap)) gaps.push(gap);
-    }
-  }
-  const directIsCurrent = Boolean(
-    latestDirect &&
-    latestDirect.result === "passed" &&
-    !isVerificationStale(
-      work,
-      latestDirect,
-      latestDirect.artifactId
-        ? artifactsById.get(latestDirect.artifactId)
-        : null,
-      currentImplementationSetFingerprint,
-    ),
+  const gaps = verificationResultGaps(latestRelevant.values());
+  const directIsCurrent = verificationIsCurrent(
+    work,
+    latestDirect,
+    latestDirect?.artifactId
+      ? artifactsById.get(latestDirect.artifactId)
+      : null,
+    currentImplementationSetFingerprint,
   );
   const artifactsAreCurrent =
     artifactIds.length > 0 &&
     artifactIds.every((artifactId) => {
       const verification = latestByArtifact.get(artifactId);
-      return Boolean(
-        verification &&
-        verification.result === "passed" &&
-        !isVerificationStale(work, verification, artifactsById.get(artifactId)),
+      return verificationIsCurrent(
+        work,
+        verification,
+        artifactsById.get(artifactId),
       );
     });
   if (!directIsCurrent && !artifactsAreCurrent) {

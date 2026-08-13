@@ -12,6 +12,7 @@ import type {
 const API = "https://api.github.com";
 const API_VERSION = "2022-11-28";
 const USER_AGENT = "ScopeDelta-GitHub-App";
+const MAX_REVIEW_PAGES = 10;
 
 type GitHubInstallation = {
   id: number;
@@ -201,25 +202,12 @@ function aggregateReviewRollup(
   return hasReviewActivity ? "pending" : "unknown";
 }
 
-async function reviewRollup(
-  repository: GitHubRepository,
-  pullNumber: number,
-  requestedReviewCount: number,
-  token: string,
-) {
-  const reviews = await githubJson<GitHubReview[]>(
-    `/repos/${repository.full_name}/pulls/${pullNumber}/reviews?per_page=100`,
-    token,
-  );
+function latestReviewCounts(reviews: GitHubReview[]) {
   const latestByReviewer = new Map<string, GitHubReview>();
   for (const review of reviews) {
     if (!review.user || !review.submitted_at) continue;
     const state = review.state.toLowerCase();
-    if (
-      state !== "approved" &&
-      state !== "changes_requested" &&
-      state !== "dismissed"
-    ) {
+    if (!["approved", "changes_requested", "dismissed"].includes(state)) {
       continue;
     }
     const previous = latestByReviewer.get(String(review.user.id));
@@ -238,11 +226,36 @@ async function reviewRollup(
       changesRequestedCount += 1;
     }
   }
-  const rollup = aggregateReviewRollup(
-    approvalsCount,
-    changesRequestedCount,
-    Boolean(reviews.length || requestedReviewCount),
-  );
+  return { approvalsCount, changesRequestedCount };
+}
+
+export async function getGitHubReviewRollup(
+  repository: GitHubRepository,
+  pullNumber: number,
+  requestedReviewCount: number,
+  token: string,
+) {
+  const reviews: GitHubReview[] = [];
+  let truncated = true;
+  for (let page = 1; page <= MAX_REVIEW_PAGES; page += 1) {
+    const pageReviews = await githubJson<GitHubReview[]>(
+      `/repos/${repository.full_name}/pulls/${pullNumber}/reviews?per_page=100&page=${page}`,
+      token,
+    );
+    reviews.push(...pageReviews);
+    if (pageReviews.length < 100) {
+      truncated = false;
+      break;
+    }
+  }
+  const { approvalsCount, changesRequestedCount } = latestReviewCounts(reviews);
+  const rollup = truncated
+    ? "unknown"
+    : aggregateReviewRollup(
+        approvalsCount,
+        changesRequestedCount,
+        Boolean(reviews.length || requestedReviewCount),
+      );
   return { rollup, approvalsCount, changesRequestedCount };
 }
 
@@ -291,7 +304,7 @@ async function normalizePullRequest(
     (pull.requested_reviewers?.length ?? 0) +
     (pull.requested_teams?.length ?? 0);
   const [review, checks, statuses] = await Promise.all([
-    reviewRollup(repository, pull.number, requestedReviewCount, token),
+    getGitHubReviewRollup(repository, pull.number, requestedReviewCount, token),
     githubJson<GitHubCheckRuns>(
       `/repos/${repository.full_name}/commits/${pull.head.sha}/check-runs?per_page=100`,
       token,

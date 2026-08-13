@@ -2,7 +2,16 @@ import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
 
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 import { getDb } from "@/db";
 import {
@@ -780,7 +789,7 @@ export async function linkImplementationEvidence(
   input: ManualImplementationLinkInput,
 ) {
   const id = randomUUID();
-  await getDb().transaction(async (transaction) => {
+  const persistedId = await getDb().transaction(async (transaction) => {
     await assertWritableProject(transaction, actor, workspaceId, projectId);
     const [work, artifact] = await Promise.all([
       transaction
@@ -805,7 +814,7 @@ export async function linkImplementationEvidence(
         .limit(1),
     ]);
     if (!work[0] || !artifact[0]) throw notFound();
-    await transaction
+    const rows = await transaction
       .insert(workImplementationLinks)
       .values({
         id,
@@ -827,7 +836,8 @@ export async function linkImplementationEvidence(
           removedByUserId: null,
           removedAt: null,
         },
-      });
+      })
+      .returning({ id: workImplementationLinks.id });
     await auditEngineeringEvent(transaction, {
       workspaceId,
       actorType: "human",
@@ -837,8 +847,9 @@ export async function linkImplementationEvidence(
       targetId: input.artifactId,
       metadata: { workItemId: input.workItemId, provenance: "manual" },
     });
+    return rows[0]!.id;
   });
-  return { id };
+  return { id: persistedId };
 }
 
 export async function unlinkImplementationEvidence(
@@ -1012,6 +1023,142 @@ async function targetContext(
   if (results.some((result) => result.length !== 1)) throw notFound();
 }
 
+function verificationWorkAssociationQuery(
+  projectId: string,
+  targets: SQL,
+  workItemId?: string,
+) {
+  return sql`
+    with verification_target as (${targets})
+    select distinct target.verification_id as "verificationId",
+      association.work_item_id as "workItemId"
+    from verification_target target
+    cross join lateral (
+      select target.work_item_id
+      where target.work_item_id is not null
+      union
+      select artifact_link.work_item_id
+      from work_implementation_links artifact_link
+      where artifact_link.project_id = ${projectId}
+        and artifact_link.artifact_id = target.artifact_id
+        and artifact_link.removed_at is null
+      union
+      select basis.work_item_id
+      from commercial_scope_item_revisions target_revision
+      inner join commercial_scope_items target_scope
+        on target_scope.id = target_revision.scope_item_id
+        and target_scope.project_id = target_revision.project_id
+      inner join commercial_scope_items related_scope
+        on related_scope.material_basis_scope_item_id = target_scope.material_basis_scope_item_id
+        and related_scope.project_id = target_scope.project_id
+      inner join commercial_scope_item_revisions related_revision
+        on related_revision.scope_item_id = related_scope.id
+        and related_revision.project_id = related_scope.project_id
+      inner join commercial_basis_links basis
+        on basis.scope_item_revision_id = related_revision.id
+        and basis.project_id = related_revision.project_id
+      where target_revision.id = target.scope_item_revision_id
+        and target_revision.project_id = ${projectId}
+      union
+      select milestone_work.id
+      from work_items milestone_work
+      where milestone_work.project_id = ${projectId}
+        and milestone_work.milestone_id = target.milestone_id
+      union
+      select acceptance_work.id
+      from client_acceptance_targets acceptance_target
+      inner join client_project_items acceptance_item
+        on acceptance_item.id = acceptance_target.project_item_id
+        and acceptance_item.project_id = acceptance_target.project_id
+      inner join work_items acceptance_work
+        on acceptance_work.project_id = acceptance_item.project_id
+        and acceptance_work.milestone_id = acceptance_item.milestone_id
+      where acceptance_target.id = target.acceptance_target_id
+        and acceptance_target.project_id = ${projectId}
+      union
+      select acceptance_basis.work_item_id
+      from client_acceptance_targets acceptance_target
+      inner join client_project_items acceptance_item
+        on acceptance_item.id = acceptance_target.project_item_id
+        and acceptance_item.project_id = acceptance_target.project_id
+      inner join commercial_scope_item_revisions target_revision
+        on target_revision.id = acceptance_item.scope_item_revision_id
+        and target_revision.project_id = acceptance_item.project_id
+      inner join commercial_scope_items target_scope
+        on target_scope.id = target_revision.scope_item_id
+        and target_scope.project_id = target_revision.project_id
+      inner join commercial_scope_items related_scope
+        on related_scope.material_basis_scope_item_id = target_scope.material_basis_scope_item_id
+        and related_scope.project_id = target_scope.project_id
+      inner join commercial_scope_item_revisions related_revision
+        on related_revision.scope_item_id = related_scope.id
+        and related_revision.project_id = related_scope.project_id
+      inner join commercial_basis_links acceptance_basis
+        on acceptance_basis.scope_item_revision_id = related_revision.id
+        and acceptance_basis.project_id = related_revision.project_id
+      where acceptance_target.id = target.acceptance_target_id
+        and acceptance_target.project_id = ${projectId}
+    ) association
+    ${workItemId ? sql`where association.work_item_id = ${workItemId}` : sql``}
+    limit ${MAX_PROJECT_EVIDENCE + 1}
+  `;
+}
+
+async function verificationWorkMappings(
+  database: Executor,
+  projectId: string,
+  verificationIds?: string[],
+  workItemId?: string,
+) {
+  const verificationFilter = verificationIds?.length
+    ? sql`and verification.id in (${sql.join(
+        verificationIds.map((id) => sql`${id}`),
+        sql`, `,
+      )})`
+    : sql``;
+  return database.execute<{ verificationId: string; workItemId: string }>(
+    verificationWorkAssociationQuery(
+      projectId,
+      sql`
+        select verification.id as verification_id,
+          verification.work_item_id,
+          verification.scope_item_revision_id,
+          verification.artifact_id,
+          verification.milestone_id,
+          verification.acceptance_target_id
+        from verification_records verification
+        where verification.project_id = ${projectId}
+          ${verificationFilter}
+      `,
+      workItemId,
+    ),
+  );
+}
+
+async function verificationTargetWorkIds(
+  database: Executor,
+  projectId: string,
+  input: CreateVerificationInput,
+) {
+  const result = await database.execute<{
+    verificationId: string | null;
+    workItemId: string;
+  }>(
+    verificationWorkAssociationQuery(
+      projectId,
+      sql`
+        select null::uuid as verification_id,
+          ${input.workItemId ?? null}::uuid as work_item_id,
+          ${input.scopeItemRevisionId ?? null}::uuid as scope_item_revision_id,
+          ${input.artifactId ?? null}::uuid as artifact_id,
+          ${input.milestoneId ?? null}::uuid as milestone_id,
+          ${input.acceptanceTargetId ?? null}::uuid as acceptance_target_id
+      `,
+    ),
+  );
+  return [...new Set(result.rows.map((row) => row.workItemId))];
+}
+
 export async function createVerificationRecord(
   actor: UserActor,
   workspaceId: string,
@@ -1022,55 +1169,60 @@ export async function createVerificationRecord(
   await getDb().transaction(async (transaction) => {
     await assertWritableProject(transaction, actor, workspaceId, projectId);
     await targetContext(transaction, projectId, input);
-    const [workRows, artifactRows, linkedImplementationRows] =
-      await Promise.all([
-        input.workItemId
-          ? transaction
-              .select({
-                title: workItems.title,
-                description: workItems.description,
-                acceptanceCriteria: workItems.acceptanceCriteria,
-              })
-              .from(workItems)
-              .where(eq(workItems.id, input.workItemId))
-              .limit(1)
-          : Promise.resolve([]),
-        input.artifactId
-          ? transaction
-              .select({ headSha: implementationArtifacts.headSha })
-              .from(implementationArtifacts)
-              .where(eq(implementationArtifacts.id, input.artifactId))
-              .limit(1)
-          : Promise.resolve([]),
-        input.workItemId
-          ? transaction
-              .select({
-                id: implementationArtifacts.id,
-                headSha: implementationArtifacts.headSha,
-              })
-              .from(workImplementationLinks)
-              .innerJoin(
-                implementationArtifacts,
-                eq(
-                  implementationArtifacts.id,
-                  workImplementationLinks.artifactId,
-                ),
-              )
-              .where(
-                and(
-                  eq(workImplementationLinks.projectId, projectId),
-                  eq(workImplementationLinks.workItemId, input.workItemId),
-                  isNull(workImplementationLinks.removedAt),
-                ),
-              )
-          : Promise.resolve([]),
-      ]);
+    const capturesImplementationSet = Boolean(
+      input.workItemId ||
+      input.scopeItemRevisionId ||
+      input.milestoneId ||
+      input.acceptanceTargetId,
+    );
+    const [workRows, artifactRows, mappedWorkIds] = await Promise.all([
+      input.workItemId
+        ? transaction
+            .select({
+              title: workItems.title,
+              description: workItems.description,
+              acceptanceCriteria: workItems.acceptanceCriteria,
+            })
+            .from(workItems)
+            .where(eq(workItems.id, input.workItemId))
+            .limit(1)
+        : Promise.resolve([]),
+      input.artifactId
+        ? transaction
+            .select({ headSha: implementationArtifacts.headSha })
+            .from(implementationArtifacts)
+            .where(eq(implementationArtifacts.id, input.artifactId))
+            .limit(1)
+        : Promise.resolve([]),
+      capturesImplementationSet
+        ? verificationTargetWorkIds(transaction, projectId, input)
+        : Promise.resolve([]),
+    ]);
+    const linkedImplementationRows = mappedWorkIds.length
+      ? await transaction
+          .select({
+            id: implementationArtifacts.id,
+            headSha: implementationArtifacts.headSha,
+          })
+          .from(workImplementationLinks)
+          .innerJoin(
+            implementationArtifacts,
+            eq(implementationArtifacts.id, workImplementationLinks.artifactId),
+          )
+          .where(
+            and(
+              eq(workImplementationLinks.projectId, projectId),
+              inArray(workImplementationLinks.workItemId, mappedWorkIds),
+              isNull(workImplementationLinks.removedAt),
+            ),
+          )
+      : [];
     await transaction.insert(verificationRecords).values({
       id,
       projectId,
       ...input,
       subjectFingerprint: workRows[0] ? workFingerprint(workRows[0]) : null,
-      implementationSetFingerprint: workRows[0]
+      implementationSetFingerprint: capturesImplementationSet
         ? implementationSetFingerprint(linkedImplementationRows)
         : null,
       artifactHeadSha: artifactRows[0]?.headSha ?? null,
@@ -1471,12 +1623,16 @@ type CoverageArtifact = {
 type CoverageVerification = {
   id: string;
   workItemId: string | null;
+  scopeItemRevisionId: string | null;
   result: string;
   subjectFingerprint: string | null;
   implementationSetFingerprint: string | null;
   artifactHeadSha: string | null;
   artifactId: string | null;
+  milestoneId: string | null;
+  acceptanceTargetId: string | null;
   recordedAt: Date;
+  currentImplementationSetFingerprint?: string;
 };
 
 type VerificationArtifactState = Pick<CoverageArtifact, "headSha" | "staleAt">;
@@ -1488,6 +1644,7 @@ function isVerificationStale(
   currentImplementationSetFingerprint?: string,
 ) {
   const subjectChanged =
+    verification.workItemId === work.id &&
     Boolean(verification.subjectFingerprint) &&
     verification.subjectFingerprint !== workFingerprint(work);
   const implementationChanged =
@@ -1542,6 +1699,22 @@ function latestArtifactVerifications(
   return latestByArtifact;
 }
 
+function latestContextualVerifications(verifications: CoverageVerification[]) {
+  const latestByTarget = new Map<string, CoverageVerification>();
+  for (const verification of verifications) {
+    for (const [target, id] of [
+      ["scope", verification.scopeItemRevisionId],
+      ["milestone", verification.milestoneId],
+      ["acceptance", verification.acceptanceTargetId],
+    ] as const) {
+      if (id && !latestByTarget.has(`${target}:${id}`)) {
+        latestByTarget.set(`${target}:${id}`, verification);
+      }
+    }
+  }
+  return latestByTarget;
+}
+
 function verificationResultGaps(verifications: Iterable<CoverageVerification>) {
   const gaps = new Set<string>();
   for (const verification of verifications) {
@@ -1582,6 +1755,7 @@ function verificationCoverageGaps(
     verifications,
     artifactIds,
   );
+  const latestContextual = latestContextualVerifications(verifications);
   const currentImplementationSetFingerprint = implementationSetFingerprint(
     artifactIds.flatMap((id) => {
       const artifact = artifactsById.get(id);
@@ -1593,6 +1767,9 @@ function verificationCoverageGaps(
   for (const verification of latestByArtifact.values()) {
     latestRelevant.set(verification.id, verification);
   }
+  for (const verification of latestContextual.values()) {
+    latestRelevant.set(verification.id, verification);
+  }
   const gaps = verificationResultGaps(latestRelevant.values());
   const directIsCurrent = verificationIsCurrent(
     work,
@@ -1600,7 +1777,8 @@ function verificationCoverageGaps(
     latestDirect?.artifactId
       ? artifactsById.get(latestDirect.artifactId)
       : null,
-    currentImplementationSetFingerprint,
+    latestDirect?.currentImplementationSetFingerprint ??
+      currentImplementationSetFingerprint,
   );
   const artifactsAreCurrent =
     artifactIds.length > 0 &&
@@ -1612,7 +1790,18 @@ function verificationCoverageGaps(
         artifactsById.get(artifactId),
       );
     });
-  if (!directIsCurrent && !artifactsAreCurrent) {
+  const contextualIsCurrent = [...latestContextual.values()].some(
+    (verification) =>
+      verificationIsCurrent(
+        work,
+        verification,
+        verification.artifactId
+          ? artifactsById.get(verification.artifactId)
+          : null,
+        verification.currentImplementationSetFingerprint,
+      ),
+  );
+  if (!directIsCurrent && !artifactsAreCurrent && !contextualIsCurrent) {
     gaps.push("missing_verification");
   }
   const staleRelevant = [...latestRelevant.values()].some((verification) =>
@@ -1622,12 +1811,13 @@ function verificationCoverageGaps(
       verification.artifactId
         ? artifactsById.get(verification.artifactId)
         : null,
-      verification.workItemId === work.id
-        ? currentImplementationSetFingerprint
-        : undefined,
+      verification.currentImplementationSetFingerprint ??
+        (verification.workItemId === work.id
+          ? currentImplementationSetFingerprint
+          : undefined),
     ),
   );
-  if (staleRelevant && !artifactsAreCurrent) {
+  if (staleRelevant && !artifactsAreCurrent && !contextualIsCurrent) {
     gaps.push("stale_verification");
   }
   return gaps;
@@ -1789,6 +1979,7 @@ export async function getEngineeringCoverage(
     defectRows,
     defectWorkRows,
     acceptanceRows,
+    verificationWorkRows,
   ] = await Promise.all([
     db
       .select({
@@ -1832,12 +2023,15 @@ export async function getEngineeringCoverage(
       .select({
         id: verificationRecords.id,
         workItemId: verificationRecords.workItemId,
+        scopeItemRevisionId: verificationRecords.scopeItemRevisionId,
         result: verificationRecords.result,
         subjectFingerprint: verificationRecords.subjectFingerprint,
         implementationSetFingerprint:
           verificationRecords.implementationSetFingerprint,
         artifactHeadSha: verificationRecords.artifactHeadSha,
         artifactId: verificationRecords.artifactId,
+        milestoneId: verificationRecords.milestoneId,
+        acceptanceTargetId: verificationRecords.acceptanceTargetId,
         recordedAt: verificationRecords.recordedAt,
       })
       .from(verificationRecords)
@@ -1939,6 +2133,7 @@ export async function getEngineeringCoverage(
       .leftJoin(milestones, eq(milestones.id, clientProjectItems.milestoneId))
       .where(and(...acceptanceConditions))
       .limit(500),
+    verificationWorkMappings(db, projectId),
   ]);
   const truncated =
     workRows.length > MAX_COVERAGE_WORK ||
@@ -1946,7 +2141,8 @@ export async function getEngineeringCoverage(
     artifactRows.length > MAX_PROJECT_EVIDENCE ||
     verificationRows.length > MAX_PROJECT_EVIDENCE ||
     defectRows.length > MAX_PROJECT_EVIDENCE ||
-    defectWorkRows.rows.length > MAX_PROJECT_EVIDENCE;
+    defectWorkRows.rows.length > MAX_PROJECT_EVIDENCE ||
+    verificationWorkRows.rows.length > MAX_PROJECT_EVIDENCE;
   const boundedWork = workRows.slice(0, MAX_COVERAGE_WORK);
   const artifactsById = new Map(
     artifactRows.slice(0, MAX_PROJECT_EVIDENCE).map((item) => [item.id, item]),
@@ -1972,15 +2168,45 @@ export async function getEngineeringCoverage(
       verificationsByWork.set(workItemId, existing);
     }
   };
+  const workIdsByVerification = new Map<string, string[]>();
+  for (const mapping of verificationWorkRows.rows.slice(
+    0,
+    MAX_PROJECT_EVIDENCE,
+  )) {
+    const workIds = workIdsByVerification.get(mapping.verificationId) ?? [];
+    workIds.push(mapping.workItemId);
+    workIdsByVerification.set(mapping.verificationId, workIds);
+  }
   for (const verification of verificationRows.slice(0, MAX_PROJECT_EVIDENCE)) {
-    if (verification.workItemId) {
-      addVerification(verification.workItemId, verification);
-    }
-    if (verification.artifactId) {
-      for (const workItemId of workIdsByArtifact.get(verification.artifactId) ??
-        []) {
-        addVerification(workItemId, verification);
-      }
+    const mappedWorkIds = workIdsByVerification.get(verification.id) ?? [];
+    const capturesImplementationSet = Boolean(
+      verification.workItemId ||
+      verification.scopeItemRevisionId ||
+      verification.milestoneId ||
+      verification.acceptanceTargetId,
+    );
+    const mappedArtifactIds = [
+      ...new Set(
+        mappedWorkIds.flatMap(
+          (workItemId) => artifactIdsByWork.get(workItemId) ?? [],
+        ),
+      ),
+    ];
+    const currentImplementationSetFingerprint = capturesImplementationSet
+      ? implementationSetFingerprint(
+          mappedArtifactIds.flatMap((artifactId) => {
+            const artifact = artifactsById.get(artifactId);
+            return artifact
+              ? [{ id: artifactId, headSha: artifact.headSha }]
+              : [];
+          }),
+        )
+      : undefined;
+    for (const workItemId of mappedWorkIds) {
+      addVerification(workItemId, {
+        ...verification,
+        currentImplementationSetFingerprint,
+      });
     }
   }
   const workWithDefects = new Set(
@@ -2196,6 +2422,15 @@ export async function getDeliveryEvidenceTrace(
     )
     .limit(1);
   if (!workRows[0]) throw notFound();
+  const traceTargetRows = await verificationWorkMappings(
+    db,
+    projectId,
+    undefined,
+    workItemId,
+  );
+  const traceVerificationIds = [
+    ...new Set(traceTargetRows.rows.map((mapping) => mapping.verificationId)),
+  ];
   const [basis, implementation, verification, defect, acceptance] =
     await Promise.all([
       db
@@ -2251,52 +2486,44 @@ export async function getDeliveryEvidenceTrace(
             isNull(workImplementationLinks.removedAt),
           ),
         ),
-      db
-        .select({
-          id: verificationRecords.id,
-          projectId: verificationRecords.projectId,
-          workItemId: verificationRecords.workItemId,
-          scopeItemRevisionId: verificationRecords.scopeItemRevisionId,
-          artifactId: verificationRecords.artifactId,
-          milestoneId: verificationRecords.milestoneId,
-          acceptanceTargetId: verificationRecords.acceptanceTargetId,
-          method: verificationRecords.method,
-          category: verificationRecords.category,
-          result: verificationRecords.result,
-          referenceUrl: verificationRecords.referenceUrl,
-          notes: verificationRecords.notes,
-          subjectFingerprint: verificationRecords.subjectFingerprint,
-          implementationSetFingerprint:
-            verificationRecords.implementationSetFingerprint,
-          artifactHeadSha: verificationRecords.artifactHeadSha,
-          recordedByUserId: verificationRecords.recordedByUserId,
-          recordedAt: verificationRecords.recordedAt,
-          currentArtifactHeadSha: implementationArtifacts.headSha,
-          currentArtifactStaleAt: implementationArtifacts.staleAt,
-        })
-        .from(verificationRecords)
-        .leftJoin(
-          implementationArtifacts,
-          eq(implementationArtifacts.id, verificationRecords.artifactId),
-        )
-        .where(
-          and(
-            eq(verificationRecords.projectId, projectId),
-            sql`(
-              ${verificationRecords.workItemId} = ${workItemId}
-              or exists (
-                select 1
-                from work_implementation_links verification_link
-                where verification_link.project_id = ${projectId}
-                  and verification_link.work_item_id = ${workItemId}
-                  and verification_link.artifact_id = ${verificationRecords.artifactId}
-                  and verification_link.removed_at is null
-              )
-            )`,
-          ),
-        )
-        .orderBy(desc(verificationRecords.recordedAt))
-        .limit(100),
+      traceVerificationIds.length
+        ? db
+            .select({
+              id: verificationRecords.id,
+              projectId: verificationRecords.projectId,
+              workItemId: verificationRecords.workItemId,
+              scopeItemRevisionId: verificationRecords.scopeItemRevisionId,
+              artifactId: verificationRecords.artifactId,
+              milestoneId: verificationRecords.milestoneId,
+              acceptanceTargetId: verificationRecords.acceptanceTargetId,
+              method: verificationRecords.method,
+              category: verificationRecords.category,
+              result: verificationRecords.result,
+              referenceUrl: verificationRecords.referenceUrl,
+              notes: verificationRecords.notes,
+              subjectFingerprint: verificationRecords.subjectFingerprint,
+              implementationSetFingerprint:
+                verificationRecords.implementationSetFingerprint,
+              artifactHeadSha: verificationRecords.artifactHeadSha,
+              recordedByUserId: verificationRecords.recordedByUserId,
+              recordedAt: verificationRecords.recordedAt,
+              currentArtifactHeadSha: implementationArtifacts.headSha,
+              currentArtifactStaleAt: implementationArtifacts.staleAt,
+            })
+            .from(verificationRecords)
+            .leftJoin(
+              implementationArtifacts,
+              eq(implementationArtifacts.id, verificationRecords.artifactId),
+            )
+            .where(
+              and(
+                eq(verificationRecords.projectId, projectId),
+                inArray(verificationRecords.id, traceVerificationIds),
+              ),
+            )
+            .orderBy(desc(verificationRecords.recordedAt))
+            .limit(100)
+        : Promise.resolve([]),
       db
         .select()
         .from(defects)
@@ -2367,6 +2594,74 @@ export async function getDeliveryEvidenceTrace(
             .limit(100)
         : Promise.resolve([]),
     ]);
+  const traceMappingRows = traceVerificationIds.length
+    ? await verificationWorkMappings(db, projectId, traceVerificationIds)
+    : { rows: [] as Array<{ verificationId: string; workItemId: string }> };
+  const traceWorkIdsByVerification = new Map<string, string[]>();
+  for (const mapping of traceMappingRows.rows) {
+    const workIds =
+      traceWorkIdsByVerification.get(mapping.verificationId) ?? [];
+    workIds.push(mapping.workItemId);
+    traceWorkIdsByVerification.set(mapping.verificationId, workIds);
+  }
+  const traceMappedWorkIds = [
+    ...new Set(
+      [...traceWorkIdsByVerification.values()].flatMap((workIds) => workIds),
+    ),
+  ];
+  const traceImplementation = traceMappedWorkIds.length
+    ? await db
+        .select({
+          workItemId: workImplementationLinks.workItemId,
+          id: implementationArtifacts.id,
+          headSha: implementationArtifacts.headSha,
+        })
+        .from(workImplementationLinks)
+        .innerJoin(
+          implementationArtifacts,
+          eq(implementationArtifacts.id, workImplementationLinks.artifactId),
+        )
+        .where(
+          and(
+            eq(workImplementationLinks.projectId, projectId),
+            inArray(workImplementationLinks.workItemId, traceMappedWorkIds),
+            isNull(workImplementationLinks.removedAt),
+          ),
+        )
+    : [];
+  const traceArtifactsByWork = new Map<
+    string,
+    Array<{ id: string; headSha: string | null }>
+  >();
+  for (const artifact of traceImplementation) {
+    const artifacts = traceArtifactsByWork.get(artifact.workItemId) ?? [];
+    artifacts.push({ id: artifact.id, headSha: artifact.headSha });
+    traceArtifactsByWork.set(artifact.workItemId, artifacts);
+  }
+  const currentFingerprintByVerification = new Map<string, string>();
+  for (const record of verification) {
+    if (
+      !record.workItemId &&
+      !record.scopeItemRevisionId &&
+      !record.milestoneId &&
+      !record.acceptanceTargetId
+    ) {
+      continue;
+    }
+    const targetArtifacts = [
+      ...new Map(
+        (traceWorkIdsByVerification.get(record.id) ?? [])
+          .flatMap(
+            (mappedWorkId) => traceArtifactsByWork.get(mappedWorkId) ?? [],
+          )
+          .map((artifact) => [artifact.id, artifact]),
+      ).values(),
+    ];
+    currentFingerprintByVerification.set(
+      record.id,
+      implementationSetFingerprint(targetArtifacts),
+    );
+  }
   const currentImplementationSetFingerprint = implementationSetFingerprint(
     implementation.map((artifact) => ({
       id: artifact.artifactId,
@@ -2390,9 +2685,10 @@ export async function getDeliveryEvidenceTrace(
             headSha: currentArtifactHeadSha,
             staleAt: currentArtifactStaleAt,
           },
-          record.workItemId === workItemId
-            ? currentImplementationSetFingerprint
-            : undefined,
+          currentFingerprintByVerification.get(record.id) ??
+            (record.workItemId === workItemId
+              ? currentImplementationSetFingerprint
+              : undefined),
         ),
       }),
     ),
@@ -2403,6 +2699,7 @@ export async function getDeliveryEvidenceTrace(
 
 type GitHubWebhookPayload = {
   action?: string;
+  sha?: string;
   installation?: { id?: number };
   repository?: { id?: number };
   repositories_removed?: Array<{ id?: number }>;
@@ -2539,10 +2836,15 @@ async function reconcileWebhookRepositories(
   repositoryIds: string[],
   pullNumbers: number[],
   eventName: string,
+  statusSha?: string,
 ) {
   for (const repositoryId of repositoryIds) {
-    if (pullNumbers.length) {
-      for (const pullNumber of pullNumbers) {
+    const exactPullNumbers =
+      eventName === "status" && !pullNumbers.length
+        ? await statusWebhookPullNumbers(repositoryId, statusSha)
+        : pullNumbers;
+    if (exactPullNumbers.length) {
+      for (const pullNumber of exactPullNumbers) {
         await reconcileRepositoryById(
           repositoryId,
           "integration",
@@ -2550,10 +2852,32 @@ async function reconcileWebhookRepositories(
           pullNumber,
         );
       }
-    } else if (["push", "status"].includes(eventName)) {
+    } else if (eventName === "push") {
       await reconcileRepositoryById(repositoryId, "integration", null);
     }
   }
+}
+
+async function statusWebhookPullNumbers(
+  repositoryId: string,
+  statusSha?: string,
+) {
+  if (!statusSha) throw new Error("github_webhook_missing_status_sha");
+  const artifacts = await getDb()
+    .select({ number: implementationArtifacts.number })
+    .from(implementationArtifacts)
+    .where(
+      and(
+        eq(implementationArtifacts.repositoryId, repositoryId),
+        eq(implementationArtifacts.headSha, statusSha),
+      ),
+    )
+    .orderBy(desc(implementationArtifacts.providerUpdatedAt))
+    .limit(11);
+  if (artifacts.length > 10) {
+    throw new Error("github_webhook_status_mapping_truncated");
+  }
+  return [...new Set(artifacts.map((artifact) => artifact.number))];
 }
 
 export async function processGitHubWebhookDelivery(
@@ -2624,6 +2948,7 @@ export async function processGitHubWebhookDelivery(
       repositoryIds,
       webhookPullNumbers(payload),
       eventName,
+      payload.sha,
     );
     await db
       .update(providerWebhookDeliveries)

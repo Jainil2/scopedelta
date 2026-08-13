@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getGitHubReviewRollup,
   getGitHubUserInstallationRepository,
   githubCheckRollup,
   verifyGitHubWebhookSignature,
@@ -138,5 +139,85 @@ describe("GitHub provider webhook boundary", () => {
         { state: "success", total_count: 1 },
       ),
     ).toBe("unknown");
+  });
+
+  it("aggregates reviews beyond the first 100 entries", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      user: { id: index + 1, login: `reviewer-${index + 1}` },
+      state: "APPROVED",
+      submitted_at: "2026-08-13T08:00:00.000Z",
+    }));
+    const request = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      const page = new URL(url).searchParams.get("page");
+      if (page === "1") return Response.json(firstPage);
+      if (page === "2") {
+        return Response.json([
+          {
+            user: { id: 1, login: "reviewer-1" },
+            state: "CHANGES_REQUESTED",
+            submitted_at: "2026-08-13T09:00:00.000Z",
+          },
+        ]);
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", request);
+
+    await expect(
+      getGitHubReviewRollup(
+        {
+          id: 99,
+          name: "delivery",
+          full_name: "customer/delivery",
+          html_url: "https://github.com/customer/delivery",
+          private: true,
+          default_branch: "main",
+          owner: { login: "customer" },
+        },
+        41,
+        0,
+        "installation-token",
+      ),
+    ).resolves.toEqual({
+      rollup: "changes_requested",
+      approvalsCount: 99,
+      changesRequestedCount: 1,
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails review rollup closed when the bounded pagination limit is full", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          Response.json(
+            Array.from({ length: 100 }, (_, index) => ({
+              user: { id: index + 1, login: `reviewer-${index + 1}` },
+              state: "APPROVED",
+              submitted_at: "2026-08-13T08:00:00.000Z",
+            })),
+          ),
+        ),
+      ),
+    );
+
+    await expect(
+      getGitHubReviewRollup(
+        {
+          id: 99,
+          name: "delivery",
+          full_name: "customer/delivery",
+          html_url: "https://github.com/customer/delivery",
+          private: true,
+          default_branch: "main",
+          owner: { login: "customer" },
+        },
+        41,
+        0,
+        "installation-token",
+      ),
+    ).resolves.toMatchObject({ rollup: "unknown" });
   });
 });

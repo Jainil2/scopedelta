@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getDb, getPool } from "@/db";
 import {
@@ -186,12 +186,38 @@ describe("engineering and QA delivery evidence boundary", () => {
     });
 
     const secondWork = await createWork(fixture, "Manually linked delivery");
-    await linkImplementationEvidence(
+    const manualLink = await linkImplementationEvidence(
       fixture.owner,
       fixture.workspace.id,
       fixture.project.id,
       { workItemId: secondWork.id, artifactId: artifactRows[0]!.id },
     );
+    const repeatedManualLink = await linkImplementationEvidence(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { workItemId: secondWork.id, artifactId: artifactRows[0]!.id },
+    );
+    expect(repeatedManualLink.id).toBe(manualLink.id);
+    await expect(
+      db
+        .select({ id: workImplementationLinks.id })
+        .from(workImplementationLinks)
+        .where(eq(workImplementationLinks.id, repeatedManualLink.id)),
+    ).resolves.toEqual([{ id: manualLink.id }]);
+    await unlinkImplementationEvidence(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      repeatedManualLink.id,
+    );
+    const restoredManualLink = await linkImplementationEvidence(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { workItemId: secondWork.id, artifactId: artifactRows[0]!.id },
+    );
+    expect(restoredManualLink.id).toBe(manualLink.id);
     await expect(
       db
         .select()
@@ -427,6 +453,153 @@ describe("engineering and QA delivery evidence boundary", () => {
     ).rejects.toMatchObject({
       cause: { message: expect.stringMatching(/immutable/) },
     });
+  });
+
+  it("associates scope, milestone, and acceptance verification with affected work", async () => {
+    const fixture = await createFixture("TARGETQA");
+    const scopeWork = await createWork(fixture, "Scope-targeted QA");
+    const milestoneWork = await createWork(fixture, "Milestone-targeted QA");
+    const acceptanceWork = await createWork(fixture, "Acceptance-targeted QA");
+    const scopeItem = await createDraftScopeItem(
+      fixture,
+      "Verified scope deliverable",
+    );
+    await activateCommercialBaselineVersion(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      scopeItem.baselineVersionId,
+      {},
+    );
+    await createCommercialBasisLink(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      scopeWork.id,
+      { scopeItemRevisionId: scopeItem.revisionId },
+    );
+    const milestoneId = randomUUID();
+    const acceptanceMilestoneId = randomUUID();
+    await db.insert(milestones).values([
+      {
+        id: milestoneId,
+        projectId: fixture.project.id,
+        name: "QA milestone",
+      },
+      {
+        id: acceptanceMilestoneId,
+        projectId: fixture.project.id,
+        name: "Acceptance QA milestone",
+      },
+    ]);
+    await Promise.all([
+      updateWorkItem(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        milestoneWork.id,
+        { milestoneId },
+      ),
+      updateWorkItem(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        acceptanceWork.id,
+        { milestoneId: acceptanceMilestoneId },
+      ),
+    ]);
+    const acceptanceItemId = randomUUID();
+    const acceptanceTargetId = randomUUID();
+    await db.insert(clientProjectItems).values({
+      id: acceptanceItemId,
+      projectId: fixture.project.id,
+      idempotencyKey: randomUUID(),
+      target: "milestone",
+      milestoneId: acceptanceMilestoneId,
+      clientSummary: "Acceptance QA milestone",
+      createdByUserId: fixture.owner.userId,
+    });
+    await db.insert(clientAcceptanceTargets).values({
+      id: acceptanceTargetId,
+      projectId: fixture.project.id,
+      projectItemId: acceptanceItemId,
+      idempotencyKey: randomUUID(),
+      versionNumber: 1,
+      snapshotTitle: "Acceptance QA milestone",
+      snapshotSummary: "QA evidence target",
+      snapshotStatus: "in_progress",
+      publishedByUserId: fixture.owner.userId,
+    });
+    const targets = [
+      {
+        work: scopeWork,
+        input: {
+          workItemId: null,
+          scopeItemRevisionId: scopeItem.revisionId,
+          artifactId: null,
+          milestoneId: null,
+          acceptanceTargetId: null,
+        },
+      },
+      {
+        work: milestoneWork,
+        input: {
+          workItemId: null,
+          scopeItemRevisionId: null,
+          artifactId: null,
+          milestoneId,
+          acceptanceTargetId: null,
+        },
+      },
+      {
+        work: acceptanceWork,
+        input: {
+          workItemId: null,
+          scopeItemRevisionId: null,
+          artifactId: null,
+          milestoneId: null,
+          acceptanceTargetId,
+        },
+      },
+    ];
+    const verificationIds: string[] = [];
+    for (const target of targets) {
+      const record = await createVerificationRecord(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        {
+          ...target.input,
+          method: "manual",
+          category: "Targeted delivery verification",
+          result: "passed",
+          referenceUrl: null,
+          notes: null,
+        },
+      );
+      verificationIds.push(record.id);
+    }
+
+    const coverage = await getEngineeringCoverage(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { page: 1, pageSize: 50 },
+    );
+    for (const [index, target] of targets.entries()) {
+      expect(
+        coverage.items.find((item) => item.workItemId === target.work.id)?.gaps,
+      ).not.toContain("missing_verification");
+      const trace = await getDeliveryEvidenceTrace(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        target.work.id,
+      );
+      expect(trace.verification).toContainEqual(
+        expect.objectContaining({ id: verificationIds[index], stale: false }),
+      );
+    }
   });
 
   it("keeps done work in evidence readiness without calling it incomplete", async () => {
@@ -1367,6 +1540,143 @@ describe("engineering and QA delivery evidence boundary", () => {
     ).resolves.toHaveLength(0);
   });
 
+  it("reconciles a status webhook against an older cached PR by head SHA", async () => {
+    const fixture = await createFixture("STATUS", "old-status");
+    const repositoryId = await seedRepository(fixture);
+    await upsertProviderEvidence(
+      repositoryId,
+      Array.from({ length: 31 }, (_, index) =>
+        evidence({
+          providerArtifactId: String(index + 1),
+          number: index + 1,
+          title: `Status evidence ${index + 1}`,
+          headSha: index === 0 ? "old-head-sha" : `newer-head-${index + 1}`,
+          checkRollup: "passing",
+          providerUpdatedAt: new Date(Date.UTC(2026, 7, 13, 0, index)),
+        }),
+      ),
+      "integration",
+      null,
+    );
+    const repositoryRows = await db
+      .select()
+      .from(engineeringRepositories)
+      .where(eq(engineeringRepositories.id, repositoryId));
+    const installationRows = await db
+      .select()
+      .from(engineeringProviderInstallations)
+      .where(
+        eq(
+          engineeringProviderInstallations.id,
+          repositoryRows[0]!.installationId,
+        ),
+      );
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const envKeys = [
+      "GITHUB_APP_ID",
+      "GITHUB_APP_SLUG",
+      "GITHUB_APP_CLIENT_ID",
+      "GITHUB_APP_CLIENT_SECRET",
+      "GITHUB_APP_PRIVATE_KEY",
+      "GITHUB_APP_WEBHOOK_SECRET",
+    ] as const;
+    const previousEnv = Object.fromEntries(
+      envKeys.map((key) => [key, process.env[key]]),
+    );
+    Object.assign(process.env, {
+      GITHUB_APP_ID: "12345",
+      GITHUB_APP_SLUG: "scopedelta-test",
+      GITHUB_APP_CLIENT_ID: "Iv1.test-client",
+      GITHUB_APP_CLIENT_SECRET: "test-client-secret",
+      GITHUB_APP_PRIVATE_KEY: privateKey.export({
+        type: "pkcs8",
+        format: "pem",
+      }),
+      GITHUB_APP_WEBHOOK_SECRET: "a-test-webhook-secret-long-enough",
+    });
+    const request = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/access_tokens")) {
+        return Response.json({ token: "installation-token" });
+      }
+      if (url.includes("/pulls/1/reviews")) return Response.json([]);
+      if (url.endsWith("/pulls/1")) {
+        return Response.json({
+          id: 1,
+          number: 1,
+          html_url: "https://github.com/scope-delta-test/delivery/pull/1",
+          title: "Status evidence 1",
+          state: "open",
+          draft: false,
+          merged_at: null,
+          merge_commit_sha: null,
+          updated_at: "2026-08-13T23:30:00.000Z",
+          user: { id: 1, login: "engineer" },
+          requested_reviewers: [],
+          requested_teams: [],
+          head: { ref: "old-pr", sha: "old-head-sha" },
+          base: { ref: "main" },
+        });
+      }
+      if (url.includes("/commits/old-head-sha/check-runs")) {
+        return Response.json({
+          total_count: 1,
+          check_runs: [{ status: "completed", conclusion: "failure" }],
+        });
+      }
+      if (url.endsWith("/commits/old-head-sha/status")) {
+        return Response.json({ state: "failure", total_count: 1 });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", request);
+
+    try {
+      await expect(
+        processGitHubWebhookDelivery(
+          "old-status-delivery",
+          "status",
+          JSON.stringify({
+            sha: "old-head-sha",
+            repository: {
+              id: Number(repositoryRows[0]!.providerRepositoryId),
+            },
+            installation: {
+              id: Number(installationRows[0]!.providerInstallationId),
+            },
+          }),
+        ),
+      ).resolves.toEqual({ duplicate: false, processed: 1 });
+      const oldArtifactRows = await db
+        .select({
+          checkRollup: implementationArtifacts.checkRollup,
+          staleAt: implementationArtifacts.staleAt,
+        })
+        .from(implementationArtifacts)
+        .where(eq(implementationArtifacts.providerArtifactId, "1"));
+      expect(oldArtifactRows).toEqual([
+        { checkRollup: "failing", staleAt: null },
+      ]);
+      expect(
+        request.mock.calls.some(([input]) =>
+          String(input).includes("/pulls?state=all"),
+        ),
+      ).toBe(false);
+      expect(
+        request.mock.calls.some(([input]) =>
+          String(input).endsWith("/pulls/1"),
+        ),
+      ).toBe(true);
+    } finally {
+      for (const key of envKeys) {
+        const value = previousEnv[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("revokes cached evidence when GitHub removes repository or installation grants", async () => {
     const repositoryFixture = await createFixture("REVOKE", "repository-grant");
     const repositoryId = await seedRepository(repositoryFixture);
@@ -1573,7 +1883,7 @@ async function createDraftScopeItem(fixture: Fixture, title: string) {
     fixture.project.id,
     { sourceId: source.id },
   );
-  return createCommercialScopeItem(
+  const item = await createCommercialScopeItem(
     fixture.owner,
     fixture.workspace.id,
     fixture.project.id,
@@ -1594,6 +1904,7 @@ async function createDraftScopeItem(fixture: Fixture, title: string) {
       ],
     },
   );
+  return { ...item, baselineVersionId: baseline.versionId };
 }
 
 async function seedRepository(fixture: Fixture) {

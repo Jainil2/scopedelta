@@ -163,6 +163,38 @@ function workFingerprint(work: {
     .digest("hex");
 }
 
+function workSetFingerprint(
+  work: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    acceptanceCriteria: string | null;
+  }>,
+) {
+  const fingerprint = createHash("sha256")
+    .update(
+      JSON.stringify(
+        work
+          .map((item) => [item.id, workFingerprint(item)] as const)
+          .sort(([left], [right]) => left.localeCompare(right)),
+      ),
+    )
+    .digest("hex");
+  return `work-set-v1:${fingerprint}`;
+}
+
+function hasContextualWorkTarget(target: {
+  scopeItemRevisionId?: string | null;
+  milestoneId?: string | null;
+  acceptanceTargetId?: string | null;
+}) {
+  return Boolean(
+    target.scopeItemRevisionId ||
+    target.milestoneId ||
+    target.acceptanceTargetId,
+  );
+}
+
 function implementationSetFingerprint(
   artifacts: Array<{ id: string; headSha: string | null }>,
 ) {
@@ -1031,7 +1063,10 @@ function verificationWorkAssociationQuery(
   return sql`
     with verification_target as (${targets})
     select distinct target.verification_id as "verificationId",
-      association.work_item_id as "workItemId"
+      mapped_work.id as "workItemId",
+      mapped_work.title,
+      mapped_work.description,
+      mapped_work.acceptance_criteria as "acceptanceCriteria"
     from verification_target target
     cross join lateral (
       select target.work_item_id
@@ -1099,10 +1134,21 @@ function verificationWorkAssociationQuery(
       where acceptance_target.id = target.acceptance_target_id
         and acceptance_target.project_id = ${projectId}
     ) association
-    ${workItemId ? sql`where association.work_item_id = ${workItemId}` : sql``}
+    inner join work_items mapped_work
+      on mapped_work.id = association.work_item_id
+      and mapped_work.project_id = ${projectId}
+    ${workItemId ? sql`where mapped_work.id = ${workItemId}` : sql``}
     limit ${MAX_PROJECT_EVIDENCE + 1}
   `;
 }
+
+type VerificationWorkMapping = {
+  verificationId: string;
+  workItemId: string;
+  title: string;
+  description: string | null;
+  acceptanceCriteria: string | null;
+};
 
 async function verificationWorkMappings(
   database: Executor,
@@ -1116,7 +1162,7 @@ async function verificationWorkMappings(
         sql`, `,
       )})`
     : sql``;
-  return database.execute<{ verificationId: string; workItemId: string }>(
+  return database.execute<VerificationWorkMapping>(
     verificationWorkAssociationQuery(
       projectId,
       sql`
@@ -1135,15 +1181,12 @@ async function verificationWorkMappings(
   );
 }
 
-async function verificationTargetWorkIds(
+async function verificationTargetWorkMappings(
   database: Executor,
   projectId: string,
   input: CreateVerificationInput,
 ) {
-  const result = await database.execute<{
-    verificationId: string | null;
-    workItemId: string;
-  }>(
+  return database.execute<VerificationWorkMapping>(
     verificationWorkAssociationQuery(
       projectId,
       sql`
@@ -1156,7 +1199,109 @@ async function verificationTargetWorkIds(
       `,
     ),
   );
-  return [...new Set(result.rows.map((row) => row.workItemId))];
+}
+
+function defectTargetsQuery(projectId: string, openOnly: boolean) {
+  return sql`
+    select defect.id as defect_id,
+      defect.work_item_id,
+      defect.scope_item_revision_id,
+      defect.commercial_request_id,
+      defect.commercial_decision_id,
+      defect.artifact_id,
+      defect.verification_id,
+      defect.milestone_id,
+      defect.acceptance_target_id
+    from defects defect
+    where defect.project_id = ${projectId}
+      ${openOnly ? sql`and defect.status = 'open'` : sql``}
+  `;
+}
+
+function defectWorkAssociationQuery(projectId: string, targets: SQL) {
+  return sql`
+    with defect_target as (${targets})
+    select direct_mapping."verificationId" as "defectId",
+      direct_mapping."workItemId"
+    from (${verificationWorkAssociationQuery(
+      projectId,
+      sql`
+        select target.defect_id as verification_id,
+          target.work_item_id,
+          target.scope_item_revision_id,
+          target.artifact_id,
+          target.milestone_id,
+          target.acceptance_target_id
+        from defect_target target
+      `,
+    )}) direct_mapping
+    union
+    select target.defect_id as "defectId",
+      verification_mapping."workItemId"
+    from defect_target target
+    inner join (${verificationWorkAssociationQuery(
+      projectId,
+      sql`
+        select verification.id as verification_id,
+          verification.work_item_id,
+          verification.scope_item_revision_id,
+          verification.artifact_id,
+          verification.milestone_id,
+          verification.acceptance_target_id
+        from verification_records verification
+        where verification.project_id = ${projectId}
+      `,
+    )}) verification_mapping
+      on verification_mapping."verificationId" = target.verification_id
+    union
+    select target.defect_id as "defectId", basis.work_item_id as "workItemId"
+    from defect_target target
+    inner join commercial_basis_links basis
+      on basis.decision_id = target.commercial_decision_id
+      and basis.project_id = ${projectId}
+    union
+    select target.defect_id as "defectId", basis.work_item_id as "workItemId"
+    from defect_target target
+    inner join commercial_decisions decision
+      on decision.request_id = target.commercial_request_id
+      and decision.project_id = ${projectId}
+    inner join commercial_basis_links basis
+      on basis.decision_id = decision.id
+      and basis.project_id = decision.project_id
+  `;
+}
+
+async function defectWorkMappings(
+  database: Executor,
+  projectId: string,
+  options: {
+    openOnly: boolean;
+    workItemId?: string;
+    milestoneId?: string;
+  },
+) {
+  return database.execute<{ defectId: string; workItemId: string }>(sql`
+    select distinct mapping."defectId", mapping."workItemId"
+    from (${defectWorkAssociationQuery(
+      projectId,
+      defectTargetsQuery(projectId, options.openOnly),
+    )}) mapping
+    inner join work_items mapped_work
+      on mapped_work.id = mapping."workItemId"
+      and mapped_work.project_id = ${projectId}
+    where true
+      ${
+        options.workItemId
+          ? sql`and mapped_work.id = ${options.workItemId}`
+          : sql``
+      }
+      ${
+        options.milestoneId
+          ? sql`and mapped_work.milestone_id = ${options.milestoneId}`
+          : sql``
+      }
+    limit ${MAX_PROJECT_EVIDENCE + 1}
+  `);
 }
 
 export async function createVerificationRecord(
@@ -1175,18 +1320,7 @@ export async function createVerificationRecord(
       input.milestoneId ||
       input.acceptanceTargetId,
     );
-    const [workRows, artifactRows, mappedWorkIds] = await Promise.all([
-      input.workItemId
-        ? transaction
-            .select({
-              title: workItems.title,
-              description: workItems.description,
-              acceptanceCriteria: workItems.acceptanceCriteria,
-            })
-            .from(workItems)
-            .where(eq(workItems.id, input.workItemId))
-            .limit(1)
-        : Promise.resolve([]),
+    const [artifactRows, mappedWorkResult] = await Promise.all([
       input.artifactId
         ? transaction
             .select({ headSha: implementationArtifacts.headSha })
@@ -1195,9 +1329,18 @@ export async function createVerificationRecord(
             .limit(1)
         : Promise.resolve([]),
       capturesImplementationSet
-        ? verificationTargetWorkIds(transaction, projectId, input)
-        : Promise.resolve([]),
+        ? verificationTargetWorkMappings(transaction, projectId, input)
+        : Promise.resolve({ rows: [] as VerificationWorkMapping[] }),
     ]);
+    const mappedWorkRows = [
+      ...new Map(
+        mappedWorkResult.rows.map((work) => [work.workItemId, work]),
+      ).values(),
+    ];
+    const mappedWorkIds = mappedWorkRows.map((work) => work.workItemId);
+    const directlyTargetedWork = input.workItemId
+      ? mappedWorkRows.find((work) => work.workItemId === input.workItemId)
+      : undefined;
     const linkedImplementationRows = mappedWorkIds.length
       ? await transaction
           .select({
@@ -1221,7 +1364,13 @@ export async function createVerificationRecord(
       id,
       projectId,
       ...input,
-      subjectFingerprint: workRows[0] ? workFingerprint(workRows[0]) : null,
+      subjectFingerprint: hasContextualWorkTarget(input)
+        ? workSetFingerprint(
+            mappedWorkRows.map((work) => ({ id: work.workItemId, ...work })),
+          )
+        : directlyTargetedWork
+          ? workFingerprint(directlyTargetedWork)
+          : null,
       implementationSetFingerprint: capturesImplementationSet
         ? implementationSetFingerprint(linkedImplementationRows)
         : null,
@@ -1342,6 +1491,7 @@ export async function listEngineeringWorkspace(
     scopeRows,
     requestRows,
     acceptanceRows,
+    verificationWorkRows,
   ] = await Promise.all([
     db
       .select({
@@ -1527,6 +1677,7 @@ export async function listEngineeringWorkspace(
       .where(eq(clientAcceptanceTargets.projectId, projectId))
       .orderBy(desc(clientAcceptanceTargets.publishedAt))
       .limit(100),
+    verificationWorkMappings(db, projectId),
   ]);
   const artifactsById = new Map(
     artifactRows.map((artifact) => [artifact.id, artifact]),
@@ -1537,6 +1688,16 @@ export async function listEngineeringWorkspace(
     artifactIds.push(link.artifactId);
     artifactIdsByWork.set(link.workItemId, artifactIds);
   }
+  const workMappingsByVerification = new Map<
+    string,
+    VerificationWorkMapping[]
+  >();
+  for (const mapping of verificationWorkRows.rows) {
+    const mappings =
+      workMappingsByVerification.get(mapping.verificationId) ?? [];
+    mappings.push(mapping);
+    workMappingsByVerification.set(mapping.verificationId, mappings);
+  }
   const verifications = verificationRows.map((record) => {
     const currentFingerprint = record.currentWorkTitle
       ? workFingerprint({
@@ -1545,15 +1706,28 @@ export async function listEngineeringWorkspace(
           acceptanceCriteria: record.currentAcceptanceCriteria,
         })
       : null;
-    const linkedArtifactIds = record.workItemId
-      ? (artifactIdsByWork.get(record.workItemId) ?? [])
-      : [];
+    const mappedWork = workMappingsByVerification.get(record.id) ?? [];
+    const currentContextualFingerprint = hasContextualWorkTarget(record)
+      ? workSetFingerprint(
+          mappedWork.map((work) => ({ id: work.workItemId, ...work })),
+        )
+      : undefined;
+    const linkedArtifactIds = [
+      ...new Set(
+        mappedWork.flatMap(
+          (work) => artifactIdsByWork.get(work.workItemId) ?? [],
+        ),
+      ),
+    ];
     const linkedArtifacts = linkedArtifactIds.flatMap((artifactId) => {
       const artifact = artifactsById.get(artifactId);
       return artifact ? [{ id: artifact.id, headSha: artifact.headSha }] : [];
     });
+    const capturesImplementationSet = Boolean(
+      record.workItemId || hasContextualWorkTarget(record),
+    );
     const implementationSetChanged = Boolean(
-      record.workItemId &&
+      capturesImplementationSet &&
       (linkedArtifacts.length !== linkedArtifactIds.length ||
         (record.implementationSetFingerprint === null
           ? linkedArtifacts.length > 0
@@ -1563,10 +1737,12 @@ export async function listEngineeringWorkspace(
     return {
       ...record,
       stale:
-        Boolean(
-          record.subjectFingerprint &&
-          currentFingerprint !== record.subjectFingerprint,
-        ) ||
+        (currentContextualFingerprint !== undefined
+          ? record.subjectFingerprint !== currentContextualFingerprint
+          : Boolean(
+              record.subjectFingerprint &&
+              currentFingerprint !== record.subjectFingerprint,
+            )) ||
         Boolean(
           record.artifactHeadSha &&
           record.currentArtifactHeadSha !== record.artifactHeadSha,
@@ -1632,6 +1808,7 @@ type CoverageVerification = {
   milestoneId: string | null;
   acceptanceTargetId: string | null;
   recordedAt: Date;
+  currentSubjectFingerprint?: string;
   currentImplementationSetFingerprint?: string;
 };
 
@@ -1644,9 +1821,13 @@ function isVerificationStale(
   currentImplementationSetFingerprint?: string,
 ) {
   const subjectChanged =
-    verification.workItemId === work.id &&
-    Boolean(verification.subjectFingerprint) &&
-    verification.subjectFingerprint !== workFingerprint(work);
+    hasContextualWorkTarget(verification) &&
+    verification.currentSubjectFingerprint !== undefined
+      ? verification.subjectFingerprint !==
+        verification.currentSubjectFingerprint
+      : verification.workItemId === work.id &&
+        Boolean(verification.subjectFingerprint) &&
+        verification.subjectFingerprint !== workFingerprint(work);
   const implementationChanged =
     Boolean(verification.artifactHeadSha && artifact) &&
     verification.artifactHeadSha !== artifact?.headSha;
@@ -1887,44 +2068,6 @@ function coverageDefectConditions(projectId: string, milestoneId?: string) {
   conditions.push(sql`(
     ${defects.milestoneId} = ${milestoneId}
     or exists (
-      select 1 from work_items defect_work
-      where defect_work.id = ${defects.workItemId}
-        and defect_work.project_id = ${projectId}
-        and defect_work.milestone_id = ${milestoneId}
-    )
-    or exists (
-      select 1
-      from work_implementation_links defect_artifact_link
-      inner join work_items defect_artifact_work
-        on defect_artifact_work.id = defect_artifact_link.work_item_id
-        and defect_artifact_work.project_id = defect_artifact_link.project_id
-      where defect_artifact_link.artifact_id = ${defects.artifactId}
-        and defect_artifact_link.project_id = ${projectId}
-        and defect_artifact_link.removed_at is null
-        and defect_artifact_work.milestone_id = ${milestoneId}
-    )
-    or exists (
-      select 1
-      from (${verificationWorkAssociationQuery(
-        projectId,
-        sql`
-          select verification.id as verification_id,
-            verification.work_item_id,
-            verification.scope_item_revision_id,
-            verification.artifact_id,
-            verification.milestone_id,
-            verification.acceptance_target_id
-          from verification_records verification
-          where verification.project_id = ${projectId}
-        `,
-      )}) defect_verification_mapping
-      inner join work_items defect_verification_work
-        on defect_verification_work.id = defect_verification_mapping."workItemId"
-        and defect_verification_work.project_id = ${projectId}
-      where defect_verification_mapping."verificationId" = ${defects.verificationId}
-        and defect_verification_work.milestone_id = ${milestoneId}
-    )
-    or exists (
       select 1
       from client_acceptance_targets defect_acceptance
       inner join client_project_items defect_acceptance_item
@@ -1933,6 +2076,18 @@ function coverageDefectConditions(projectId: string, milestoneId?: string) {
       where defect_acceptance.id = ${defects.acceptanceTargetId}
         and defect_acceptance.project_id = ${projectId}
         and defect_acceptance_item.milestone_id = ${milestoneId}
+    )
+    or exists (
+      select 1
+      from (${defectWorkAssociationQuery(
+        projectId,
+        defectTargetsQuery(projectId, true),
+      )}) defect_mapping
+      inner join work_items defect_work
+        on defect_work.id = defect_mapping."workItemId"
+        and defect_work.project_id = ${projectId}
+      where defect_mapping."defectId" = ${defects.id}
+        and defect_work.milestone_id = ${milestoneId}
     )
   )`);
   return conditions;
@@ -2054,57 +2209,10 @@ export async function getEngineeringCoverage(
       .where(and(...defectConditions))
       .orderBy(desc(defects.detectedAt), desc(defects.id))
       .limit(MAX_PROJECT_EVIDENCE + 1),
-    db.execute<{ defectId: string; workItemId: string }>(sql`
-      select distinct affected.defect_id as "defectId",
-        affected.work_item_id as "workItemId"
-      from (
-        select defect.id as defect_id, defect.work_item_id
-        from defects defect
-        where defect.project_id = ${projectId}
-          and defect.status = 'open'
-          and defect.work_item_id is not null
-        union
-        select defect.id as defect_id, artifact_link.work_item_id
-        from defects defect
-        inner join work_implementation_links artifact_link
-          on artifact_link.artifact_id = defect.artifact_id
-          and artifact_link.project_id = defect.project_id
-          and artifact_link.removed_at is null
-        where defect.project_id = ${projectId}
-          and defect.status = 'open'
-        union
-        select defect.id as defect_id, verification.work_item_id
-        from defects defect
-        inner join verification_records verification
-          on verification.id = defect.verification_id
-          and verification.project_id = defect.project_id
-        where defect.project_id = ${projectId}
-          and defect.status = 'open'
-        union
-        select defect.id as defect_id, verification_link.work_item_id
-        from defects defect
-        inner join verification_records verification
-          on verification.id = defect.verification_id
-          and verification.project_id = defect.project_id
-        inner join work_implementation_links verification_link
-          on verification_link.artifact_id = verification.artifact_id
-          and verification_link.project_id = verification.project_id
-          and verification_link.removed_at is null
-        where defect.project_id = ${projectId}
-          and defect.status = 'open'
-      ) affected
-      ${
-        filters.milestoneId
-          ? sql`where exists (
-            select 1 from work_items scoped_defect_work
-            where scoped_defect_work.id = affected.work_item_id
-              and scoped_defect_work.project_id = ${projectId}
-              and scoped_defect_work.milestone_id = ${filters.milestoneId}
-          )`
-          : sql``
-      }
-      limit ${MAX_PROJECT_EVIDENCE + 1}
-    `),
+    defectWorkMappings(db, projectId, {
+      openOnly: true,
+      milestoneId: filters.milestoneId,
+    }),
     db
       .select({
         projectItemId: clientProjectItems.id,
@@ -2171,6 +2279,10 @@ export async function getEngineeringCoverage(
     }
   };
   const workIdsByVerification = new Map<string, string[]>();
+  const workDefinitionsByVerification = new Map<
+    string,
+    VerificationWorkMapping[]
+  >();
   for (const mapping of verificationWorkRows.rows.slice(
     0,
     MAX_PROJECT_EVIDENCE,
@@ -2178,20 +2290,21 @@ export async function getEngineeringCoverage(
     const workIds = workIdsByVerification.get(mapping.verificationId) ?? [];
     workIds.push(mapping.workItemId);
     workIdsByVerification.set(mapping.verificationId, workIds);
+    const workDefinitions =
+      workDefinitionsByVerification.get(mapping.verificationId) ?? [];
+    workDefinitions.push(mapping);
+    workDefinitionsByVerification.set(mapping.verificationId, workDefinitions);
   }
-  const contextualDefectWorkRows = defectRows.flatMap((defect) =>
-    defect.verificationId
-      ? (workIdsByVerification.get(defect.verificationId) ?? []).map(
-          (workItemId) => ({ defectId: defect.id, workItemId }),
-        )
-      : [],
-  );
-  const allDefectWorkRows = [
-    ...defectWorkRows.rows.slice(0, MAX_PROJECT_EVIDENCE),
-    ...contextualDefectWorkRows,
-  ];
+  const allDefectWorkRows = defectWorkRows.rows.slice(0, MAX_PROJECT_EVIDENCE);
   for (const verification of verificationRows.slice(0, MAX_PROJECT_EVIDENCE)) {
     const mappedWorkIds = workIdsByVerification.get(verification.id) ?? [];
+    const currentSubjectFingerprint = hasContextualWorkTarget(verification)
+      ? workSetFingerprint(
+          (workDefinitionsByVerification.get(verification.id) ?? []).map(
+            (work) => ({ id: work.workItemId, ...work }),
+          ),
+        )
+      : undefined;
     const capturesImplementationSet = Boolean(
       verification.workItemId ||
       verification.scopeItemRevisionId ||
@@ -2218,6 +2331,7 @@ export async function getEngineeringCoverage(
     for (const workItemId of mappedWorkIds) {
       addVerification(workItemId, {
         ...verification,
+        currentSubjectFingerprint,
         currentImplementationSetFingerprint,
       });
     }
@@ -2442,9 +2556,13 @@ export async function getDeliveryEvidenceTrace(
   const traceVerificationIds = [
     ...new Set(traceTargetRows.rows.map((mapping) => mapping.verificationId)),
   ];
-  const traceVerificationDefectCondition = traceVerificationIds.length
-    ? inArray(defects.verificationId, traceVerificationIds)
-    : sql`false`;
+  const traceDefectMappings = await defectWorkMappings(db, projectId, {
+    openOnly: false,
+    workItemId,
+  });
+  const traceDefectIds = [
+    ...new Set(traceDefectMappings.rows.map((mapping) => mapping.defectId)),
+  ];
   const [basis, implementation, verification, defect, acceptance] =
     await Promise.all([
       db
@@ -2538,45 +2656,19 @@ export async function getDeliveryEvidenceTrace(
             .orderBy(desc(verificationRecords.recordedAt))
             .limit(100)
         : Promise.resolve([]),
-      db
-        .select()
-        .from(defects)
-        .where(
-          and(
-            eq(defects.projectId, projectId),
-            sql`(
-              ${defects.workItemId} = ${workItemId}
-              or exists (
-                select 1
-                from work_implementation_links artifact_link
-                where artifact_link.project_id = ${projectId}
-                  and artifact_link.work_item_id = ${workItemId}
-                  and artifact_link.artifact_id = ${defects.artifactId}
-                  and artifact_link.removed_at is null
-              )
-              or exists (
-                select 1
-                from verification_records defect_verification
-                where defect_verification.project_id = ${projectId}
-                  and defect_verification.id = ${defects.verificationId}
-                  and (
-                    defect_verification.work_item_id = ${workItemId}
-                    or exists (
-                      select 1
-                      from work_implementation_links verification_link
-                      where verification_link.project_id = ${projectId}
-                        and verification_link.work_item_id = ${workItemId}
-                        and verification_link.artifact_id = defect_verification.artifact_id
-                        and verification_link.removed_at is null
-                    )
-                  )
-              )
-              or ${traceVerificationDefectCondition}
-            )`,
-          ),
-        )
-        .orderBy(desc(defects.detectedAt))
-        .limit(100),
+      traceDefectIds.length
+        ? db
+            .select()
+            .from(defects)
+            .where(
+              and(
+                eq(defects.projectId, projectId),
+                inArray(defects.id, traceDefectIds),
+              ),
+            )
+            .orderBy(desc(defects.detectedAt))
+            .limit(100)
+        : Promise.resolve([]),
       workRows[0].milestoneId
         ? db
             .select({
@@ -2611,13 +2703,24 @@ export async function getDeliveryEvidenceTrace(
     ]);
   const traceMappingRows = traceVerificationIds.length
     ? await verificationWorkMappings(db, projectId, traceVerificationIds)
-    : { rows: [] as Array<{ verificationId: string; workItemId: string }> };
+    : { rows: [] as VerificationWorkMapping[] };
   const traceWorkIdsByVerification = new Map<string, string[]>();
+  const traceWorkDefinitionsByVerification = new Map<
+    string,
+    VerificationWorkMapping[]
+  >();
   for (const mapping of traceMappingRows.rows) {
     const workIds =
       traceWorkIdsByVerification.get(mapping.verificationId) ?? [];
     workIds.push(mapping.workItemId);
     traceWorkIdsByVerification.set(mapping.verificationId, workIds);
+    const workDefinitions =
+      traceWorkDefinitionsByVerification.get(mapping.verificationId) ?? [];
+    workDefinitions.push(mapping);
+    traceWorkDefinitionsByVerification.set(
+      mapping.verificationId,
+      workDefinitions,
+    );
   }
   const traceMappedWorkIds = [
     ...new Set(
@@ -2695,7 +2798,16 @@ export async function getDeliveryEvidenceTrace(
         ...record,
         stale: isVerificationStale(
           workRows[0],
-          record,
+          {
+            ...record,
+            currentSubjectFingerprint: hasContextualWorkTarget(record)
+              ? workSetFingerprint(
+                  (traceWorkDefinitionsByVerification.get(record.id) ?? []).map(
+                    (work) => ({ id: work.workItemId, ...work }),
+                  ),
+                )
+              : undefined,
+          },
           {
             headSha: currentArtifactHeadSha,
             staleAt: currentArtifactStaleAt,

@@ -9,6 +9,8 @@ import {
   clientAcceptanceTargets,
   clientProjectItems,
   clientProjectParticipants,
+  commercialDecisions,
+  commercialRequests,
   defects,
   engineeringProviderInstallations,
   engineeringRepositories,
@@ -19,6 +21,7 @@ import {
   verificationRecords,
   workImplementationLinks,
 } from "@/db/schema";
+import type { CreateDefectInput } from "@/lib/engineering-validation";
 import {
   createCommercialBaseline,
   createCommercialBasisLink,
@@ -600,6 +603,92 @@ describe("engineering and QA delivery evidence boundary", () => {
         expect.objectContaining({ id: verificationIds[index], stale: false }),
       );
     }
+
+    const storedFingerprints = await db
+      .select({
+        id: verificationRecords.id,
+        subjectFingerprint: verificationRecords.subjectFingerprint,
+      })
+      .from(verificationRecords);
+    for (const verificationId of verificationIds) {
+      expect(
+        storedFingerprints.find((record) => record.id === verificationId)
+          ?.subjectFingerprint,
+      ).toMatch(/^work-set-v1:/);
+    }
+
+    const repositoryId = await seedRepository(fixture);
+    await upsertProviderEvidence(
+      repositoryId,
+      [
+        evidence({
+          providerArtifactId: "contextual-overview-pr",
+          number: 20,
+          title: `TARGETQA-${scopeWork.number} contextual implementation`,
+          headRef: `targetqa-${scopeWork.number}-contextual-implementation`,
+        }),
+      ],
+      "integration",
+      null,
+    );
+    let engineeringWorkspace = await listEngineeringWorkspace(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+    );
+    expect(engineeringWorkspace.verifications).toContainEqual(
+      expect.objectContaining({ id: verificationIds[0], stale: true }),
+    );
+    for (const verificationId of verificationIds.slice(1)) {
+      expect(engineeringWorkspace.verifications).toContainEqual(
+        expect.objectContaining({ id: verificationId, stale: false }),
+      );
+    }
+
+    await Promise.all(
+      targets.map((target, index) =>
+        updateWorkItem(
+          fixture.owner,
+          fixture.workspace.id,
+          fixture.project.id,
+          target.work.id,
+          { description: `Changed contextual definition ${index + 1}.` },
+        ),
+      ),
+    );
+    const staleCoverage = await getEngineeringCoverage(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { page: 1, pageSize: 50 },
+    );
+    for (const [index, target] of targets.entries()) {
+      expect(
+        staleCoverage.items.find((item) => item.workItemId === target.work.id)
+          ?.gaps,
+      ).toEqual(
+        expect.arrayContaining(["missing_verification", "stale_verification"]),
+      );
+      const trace = await getDeliveryEvidenceTrace(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        target.work.id,
+      );
+      expect(trace.verification).toContainEqual(
+        expect.objectContaining({ id: verificationIds[index], stale: true }),
+      );
+    }
+    engineeringWorkspace = await listEngineeringWorkspace(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+    );
+    for (const verificationId of verificationIds) {
+      expect(engineeringWorkspace.verifications).toContainEqual(
+        expect.objectContaining({ id: verificationId, stale: true }),
+      );
+    }
   });
 
   it("keeps done work in evidence readiness without calling it incomplete", async () => {
@@ -833,6 +922,184 @@ describe("engineering and QA delivery evidence boundary", () => {
         id: verification.id,
         result: "failed",
       }),
+    );
+  });
+
+  it("maps every direct defect context to affected work and preserves standalone defects", async () => {
+    const fixture = await createFixture("CONTEXTDEF");
+    const work = await createWork(fixture, "Contextual defect delivery");
+    const scopeItem = await createDraftScopeItem(
+      fixture,
+      "Contextual defect scope",
+    );
+    await activateCommercialBaselineVersion(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      scopeItem.baselineVersionId,
+      {},
+    );
+    await createCommercialBasisLink(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      work.id,
+      { scopeItemRevisionId: scopeItem.revisionId },
+    );
+
+    const milestoneId = randomUUID();
+    await db.insert(milestones).values({
+      id: milestoneId,
+      projectId: fixture.project.id,
+      name: "Contextual defect milestone",
+    });
+    await updateWorkItem(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      work.id,
+      { milestoneId },
+    );
+    const acceptanceItemId = randomUUID();
+    const acceptanceTargetId = randomUUID();
+    await db.insert(clientProjectItems).values({
+      id: acceptanceItemId,
+      projectId: fixture.project.id,
+      idempotencyKey: randomUUID(),
+      target: "milestone",
+      milestoneId,
+      clientSummary: "Contextual defect acceptance",
+      createdByUserId: fixture.owner.userId,
+    });
+    await db.insert(clientAcceptanceTargets).values({
+      id: acceptanceTargetId,
+      projectId: fixture.project.id,
+      projectItemId: acceptanceItemId,
+      idempotencyKey: randomUUID(),
+      versionNumber: 1,
+      snapshotTitle: "Contextual defect acceptance",
+      snapshotSummary: "Acceptance defect context",
+      snapshotStatus: "in_progress",
+      publishedByUserId: fixture.owner.userId,
+    });
+
+    const requestId = randomUUID();
+    const decisionId = randomUUID();
+    await db.insert(commercialRequests).values({
+      id: requestId,
+      projectId: fixture.project.id,
+      idempotencyKey: randomUUID(),
+      title: "Contextual commercial request",
+      requestText: "Trace request defects to delivery work.",
+      receivedAt: new Date("2026-08-13T08:00:00.000Z"),
+      createdByUserId: fixture.owner.userId,
+    });
+    await db.insert(commercialDecisions).values({
+      id: decisionId,
+      projectId: fixture.project.id,
+      requestId,
+      idempotencyKey: randomUUID(),
+      disposition: "covered",
+      coverageBasis: "baseline",
+      rationale: "Existing delivery obligation.",
+      confirmedAt: new Date("2026-08-13T08:01:00.000Z"),
+      createdByUserId: fixture.owner.userId,
+    });
+    await createCommercialBasisLink(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      work.id,
+      { basisType: "commercial_decision", decisionId },
+    );
+
+    const baseDefect: Omit<CreateDefectInput, "title"> = {
+      description: null,
+      severity: "high",
+      workItemId: null,
+      scopeItemRevisionId: null,
+      commercialRequestId: null,
+      commercialDecisionId: null,
+      artifactId: null,
+      verificationId: null,
+      milestoneId: null,
+      acceptanceTargetId: null,
+    };
+    const contextualDefects = await Promise.all([
+      createDefect(fixture.owner, fixture.workspace.id, fixture.project.id, {
+        ...baseDefect,
+        title: "Scope revision defect",
+        scopeItemRevisionId: scopeItem.revisionId,
+      }),
+      createDefect(fixture.owner, fixture.workspace.id, fixture.project.id, {
+        ...baseDefect,
+        title: "Milestone defect",
+        milestoneId,
+      }),
+      createDefect(fixture.owner, fixture.workspace.id, fixture.project.id, {
+        ...baseDefect,
+        title: "Acceptance target defect",
+        acceptanceTargetId,
+      }),
+      createDefect(fixture.owner, fixture.workspace.id, fixture.project.id, {
+        ...baseDefect,
+        title: "Commercial decision defect",
+        commercialDecisionId: decisionId,
+      }),
+      createDefect(fixture.owner, fixture.workspace.id, fixture.project.id, {
+        ...baseDefect,
+        title: "Commercial request defect",
+        commercialRequestId: requestId,
+      }),
+    ]);
+    const standaloneDefect = await createDefect(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { ...baseDefect, title: "Standalone project defect" },
+    );
+
+    const coverage = await getEngineeringCoverage(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { page: 1, pageSize: 50 },
+    );
+    expect(coverage.summary.unresolvedDefects).toBe(6);
+    expect(
+      coverage.items.find((item) => item.workItemId === work.id)?.gaps,
+    ).toContain("unresolved_defect");
+    expect(coverage.items).toContainEqual(
+      expect.objectContaining({
+        identifier: `DEF-${standaloneDefect.number}`,
+        title: "Standalone project defect",
+      }),
+    );
+
+    const milestoneCoverage = await getEngineeringCoverage(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { page: 1, pageSize: 50, milestoneId },
+    );
+    expect(milestoneCoverage.summary.unresolvedDefects).toBe(5);
+    expect(
+      milestoneCoverage.items.some(
+        (item) => item.identifier === `DEF-${standaloneDefect.number}`,
+      ),
+    ).toBe(false);
+
+    const trace = await getDeliveryEvidenceTrace(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      work.id,
+    );
+    expect(trace.defects.map((defect) => defect.id)).toEqual(
+      expect.arrayContaining(contextualDefects.map((defect) => defect.id)),
+    );
+    expect(trace.defects.map((defect) => defect.id)).not.toContain(
+      standaloneDefect.id,
     );
   });
 

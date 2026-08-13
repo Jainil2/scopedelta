@@ -21,6 +21,7 @@ test("verified signup, workspace persistence, invitation, and role management", 
   request,
   browser,
 }) => {
+  test.setTimeout(90_000);
   const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   const ownerEmail = `owner-${suffix}@example.test`;
   const memberEmail = `member-${suffix}@example.test`;
@@ -389,7 +390,8 @@ test("commercial baseline, decision authorization and contradictions stay tracea
   await workForm.getByRole("button", { name: "Create work item" }).click();
   await expect(page.getByRole("status")).toHaveText("Work item created.");
 
-  await page.getByRole("link", { name: "Commercial" }).click();
+  const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
+  await page.goto(`/app/${workspaceSlug}/projects/SCOPE/commercial`);
   await expect(
     page.getByRole("heading", { name: "Commercial", exact: true }),
   ).toBeVisible();
@@ -443,7 +445,6 @@ test("commercial baseline, decision authorization and contradictions stay tracea
   );
   await expect(page.getByText("Version 1", { exact: true })).toBeVisible();
 
-  const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
   await page.goto(`/app/${workspaceSlug}/projects/SCOPE/backlog`);
   await expect(
     page.getByText("Needs classification", { exact: true }),

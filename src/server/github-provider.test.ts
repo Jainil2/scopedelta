@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   getGitHubUserInstallationRepository,
+  githubCheckRollup,
   verifyGitHubWebhookSignature,
 } from "@/server/github-provider";
 
@@ -113,5 +114,29 @@ describe("GitHub provider webhook boundary", () => {
         "customer/private-delivery",
       ),
     ).resolves.toEqual(repository);
+  });
+
+  it("treats absent check and status evidence as unknown", () => {
+    expect(
+      githubCheckRollup(
+        { total_count: 0, check_runs: [] },
+        { state: "pending", total_count: 0 },
+      ),
+    ).toBe("unknown");
+  });
+
+  it("never promotes a truncated check-run page to passing", () => {
+    expect(
+      githubCheckRollup(
+        {
+          total_count: 101,
+          check_runs: Array.from({ length: 100 }, () => ({
+            status: "completed",
+            conclusion: "success",
+          })),
+        },
+        { state: "success", total_count: 1 },
+      ),
+    ).toBe("unknown");
   });
 });

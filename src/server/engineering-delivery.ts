@@ -1677,6 +1677,87 @@ function buildCoverageItem(
   };
 }
 
+function coverageWorkConditions(projectId: string, milestoneId?: string) {
+  const conditions = [
+    eq(workItems.projectId, projectId),
+    eq(workItems.purpose, "client_delivery"),
+    isNull(workItems.archivedAt),
+    sql`${workItems.status} <> 'canceled'`,
+  ];
+  if (milestoneId) conditions.push(eq(workItems.milestoneId, milestoneId));
+  return conditions;
+}
+
+function coverageDefectConditions(projectId: string, milestoneId?: string) {
+  const conditions = [
+    eq(defects.projectId, projectId),
+    eq(defects.status, "open"),
+  ];
+  if (!milestoneId) return conditions;
+  conditions.push(sql`(
+    ${defects.milestoneId} = ${milestoneId}
+    or exists (
+      select 1 from work_items defect_work
+      where defect_work.id = ${defects.workItemId}
+        and defect_work.project_id = ${projectId}
+        and defect_work.milestone_id = ${milestoneId}
+    )
+    or exists (
+      select 1
+      from work_implementation_links defect_artifact_link
+      inner join work_items defect_artifact_work
+        on defect_artifact_work.id = defect_artifact_link.work_item_id
+        and defect_artifact_work.project_id = defect_artifact_link.project_id
+      where defect_artifact_link.artifact_id = ${defects.artifactId}
+        and defect_artifact_link.project_id = ${projectId}
+        and defect_artifact_link.removed_at is null
+        and defect_artifact_work.milestone_id = ${milestoneId}
+    )
+    or exists (
+      select 1
+      from verification_records defect_verification
+      left join work_items defect_verification_work
+        on defect_verification_work.id = defect_verification.work_item_id
+        and defect_verification_work.project_id = defect_verification.project_id
+      left join work_implementation_links defect_verification_link
+        on defect_verification_link.artifact_id = defect_verification.artifact_id
+        and defect_verification_link.project_id = defect_verification.project_id
+        and defect_verification_link.removed_at is null
+      left join work_items defect_verification_artifact_work
+        on defect_verification_artifact_work.id = defect_verification_link.work_item_id
+        and defect_verification_artifact_work.project_id = defect_verification_link.project_id
+      where defect_verification.id = ${defects.verificationId}
+        and defect_verification.project_id = ${projectId}
+        and (
+          defect_verification_work.milestone_id = ${milestoneId}
+          or defect_verification_artifact_work.milestone_id = ${milestoneId}
+        )
+    )
+    or exists (
+      select 1
+      from client_acceptance_targets defect_acceptance
+      inner join client_project_items defect_acceptance_item
+        on defect_acceptance_item.id = defect_acceptance.project_item_id
+        and defect_acceptance_item.project_id = defect_acceptance.project_id
+      where defect_acceptance.id = ${defects.acceptanceTargetId}
+        and defect_acceptance.project_id = ${projectId}
+        and defect_acceptance_item.milestone_id = ${milestoneId}
+    )
+  )`);
+  return conditions;
+}
+
+function coverageAcceptanceConditions(projectId: string, milestoneId?: string) {
+  const conditions = [
+    eq(clientProjectItems.projectId, projectId),
+    isNull(clientProjectItems.hiddenAt),
+  ];
+  if (milestoneId) {
+    conditions.push(eq(clientProjectItems.milestoneId, milestoneId));
+  }
+  return conditions;
+}
+
 export async function getEngineeringCoverage(
   actor: UserActor,
   workspaceId: string,
@@ -1691,14 +1772,15 @@ export async function getEngineeringCoverage(
     .where(eq(projects.id, projectId))
     .limit(1);
   if (!projectRows[0]) throw notFound();
-  const workConditions = [
-    eq(workItems.projectId, projectId),
-    eq(workItems.purpose, "client_delivery"),
-    isNull(workItems.archivedAt),
-    sql`${workItems.status} <> 'canceled'`,
-  ];
-  if (filters.milestoneId)
-    workConditions.push(eq(workItems.milestoneId, filters.milestoneId));
+  const workConditions = coverageWorkConditions(projectId, filters.milestoneId);
+  const defectConditions = coverageDefectConditions(
+    projectId,
+    filters.milestoneId,
+  );
+  const acceptanceConditions = coverageAcceptanceConditions(
+    projectId,
+    filters.milestoneId,
+  );
   const [
     workRows,
     linkRows,
@@ -1770,9 +1852,10 @@ export async function getEngineeringCoverage(
         id: defects.id,
         number: defects.number,
         title: defects.title,
+        milestoneId: defects.milestoneId,
       })
       .from(defects)
-      .where(and(eq(defects.projectId, projectId), eq(defects.status, "open")))
+      .where(and(...defectConditions))
       .orderBy(desc(defects.detectedAt), desc(defects.id))
       .limit(MAX_PROJECT_EVIDENCE + 1),
     db.execute<{ defectId: string; workItemId: string }>(sql`
@@ -1814,6 +1897,16 @@ export async function getEngineeringCoverage(
         where defect.project_id = ${projectId}
           and defect.status = 'open'
       ) affected
+      ${
+        filters.milestoneId
+          ? sql`where exists (
+            select 1 from work_items scoped_defect_work
+            where scoped_defect_work.id = affected.work_item_id
+              and scoped_defect_work.project_id = ${projectId}
+              and scoped_defect_work.milestone_id = ${filters.milestoneId}
+          )`
+          : sql``
+      }
       limit ${MAX_PROJECT_EVIDENCE + 1}
     `),
     db
@@ -1844,12 +1937,7 @@ export async function getEngineeringCoverage(
         ),
       )
       .leftJoin(milestones, eq(milestones.id, clientProjectItems.milestoneId))
-      .where(
-        and(
-          eq(clientProjectItems.projectId, projectId),
-          isNull(clientProjectItems.hiddenAt),
-        ),
-      )
+      .where(and(...acceptanceConditions))
       .limit(500),
   ]);
   const truncated =
@@ -1937,7 +2025,7 @@ export async function getEngineeringCoverage(
               workItemId: null,
               identifier: `DEF-${defect.number}`,
               title: defect.title,
-              milestoneId: null,
+              milestoneId: defect.milestoneId ?? filters.milestoneId ?? null,
               gaps: ["unresolved_defect"],
             },
           ],
@@ -1980,6 +2068,25 @@ export async function getEngineeringCoverage(
     where current_scope.project_id = ${projectId}
       and current_scope.archived_at is null
       and latest_revision.kind in ('requirement', 'deliverable')
+      and (
+        ${filters.milestoneId ?? null}::uuid is null
+        or exists (
+          select 1
+          from commercial_scope_items attributed_scope
+          inner join commercial_scope_item_revisions attributed_revision
+            on attributed_revision.scope_item_id = attributed_scope.id
+            and attributed_revision.project_id = attributed_scope.project_id
+          inner join commercial_basis_links attributed_basis
+            on attributed_basis.scope_item_revision_id = attributed_revision.id
+            and attributed_basis.project_id = attributed_scope.project_id
+          inner join work_items attributed_work
+            on attributed_work.id = attributed_basis.work_item_id
+            and attributed_work.project_id = attributed_basis.project_id
+          where attributed_scope.project_id = current_scope.project_id
+            and attributed_scope.material_basis_scope_item_id = current_scope.material_basis_scope_item_id
+            and attributed_work.milestone_id = ${filters.milestoneId ?? null}::uuid
+        )
+      )
       and not exists (
         select 1
         from commercial_scope_items related_scope
@@ -1995,6 +2102,10 @@ export async function getEngineeringCoverage(
           and planned_work.purpose = 'client_delivery'
           and planned_work.archived_at is null
           and planned_work.status <> 'canceled'
+          and (
+            ${filters.milestoneId ?? null}::uuid is null
+            or planned_work.milestone_id = ${filters.milestoneId ?? null}::uuid
+          )
         where related_scope.project_id = current_scope.project_id
           and related_scope.material_basis_scope_item_id = current_scope.material_basis_scope_item_id
       )
@@ -2291,11 +2402,124 @@ export async function getDeliveryEvidenceTrace(
 }
 
 type GitHubWebhookPayload = {
+  action?: string;
+  installation?: { id?: number };
   repository?: { id?: number };
+  repositories_removed?: Array<{ id?: number }>;
   pull_request?: { number?: number };
   check_run?: { pull_requests?: Array<{ number?: number }> };
   check_suite?: { pull_requests?: Array<{ number?: number }> };
 };
+
+async function revokeGitHubProviderGrants(
+  eventName: string,
+  payload: GitHubWebhookPayload,
+) {
+  const installationId = payload.installation?.id
+    ? String(payload.installation.id)
+    : null;
+  const installationRevoked =
+    eventName === "installation" &&
+    ["deleted", "suspend", "suspended"].includes(payload.action ?? "");
+  const repositoriesRemoved =
+    eventName === "installation_repositories" && payload.action === "removed";
+  if (!installationId || (!installationRevoked && !repositoriesRemoved)) {
+    return null;
+  }
+  const removedRepositoryIds = (payload.repositories_removed ?? []).flatMap(
+    (repository) => (repository.id ? [String(repository.id)] : []),
+  );
+  const now = new Date();
+  return getDb().transaction(async (transaction) => {
+    const repositoryConditions = [
+      eq(engineeringProviderInstallations.provider, "github"),
+      eq(
+        engineeringProviderInstallations.providerInstallationId,
+        installationId,
+      ),
+      eq(engineeringRepositories.state, "active"),
+    ];
+    if (!installationRevoked) {
+      if (!removedRepositoryIds.length) return [];
+      repositoryConditions.push(
+        inArray(
+          engineeringRepositories.providerRepositoryId,
+          removedRepositoryIds,
+        ),
+      );
+    }
+    const repositories = await transaction
+      .select({
+        id: engineeringRepositories.id,
+        workspaceId: engineeringRepositories.workspaceId,
+        projectId: engineeringRepositories.projectId,
+      })
+      .from(engineeringRepositories)
+      .innerJoin(
+        engineeringProviderInstallations,
+        eq(
+          engineeringProviderInstallations.id,
+          engineeringRepositories.installationId,
+        ),
+      )
+      .where(and(...repositoryConditions));
+    if (installationRevoked) {
+      await transaction
+        .update(engineeringProviderInstallations)
+        .set({
+          state: "revoked",
+          disconnectedAt: now,
+          disconnectedByUserId: null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(engineeringProviderInstallations.provider, "github"),
+            eq(
+              engineeringProviderInstallations.providerInstallationId,
+              installationId,
+            ),
+          ),
+        );
+    }
+    const repositoryIds = repositories.map((repository) => repository.id);
+    if (!repositoryIds.length) return [];
+    const errorCode = installationRevoked
+      ? "provider_installation_revoked"
+      : "provider_repository_grant_revoked";
+    await transaction
+      .update(engineeringRepositories)
+      .set({
+        state: "revoked",
+        disconnectedAt: now,
+        disconnectedByUserId: null,
+        staleAt: now,
+        lastSyncErrorCode: errorCode,
+        updatedAt: now,
+      })
+      .where(inArray(engineeringRepositories.id, repositoryIds));
+    await transaction
+      .update(implementationArtifacts)
+      .set({ staleAt: now, updatedAt: now })
+      .where(inArray(implementationArtifacts.repositoryId, repositoryIds));
+    for (const repository of repositories) {
+      await auditEngineeringEvent(transaction, {
+        workspaceId: repository.workspaceId,
+        actorType: "integration",
+        actorId: null,
+        eventType: "engineering.repository.revoked.v1",
+        targetType: "engineering_repository",
+        targetId: repository.id,
+        metadata: {
+          projectId: repository.projectId,
+          providerEvent: eventName,
+          reason: errorCode,
+        },
+      });
+    }
+    return repositoryIds;
+  });
+}
 
 function webhookPullNumbers(payload: GitHubWebhookPayload) {
   const pullNumbers = new Set<number>();
@@ -2352,6 +2576,18 @@ export async function processGitHubWebhookDelivery(
   let repositoryIds: string[] = [];
   try {
     const payload = JSON.parse(rawBody) as GitHubWebhookPayload;
+    const revokedRepositoryIds = await revokeGitHubProviderGrants(
+      eventName,
+      payload,
+    );
+    if (revokedRepositoryIds) {
+      repositoryIds = revokedRepositoryIds;
+      await db
+        .update(providerWebhookDeliveries)
+        .set({ state: "processed", processedAt: new Date() })
+        .where(eq(providerWebhookDeliveries.id, inserted[0].id));
+      return { duplicate: false, processed: repositoryIds.length };
+    }
     const providerRepositoryId = payload.repository?.id
       ? String(payload.repository.id)
       : null;

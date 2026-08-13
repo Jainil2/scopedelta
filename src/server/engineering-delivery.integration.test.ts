@@ -42,6 +42,7 @@ import {
   getEngineeringCoverage,
   linkImplementationEvidence,
   listEngineeringWorkspace,
+  processGitHubWebhookDelivery,
   setDefectStatus,
   unlinkImplementationEvidence,
   upsertProviderEvidence,
@@ -1058,6 +1059,279 @@ describe("engineering and QA delivery evidence boundary", () => {
     expect(coverage.summary.missingPlannedWork).toBe(3);
   });
 
+  it("scopes defects, acceptance, and commercial readiness to one milestone", async () => {
+    const fixture = await createFixture("MILESTONE");
+    const targetMilestoneId = randomUUID();
+    const otherMilestoneId = randomUUID();
+    await db.insert(milestones).values([
+      {
+        id: targetMilestoneId,
+        projectId: fixture.project.id,
+        name: "Target milestone",
+      },
+      {
+        id: otherMilestoneId,
+        projectId: fixture.project.id,
+        name: "Other milestone",
+      },
+    ]);
+    const targetWork = await createWork(fixture, "Target milestone delivery");
+    const otherWork = await createWork(fixture, "Other milestone delivery");
+    const targetPlanningWork = await createWork(
+      fixture,
+      "Target milestone planning",
+    );
+    const otherPlanningWork = await createWork(
+      fixture,
+      "Other milestone planning",
+    );
+    await Promise.all([
+      updateWorkItem(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        targetWork.id,
+        { milestoneId: targetMilestoneId },
+      ),
+      updateWorkItem(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        targetPlanningWork.id,
+        { milestoneId: targetMilestoneId },
+      ),
+      updateWorkItem(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        otherWork.id,
+        { milestoneId: otherMilestoneId },
+      ),
+      updateWorkItem(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        otherPlanningWork.id,
+        { milestoneId: otherMilestoneId },
+      ),
+    ]);
+    await createDefect(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        title: "Target milestone defect",
+        description: null,
+        severity: "high",
+        workItemId: targetWork.id,
+        scopeItemRevisionId: null,
+        commercialRequestId: null,
+        commercialDecisionId: null,
+        artifactId: null,
+        verificationId: null,
+        milestoneId: null,
+        acceptanceTargetId: null,
+      },
+    );
+    await createDefect(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        title: "Other milestone defect",
+        description: null,
+        severity: "critical",
+        workItemId: otherWork.id,
+        scopeItemRevisionId: null,
+        commercialRequestId: null,
+        commercialDecisionId: null,
+        artifactId: null,
+        verificationId: null,
+        milestoneId: null,
+        acceptanceTargetId: null,
+      },
+    );
+    await createDefect(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        title: "Unattributed project defect",
+        description: null,
+        severity: "medium",
+        workItemId: null,
+        scopeItemRevisionId: null,
+        commercialRequestId: null,
+        commercialDecisionId: null,
+        artifactId: null,
+        verificationId: null,
+        milestoneId: null,
+        acceptanceTargetId: null,
+      },
+    );
+    const targetProjectItemId = randomUUID();
+    const otherProjectItemId = randomUUID();
+    await db.insert(clientProjectItems).values([
+      {
+        id: targetProjectItemId,
+        projectId: fixture.project.id,
+        idempotencyKey: randomUUID(),
+        target: "milestone",
+        milestoneId: targetMilestoneId,
+        clientSummary: "Target milestone acceptance",
+        createdByUserId: fixture.owner.userId,
+      },
+      {
+        id: otherProjectItemId,
+        projectId: fixture.project.id,
+        idempotencyKey: randomUUID(),
+        target: "milestone",
+        milestoneId: otherMilestoneId,
+        clientSummary: "Other milestone acceptance",
+        createdByUserId: fixture.owner.userId,
+      },
+    ]);
+    await db.insert(clientAcceptanceTargets).values([
+      {
+        id: randomUUID(),
+        projectId: fixture.project.id,
+        projectItemId: targetProjectItemId,
+        idempotencyKey: randomUUID(),
+        versionNumber: 1,
+        snapshotTitle: "Target milestone acceptance",
+        snapshotSummary: "Pending target acceptance",
+        snapshotStatus: "planned",
+        publishedByUserId: fixture.owner.userId,
+      },
+      {
+        id: randomUUID(),
+        projectId: fixture.project.id,
+        projectItemId: otherProjectItemId,
+        idempotencyKey: randomUUID(),
+        versionNumber: 1,
+        snapshotTitle: "Other milestone acceptance",
+        snapshotSummary: "Pending other acceptance",
+        snapshotStatus: "planned",
+        publishedByUserId: fixture.owner.userId,
+      },
+    ]);
+    const source = await createCommercialSource(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        idempotencyKey: randomUUID(),
+        kind: "pasted_text",
+        name: "Milestone-scoped requirements",
+        mediaType: "text/plain",
+        contentBase64: Buffer.from("Target and other requirements").toString(
+          "base64",
+        ),
+      },
+    );
+    const baseline = await createCommercialBaseline(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { sourceId: source.id },
+    );
+    const requirementTitles = [
+      "Target milestone requirement",
+      "Other milestone requirement",
+    ];
+    const requirements = await Promise.all(
+      requirementTitles.map((title) =>
+        createCommercialScopeItem(
+          fixture.owner,
+          fixture.workspace.id,
+          fixture.project.id,
+          {
+            idempotencyKey: randomUUID(),
+            revisionIdempotencyKey: randomUUID(),
+            baselineVersionId: baseline.versionId,
+            kind: "requirement",
+            title,
+            details: null,
+            anchors: [
+              {
+                sourceId: source.id,
+                startOffset: 0,
+                endOffset: 6,
+                label: null,
+              },
+            ],
+          },
+        ),
+      ),
+    );
+    await activateCommercialBaselineVersion(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      baseline.versionId,
+      {},
+    );
+    await Promise.all([
+      createCommercialBasisLink(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        targetPlanningWork.id,
+        { scopeItemRevisionId: requirements[0]!.revisionId },
+      ),
+      createCommercialBasisLink(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        otherPlanningWork.id,
+        { scopeItemRevisionId: requirements[1]!.revisionId },
+      ),
+    ]);
+    await Promise.all([
+      updateWorkItem(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        targetPlanningWork.id,
+        { status: "canceled" },
+      ),
+      updateWorkItem(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        otherPlanningWork.id,
+        { status: "canceled" },
+      ),
+    ]);
+
+    const coverage = await getEngineeringCoverage(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      { page: 1, pageSize: 100, milestoneId: targetMilestoneId },
+    );
+    expect(coverage.summary.unresolvedDefects).toBe(1);
+    expect(coverage.summary.pendingAcceptance).toBe(1);
+    expect(coverage.summary.missingPlannedWork).toBe(1);
+    expect(
+      coverage.items.find((item) => item.workItemId === targetWork.id)?.gaps,
+    ).toContain("unresolved_defect");
+    expect(
+      coverage.items.some((item) => item.workItemId === otherWork.id),
+    ).toBe(false);
+    expect(coverage.items).toContainEqual(
+      expect.objectContaining({ title: "Target milestone requirement" }),
+    );
+    expect(
+      coverage.items.some(
+        (item) =>
+          item.title === "Other milestone requirement" ||
+          item.title === "Other milestone defect" ||
+          item.title === "Unattributed project defect",
+      ),
+    ).toBe(false);
+  });
+
   it("rejects a cross-workspace claim even when installation and repository identities are known", async () => {
     const authorized = await createFixture("AUTH", "authorized");
     const attacker = await createFixture("EVIL", "attacker");
@@ -1091,6 +1365,130 @@ describe("engineering and QA delivery evidence boundary", () => {
           ),
         ),
     ).resolves.toHaveLength(0);
+  });
+
+  it("revokes cached evidence when GitHub removes repository or installation grants", async () => {
+    const repositoryFixture = await createFixture("REVOKE", "repository-grant");
+    const repositoryId = await seedRepository(repositoryFixture);
+    await upsertProviderEvidence(
+      repositoryId,
+      [evidence({ providerArtifactId: "revoked-repository-pr" })],
+      "integration",
+      null,
+    );
+    const repositoryRows = await db
+      .select()
+      .from(engineeringRepositories)
+      .where(eq(engineeringRepositories.id, repositoryId));
+    const repositoryInstallationRows = await db
+      .select()
+      .from(engineeringProviderInstallations)
+      .where(
+        eq(
+          engineeringProviderInstallations.id,
+          repositoryRows[0]!.installationId,
+        ),
+      );
+    await expect(
+      processGitHubWebhookDelivery(
+        "repository-grant-removed",
+        "installation_repositories",
+        JSON.stringify({
+          action: "removed",
+          installation: {
+            id: Number(repositoryInstallationRows[0]!.providerInstallationId),
+          },
+          repositories_removed: [
+            { id: Number(repositoryRows[0]!.providerRepositoryId) },
+          ],
+        }),
+      ),
+    ).resolves.toEqual({ duplicate: false, processed: 1 });
+    const revokedRepositoryRows = await db
+      .select()
+      .from(engineeringRepositories)
+      .where(eq(engineeringRepositories.id, repositoryId));
+    expect(revokedRepositoryRows[0]).toMatchObject({
+      state: "revoked",
+      lastSyncErrorCode: "provider_repository_grant_revoked",
+    });
+    expect(revokedRepositoryRows[0]!.staleAt).not.toBeNull();
+    const preservedArtifacts = await db
+      .select()
+      .from(implementationArtifacts)
+      .where(eq(implementationArtifacts.repositoryId, repositoryId));
+    expect(preservedArtifacts).toHaveLength(1);
+    expect(preservedArtifacts[0]!.staleAt).not.toBeNull();
+    await expect(
+      db
+        .select({ state: engineeringProviderInstallations.state })
+        .from(engineeringProviderInstallations)
+        .where(
+          eq(
+            engineeringProviderInstallations.id,
+            repositoryInstallationRows[0]!.id,
+          ),
+        ),
+    ).resolves.toEqual([{ state: "active" }]);
+
+    const installationFixture = await createFixture(
+      "SUSPEND",
+      "installation-grant",
+    );
+    const installationRepositoryId = await seedRepository(installationFixture);
+    await upsertProviderEvidence(
+      installationRepositoryId,
+      [evidence({ providerArtifactId: "suspended-installation-pr" })],
+      "integration",
+      null,
+    );
+    const installationRepositoryRows = await db
+      .select()
+      .from(engineeringRepositories)
+      .where(eq(engineeringRepositories.id, installationRepositoryId));
+    const installationRows = await db
+      .select()
+      .from(engineeringProviderInstallations)
+      .where(
+        eq(
+          engineeringProviderInstallations.id,
+          installationRepositoryRows[0]!.installationId,
+        ),
+      );
+    await expect(
+      processGitHubWebhookDelivery(
+        "installation-suspended",
+        "installation",
+        JSON.stringify({
+          action: "suspend",
+          installation: {
+            id: Number(installationRows[0]!.providerInstallationId),
+          },
+        }),
+      ),
+    ).resolves.toEqual({ duplicate: false, processed: 1 });
+    await expect(
+      db
+        .select({ state: engineeringProviderInstallations.state })
+        .from(engineeringProviderInstallations)
+        .where(
+          eq(engineeringProviderInstallations.id, installationRows[0]!.id),
+        ),
+    ).resolves.toEqual([{ state: "revoked" }]);
+    await expect(
+      db
+        .select({
+          state: engineeringRepositories.state,
+          errorCode: engineeringRepositories.lastSyncErrorCode,
+        })
+        .from(engineeringRepositories)
+        .where(eq(engineeringRepositories.id, installationRepositoryId)),
+    ).resolves.toEqual([
+      {
+        state: "revoked",
+        errorCode: "provider_installation_revoked",
+      },
+    ]);
   });
 });
 
@@ -1205,7 +1603,9 @@ async function seedRepository(fixture: Fixture) {
     id: installationId,
     workspaceId: fixture.workspace.id,
     provider: "github",
-    providerInstallationId: String(Math.floor(Math.random() * 1_000_000)),
+    providerInstallationId: String(
+      Math.floor(Math.random() * 900_000_000) + 100_000_000,
+    ),
     accountId: randomUUID(),
     accountLogin: "scope-delta-test",
     connectedByUserId: fixture.owner.userId,
@@ -1216,7 +1616,9 @@ async function seedRepository(fixture: Fixture) {
     projectId: fixture.project.id,
     installationId,
     provider: "github",
-    providerRepositoryId: randomUUID(),
+    providerRepositoryId: String(
+      Math.floor(Math.random() * 900_000_000) + 100_000_000,
+    ),
     owner: "scope-delta-test",
     name: "delivery",
     fullName: "scope-delta-test/delivery",

@@ -246,10 +246,15 @@ async function reviewRollup(
   return { rollup, approvalsCount, changesRequestedCount };
 }
 
-function checkRollup(
+export function githubCheckRollup(
   checks: GitHubCheckRuns,
   statuses: GitHubCombinedStatus,
 ): ImplementationCheckRollup {
+  const hasEvidence =
+    checks.check_runs.length > 0 ||
+    checks.total_count > 0 ||
+    statuses.total_count > 0;
+  if (!hasEvidence) return "unknown";
   const conclusions = checks.check_runs.map((check) => check.conclusion);
   const hasFailingCheck = conclusions.some((value) =>
     [
@@ -263,12 +268,12 @@ function checkRollup(
   if (hasFailingCheck || ["error", "failure"].includes(statuses.state)) {
     return "failing";
   }
+  if (checks.total_count > checks.check_runs.length) return "unknown";
   const hasPendingCheck = checks.check_runs.some(
     (check) => check.status !== "completed" || check.conclusion === null,
   );
   if (hasPendingCheck || statuses.state === "pending") return "pending";
-  const hasEvidence = checks.total_count > 0 || statuses.total_count > 0;
-  return hasEvidence ? "passing" : "unknown";
+  return "passing";
 }
 
 function artifactState(pull: GitHubPullRequest): ImplementationArtifactState {
@@ -309,7 +314,7 @@ async function normalizePullRequest(
     reviewRollup: review.rollup,
     approvalsCount: review.approvalsCount,
     changesRequestedCount: review.changesRequestedCount,
-    checkRollup: checkRollup(checks, statuses),
+    checkRollup: githubCheckRollup(checks, statuses),
     mergedAt: pull.merged_at ? new Date(pull.merged_at) : null,
     mergeCommitSha: pull.merge_commit_sha,
     providerUpdatedAt: new Date(pull.updated_at),

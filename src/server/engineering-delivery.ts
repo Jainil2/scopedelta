@@ -1905,23 +1905,24 @@ function coverageDefectConditions(projectId: string, milestoneId?: string) {
     )
     or exists (
       select 1
-      from verification_records defect_verification
-      left join work_items defect_verification_work
-        on defect_verification_work.id = defect_verification.work_item_id
-        and defect_verification_work.project_id = defect_verification.project_id
-      left join work_implementation_links defect_verification_link
-        on defect_verification_link.artifact_id = defect_verification.artifact_id
-        and defect_verification_link.project_id = defect_verification.project_id
-        and defect_verification_link.removed_at is null
-      left join work_items defect_verification_artifact_work
-        on defect_verification_artifact_work.id = defect_verification_link.work_item_id
-        and defect_verification_artifact_work.project_id = defect_verification_link.project_id
-      where defect_verification.id = ${defects.verificationId}
-        and defect_verification.project_id = ${projectId}
-        and (
-          defect_verification_work.milestone_id = ${milestoneId}
-          or defect_verification_artifact_work.milestone_id = ${milestoneId}
-        )
+      from (${verificationWorkAssociationQuery(
+        projectId,
+        sql`
+          select verification.id as verification_id,
+            verification.work_item_id,
+            verification.scope_item_revision_id,
+            verification.artifact_id,
+            verification.milestone_id,
+            verification.acceptance_target_id
+          from verification_records verification
+          where verification.project_id = ${projectId}
+        `,
+      )}) defect_verification_mapping
+      inner join work_items defect_verification_work
+        on defect_verification_work.id = defect_verification_mapping."workItemId"
+        and defect_verification_work.project_id = ${projectId}
+      where defect_verification_mapping."verificationId" = ${defects.verificationId}
+        and defect_verification_work.milestone_id = ${milestoneId}
     )
     or exists (
       select 1
@@ -2047,6 +2048,7 @@ export async function getEngineeringCoverage(
         number: defects.number,
         title: defects.title,
         milestoneId: defects.milestoneId,
+        verificationId: defects.verificationId,
       })
       .from(defects)
       .where(and(...defectConditions))
@@ -2177,6 +2179,17 @@ export async function getEngineeringCoverage(
     workIds.push(mapping.workItemId);
     workIdsByVerification.set(mapping.verificationId, workIds);
   }
+  const contextualDefectWorkRows = defectRows.flatMap((defect) =>
+    defect.verificationId
+      ? (workIdsByVerification.get(defect.verificationId) ?? []).map(
+          (workItemId) => ({ defectId: defect.id, workItemId }),
+        )
+      : [],
+  );
+  const allDefectWorkRows = [
+    ...defectWorkRows.rows.slice(0, MAX_PROJECT_EVIDENCE),
+    ...contextualDefectWorkRows,
+  ];
   for (const verification of verificationRows.slice(0, MAX_PROJECT_EVIDENCE)) {
     const mappedWorkIds = workIdsByVerification.get(verification.id) ?? [];
     const capturesImplementationSet = Boolean(
@@ -2210,9 +2223,7 @@ export async function getEngineeringCoverage(
     }
   }
   const workWithDefects = new Set(
-    defectWorkRows.rows
-      .slice(0, MAX_PROJECT_EVIDENCE)
-      .map((item) => item.workItemId),
+    allDefectWorkRows.map((item) => item.workItemId),
   );
   const acceptanceByMilestone = new Map(
     acceptanceRows.flatMap((item) => {
@@ -2237,7 +2248,7 @@ export async function getEngineeringCoverage(
   );
   const visibleWorkIds = new Set(boundedWork.map((work) => work.id));
   const defectIdsWithVisibleWork = new Set(
-    defectWorkRows.rows.flatMap((item) =>
+    allDefectWorkRows.flatMap((item) =>
       visibleWorkIds.has(item.workItemId) ? [item.defectId] : [],
     ),
   );
@@ -2431,6 +2442,9 @@ export async function getDeliveryEvidenceTrace(
   const traceVerificationIds = [
     ...new Set(traceTargetRows.rows.map((mapping) => mapping.verificationId)),
   ];
+  const traceVerificationDefectCondition = traceVerificationIds.length
+    ? inArray(defects.verificationId, traceVerificationIds)
+    : sql`false`;
   const [basis, implementation, verification, defect, acceptance] =
     await Promise.all([
       db
@@ -2557,6 +2571,7 @@ export async function getDeliveryEvidenceTrace(
                     )
                   )
               )
+              or ${traceVerificationDefectCondition}
             )`,
           ),
         )

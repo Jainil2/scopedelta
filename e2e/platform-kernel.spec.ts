@@ -1165,9 +1165,17 @@ test("client collaboration keeps one commercial truth across internal and extern
     .fill("This is a paid change requiring client approval.");
   await packetForm.getByLabel("Confirmed values").selectOption({ index: 1 });
   await packetForm.getByLabel("Publish monetary amount").check();
-  await packetForm
-    .getByRole("button", { name: "Publish successor packet" })
-    .click();
+  const [packetResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname.endsWith("/packets"),
+    ),
+    packetForm
+      .getByRole("button", { name: "Publish successor packet" })
+      .click(),
+  ]);
+  expect(packetResponse.status()).toBe(201);
   await expect(page.getByRole("status")).toContainText(
     "packet version was published",
   );

@@ -237,6 +237,9 @@ jobs:
       - name: Apply migrations
         run: pnpm db:migrate
 
+      - name: Build browser application
+        run: pnpm build
+
       - name: Restore Chromium cache
         id: chromium-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -253,7 +256,7 @@ jobs:
         run: pnpm exec playwright install-deps chromium # NOSONAR — system packages only
 
       - name: Browser tests
-        run: pnpm test:e2e -- --shard=${{ matrix.shard }}/2
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2
 
       - name: Upload browser diagnostics
         if: failure() || cancelled()

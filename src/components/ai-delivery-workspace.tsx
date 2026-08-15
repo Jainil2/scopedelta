@@ -52,6 +52,11 @@ type CitedItem = {
   evidenceKeys: string[];
 };
 
+type CitedProse = {
+  text: string;
+  evidenceKeys: string[];
+};
+
 async function request<T>(url: string, init?: RequestInit) {
   const response = await fetch(url, {
     ...init,
@@ -538,13 +543,13 @@ function ScopeResult({
   onMessage: (message: string) => void;
 }>) {
   const result = job.result as {
-    summary: string;
+    summary: CitedProse;
     findings: CitedItem[];
     uncertainties: CitedItem[];
     conflicts: CitedItem[];
     missingQuestions: string[];
-    draftDecision: string;
-    clientSafeWording: string;
+    draftDecision: CitedProse;
+    clientSafeWording: CitedProse;
     workCandidates: Array<{
       candidateKey: string;
       title: string;
@@ -599,7 +604,10 @@ function ScopeResult({
   }
   return (
     <div className="ai-result-body">
-      <p className="ai-summary">{result.summary}</p>
+      <div className="ai-summary">
+        <p>{result.summary.text}</p>
+        <EvidenceKeys keys={result.summary.evidenceKeys} cite={cite} />
+      </div>
       <CitedList title="Findings" items={result.findings} cite={cite} />
       <CitedList title="Uncertainty" items={result.uncertainties} cite={cite} />
       <CitedList title="Conflicts" items={result.conflicts} cite={cite} />
@@ -607,12 +615,17 @@ function ScopeResult({
         <div>
           <p className="eyebrow">Internal draft</p>
           <h3>Decision wording</h3>
-          <p>{result.draftDecision}</p>
+          <p>{result.draftDecision.text}</p>
+          <EvidenceKeys keys={result.draftDecision.evidenceKeys} cite={cite} />
         </div>
         <div>
           <p className="eyebrow">Client-safe draft</p>
           <h3>Proposed wording</h3>
-          <p>{result.clientSafeWording}</p>
+          <p>{result.clientSafeWording.text}</p>
+          <EvidenceKeys
+            keys={result.clientSafeWording.evidenceKeys}
+            cite={cite}
+          />
         </div>
       </section>
       <section className="ai-candidates">
@@ -735,6 +748,7 @@ function QaResult({
   result,
   cite,
 }: Readonly<{ result: Record<string, unknown>; cite: (key: string) => void }>) {
+  const contextSummary = result.contextSummary as CitedProse;
   const scenarios = (result.testScenarios || []) as Array<{
     title: string;
     preconditions: string[];
@@ -744,7 +758,10 @@ function QaResult({
   }>;
   return (
     <div className="ai-result-body">
-      <p className="ai-summary">{String(result.contextSummary || "")}</p>
+      <div className="ai-summary">
+        <p>{contextSummary.text}</p>
+        <EvidenceKeys keys={contextSummary.evidenceKeys} cite={cite} />
+      </div>
       <CitedList
         title="Contradictions"
         items={(result.contradictions || []) as CitedItem[]}

@@ -8,15 +8,19 @@ const citedTextSchema = z.object({
   detail: z.string().min(1).max(4_000),
   evidenceKeys: z.array(evidenceKeySchema).min(1).max(12),
 });
+const citedProseSchema = z.object({
+  text: z.string().min(1).max(4_000),
+  evidenceKeys: z.array(evidenceKeySchema).min(1).max(12),
+});
 
 export const scopeChangeAnalysisResultSchema = z.object({
-  summary: z.string().min(1).max(4_000),
+  summary: citedProseSchema,
   findings: z.array(citedTextSchema).max(20),
   uncertainties: z.array(citedTextSchema).max(12),
   conflicts: z.array(citedTextSchema).max(12),
   missingQuestions: z.array(z.string().min(1).max(1_000)).max(12),
-  draftDecision: z.string().min(1).max(4_000),
-  clientSafeWording: z.string().min(1).max(4_000),
+  draftDecision: citedProseSchema,
+  clientSafeWording: citedProseSchema,
   workCandidates: z
     .array(
       z.object({
@@ -46,7 +50,7 @@ export const deliveryRiskBriefResultSchema = z.object({
 });
 
 export const workContextQaPackResultSchema = z.object({
-  contextSummary: z.string().min(1).max(4_000),
+  contextSummary: citedProseSchema,
   contradictions: z.array(citedTextSchema).max(20),
   missingInformation: z.array(citedTextSchema).max(20),
   testScenarios: z

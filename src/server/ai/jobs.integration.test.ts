@@ -8,10 +8,16 @@ import {
   aiActionExecutions,
   aiActionRecords,
   aiJobAttempts,
+  aiJobs,
   auditEvents,
   clientProjectParticipants,
+  commercialBaselines,
+  commercialBaselineVersions,
+  commercialEvidenceSources,
   commercialRequestClarifications,
   commercialRequests,
+  commercialScopeItemRevisions,
+  commercialScopeItems,
   memberships,
   projectMemberships,
   users,
@@ -21,6 +27,7 @@ import { createCommercialRequest } from "@/server/commercial-change-control";
 import { createClient, createProject } from "@/server/delivery";
 import { createWorkspace } from "@/server/workspaces";
 
+import { assembleAiContext } from "./context";
 import {
   cancelAiJob,
   confirmAiActions,
@@ -44,6 +51,7 @@ const originalEnv = { ...process.env };
 
 describe("durable AI delivery intelligence", () => {
   beforeEach(async () => {
+    process.env = { ...originalEnv };
     process.env.AI_ENABLED = "true";
     process.env.AI_PROVIDER = "ollama";
     process.env.AI_MODEL = "fixture-model";
@@ -129,6 +137,319 @@ describe("durable AI delivery intelligence", () => {
       .from(aiJobAttempts)
       .where(eq(aiJobAttempts.jobId, first.id));
     expect(storedAttempts).toHaveLength(1);
+  });
+
+  it("fails closed when execution configuration changes and resnapshots only on retry", async () => {
+    const fixture = await createFixture();
+    const job = await createAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        idempotencyKey: randomUUID(),
+        target: {
+          kind: "scope_change_analysis",
+          requestId: fixture.request.id,
+        },
+      },
+    );
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+
+    process.env.AI_PROVIDER = "openai";
+    process.env.AI_MODEL = "review-model-b";
+    process.env.OPENAI_API_KEY = "test-key";
+    process.env.OPENAI_BASE_URL = "http://openai.test/v1";
+    await runAiJob(job.id);
+    const firstFailure = await getAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      job.id,
+    );
+    expect(firstFailure).toMatchObject({
+      status: "failed",
+      provider: "ollama",
+      model: "fixture-model",
+      errorCode: "ai_execution_config_changed",
+      attempts: [],
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+
+    const retried = await retryAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      job.id,
+    );
+    expect(retried).toMatchObject({
+      status: "queued",
+      provider: "openai",
+      model: "review-model-b",
+    });
+
+    process.env.AI_MODEL = "review-model-c";
+    await runAiJob(job.id);
+    await expect(
+      getAiJob(fixture.owner, fixture.workspace.id, fixture.project.id, job.id),
+    ).resolves.toMatchObject({
+      status: "failed",
+      provider: "openai",
+      model: "review-model-b",
+      errorCode: "ai_execution_config_changed",
+      attempts: [],
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("keeps leases beyond the provider timeout and closes expired attempts", async () => {
+    const fixture = await createFixture();
+    process.env.AI_TIMEOUT_MS = "120000";
+    const durableJob = await createAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        idempotencyKey: randomUUID(),
+        target: {
+          kind: "scope_change_analysis",
+          requestId: fixture.request.id,
+        },
+      },
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () => {
+        const rows = await db
+          .select({
+            startedAt: aiJobs.startedAt,
+            leaseExpiresAt: aiJobs.leaseExpiresAt,
+          })
+          .from(aiJobs)
+          .where(eq(aiJobs.id, durableJob.id));
+        expect(
+          rows[0]!.leaseExpiresAt!.getTime() - rows[0]!.startedAt!.getTime(),
+        ).toBeGreaterThanOrEqual(150_000);
+        return Response.json({
+          message: { content: JSON.stringify(scopeResult()) },
+        });
+      }),
+    );
+    await runAiJob(durableJob.id);
+    await expect(
+      getAiJob(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        durableJob.id,
+      ),
+    ).resolves.toMatchObject({ status: "succeeded" });
+
+    const expiredJob = await createAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        idempotencyKey: randomUUID(),
+        target: {
+          kind: "scope_change_analysis",
+          requestId: fixture.request.id,
+        },
+      },
+    );
+    const attemptId = randomUUID();
+    const expiredAt = new Date(Date.now() - 1_000);
+    await db
+      .update(aiJobs)
+      .set({
+        status: "running",
+        leaseOwner: "abandoned-runner",
+        leaseExpiresAt: expiredAt,
+        startedAt: new Date(expiredAt.getTime() - 120_000),
+      })
+      .where(eq(aiJobs.id, expiredJob.id));
+    await db.insert(aiJobAttempts).values({
+      id: attemptId,
+      jobId: expiredJob.id,
+      attemptNumber: 1,
+      provider: expiredJob.provider,
+      model: expiredJob.model,
+    });
+    const expired = await getAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      expiredJob.id,
+    );
+    expect(expired).toMatchObject({
+      status: "failed",
+      errorCode: "ai_job_lease_expired",
+      attempts: [
+        expect.objectContaining({
+          id: attemptId,
+          status: "failed",
+          errorCode: "ai_job_lease_expired",
+        }),
+      ],
+    });
+    expect(expired.attempts[0]?.completedAt).toBeInstanceOf(Date);
+  });
+
+  it("assembles only the latest revision from the effective baseline without raw IDs", async () => {
+    const fixture = await createFixture();
+    const sourceId = randomUUID();
+    const baselineId = randomUUID();
+    const originalVersionId = randomUUID();
+    const effectiveVersionId = randomUUID();
+    const originalItemId = randomUUID();
+    const effectiveItemId = randomUUID();
+    const effectiveAt = new Date("2026-08-01T08:00:00.000Z");
+    const amendedAt = new Date("2026-08-10T08:00:00.000Z");
+    await db.insert(commercialEvidenceSources).values({
+      id: sourceId,
+      projectId: fixture.project.id,
+      idempotencyKey: randomUUID(),
+      kind: "pasted_text",
+      name: "Synthetic scope source",
+      mediaType: "text/plain",
+      byteSize: 5,
+      contentSha256: "a".repeat(64),
+      originalContent: Buffer.from("scope"),
+      extractedText: "Synthetic scope evidence.",
+      parseState: "ready",
+      createdByUserId: fixture.owner.userId,
+    });
+    await db.insert(commercialBaselines).values({
+      id: baselineId,
+      projectId: fixture.project.id,
+      createdByUserId: fixture.owner.userId,
+    });
+    await db.insert(commercialBaselineVersions).values([
+      {
+        id: originalVersionId,
+        projectId: fixture.project.id,
+        baselineId,
+        sourceId,
+        versionNumber: 1,
+        label: "Original baseline",
+        state: "superseded",
+        effectiveAt,
+        effectiveByUserId: fixture.owner.userId,
+        supersededAt: amendedAt,
+        createdByUserId: fixture.owner.userId,
+      },
+      {
+        id: effectiveVersionId,
+        projectId: fixture.project.id,
+        baselineId,
+        sourceId,
+        previousVersionId: originalVersionId,
+        versionNumber: 2,
+        label: "Amended baseline",
+        state: "effective",
+        effectiveAt: amendedAt,
+        effectiveByUserId: fixture.owner.userId,
+        createdByUserId: fixture.owner.userId,
+      },
+    ]);
+    await db.insert(commercialScopeItems).values([
+      {
+        id: originalItemId,
+        projectId: fixture.project.id,
+        baselineVersionId: originalVersionId,
+        materialBasisScopeItemId: originalItemId,
+        idempotencyKey: randomUUID(),
+        createdByUserId: fixture.owner.userId,
+      },
+      {
+        id: effectiveItemId,
+        projectId: fixture.project.id,
+        baselineVersionId: effectiveVersionId,
+        materialBasisScopeItemId: originalItemId,
+        idempotencyKey: randomUUID(),
+        createdByUserId: fixture.owner.userId,
+      },
+    ]);
+    await db.insert(commercialScopeItemRevisions).values([
+      {
+        id: randomUUID(),
+        projectId: fixture.project.id,
+        scopeItemId: originalItemId,
+        idempotencyKey: randomUUID(),
+        revisionNumber: 1,
+        kind: "requirement",
+        title: "Superseded requirement",
+        details: "This belongs to baseline version one.",
+        createdByUserId: fixture.owner.userId,
+      },
+      {
+        id: randomUUID(),
+        projectId: fixture.project.id,
+        scopeItemId: effectiveItemId,
+        idempotencyKey: randomUUID(),
+        revisionNumber: 1,
+        kind: "requirement",
+        title: "Earlier amended wording",
+        details: "This revision is no longer current.",
+        createdByUserId: fixture.owner.userId,
+      },
+      {
+        id: randomUUID(),
+        projectId: fixture.project.id,
+        scopeItemId: effectiveItemId,
+        idempotencyKey: randomUUID(),
+        revisionNumber: 2,
+        kind: "requirement",
+        title: "Current amended requirement",
+        details: "This is the current effective wording.",
+        createdByUserId: fixture.owner.userId,
+      },
+    ]);
+
+    const context = await assembleAiContext(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        kind: "scope_change_analysis",
+        requestId: fixture.request.id,
+      },
+    );
+    const baselines = context.snapshot.facts.filter(
+      (fact) => fact.type === "baseline",
+    );
+    const scope = context.snapshot.facts.filter(
+      (fact) => fact.type === "scope",
+    );
+    expect(baselines).toEqual([
+      expect.objectContaining({
+        label: "Amended baseline",
+        content: expect.objectContaining({
+          versionNumber: 2,
+          state: "effective",
+        }),
+      }),
+    ]);
+    expect(scope).toEqual([
+      expect.objectContaining({
+        label: "Current amended requirement",
+        content: expect.objectContaining({
+          title: "Current amended requirement",
+          revisionNumber: 2,
+          revisionState: "current",
+          baseline: expect.objectContaining({
+            label: "Amended baseline",
+            versionNumber: 2,
+            state: "effective",
+          }),
+        }),
+      }),
+    ]);
+    const serialized = JSON.stringify(context.snapshot);
+    expect(serialized).not.toContain(originalVersionId);
+    expect(serialized).not.toContain(effectiveVersionId);
+    expect(serialized).not.toContain("Earlier amended wording");
+    expect(serialized).not.toContain("Superseded requirement");
   });
 
   it("atomically confirms bounded work and clarification drafts with both authorities", async () => {
@@ -381,13 +702,10 @@ describe("durable AI delivery intelligence", () => {
           message: {
             content: JSON.stringify({
               ...scopeResult(),
-              findings: [
-                {
-                  title: "Fabricated",
-                  detail: "This evidence key was not server-issued.",
-                  evidenceKeys: ["ev_fabricated_999"],
-                },
-              ],
+              summary: {
+                text: "This summary cites evidence the server did not issue.",
+                evidenceKeys: ["ev_fabricated_999"],
+              },
             }),
           },
         }),
@@ -400,6 +718,44 @@ describe("durable AI delivery intelligence", () => {
         fixture.workspace.id,
         fixture.project.id,
         fabricatedJob.id,
+      ),
+    ).resolves.toMatchObject({
+      status: "failed",
+      errorCode: "provider_malformed_response",
+    });
+
+    const uncitedJob = await createAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        idempotencyKey: randomUUID(),
+        target: {
+          kind: "scope_change_analysis",
+          requestId: fixture.request.id,
+        },
+      },
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          message: {
+            content: JSON.stringify({
+              ...scopeResult(),
+              summary: "This material synthesis has no citations.",
+            }),
+          },
+        }),
+      ),
+    );
+    await runAiJob(uncitedJob.id);
+    await expect(
+      getAiJob(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        uncitedJob.id,
       ),
     ).resolves.toMatchObject({
       status: "failed",
@@ -523,7 +879,10 @@ async function completedScopeJob(fixture: Fixture) {
 
 function scopeResult() {
   return {
-    summary: "The export request is not yet commercially decided.",
+    summary: {
+      text: "The export request is not yet commercially decided.",
+      evidenceKeys: ["ev_request_001"],
+    },
     findings: [
       {
         title: "New requested capability",
@@ -534,8 +893,14 @@ function scopeResult() {
     uncertainties: [],
     conflicts: [],
     missingQuestions: ["Which format is required?"],
-    draftDecision: "Confirm commercial treatment before scheduling.",
-    clientSafeWording: "We are reviewing the requested export workflow.",
+    draftDecision: {
+      text: "Confirm commercial treatment before scheduling.",
+      evidenceKeys: ["ev_request_001"],
+    },
+    clientSafeWording: {
+      text: "We are reviewing the requested export workflow.",
+      evidenceKeys: ["ev_request_001"],
+    },
     workCandidates: [
       {
         candidateKey: "work_export",

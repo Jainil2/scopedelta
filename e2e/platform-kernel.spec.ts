@@ -1596,7 +1596,10 @@ function aiFixtureResult(kind?: string, evidenceKey = "ev_request_001") {
   }
   if (kind === "work_context_qa_pack") {
     return {
-      contextSummary: "The export work has explicit acceptance criteria.",
+      contextSummary: {
+        text: "The export work has explicit acceptance criteria.",
+        evidenceKeys: [evidenceKey],
+      },
       contradictions: [],
       missingInformation: [],
       testScenarios: [
@@ -1611,7 +1614,10 @@ function aiFixtureResult(kind?: string, evidenceKey = "ev_request_001") {
     };
   }
   return {
-    summary: "The request needs a commercial decision.",
+    summary: {
+      text: "The request needs a commercial decision.",
+      evidenceKeys: [evidenceKey],
+    },
     findings: [
       {
         title: "Requested export",
@@ -1622,8 +1628,14 @@ function aiFixtureResult(kind?: string, evidenceKey = "ev_request_001") {
     uncertainties: [],
     conflicts: [],
     missingQuestions: ["Which format is required?"],
-    draftDecision: "Review commercial treatment before scheduling.",
-    clientSafeWording: "We are reviewing the export request.",
+    draftDecision: {
+      text: "Review commercial treatment before scheduling.",
+      evidenceKeys: [evidenceKey],
+    },
+    clientSafeWording: {
+      text: "We are reviewing the export request.",
+      evidenceKeys: [evidenceKey],
+    },
     workCandidates: [
       {
         candidateKey: "work_export",

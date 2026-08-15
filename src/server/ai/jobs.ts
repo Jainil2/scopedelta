@@ -49,12 +49,20 @@ import {
 } from "./context";
 import { AiProviderError, createAiProvider } from "./provider";
 
-const LEASE_DURATION_MS = 90_000;
+const MINIMUM_LEASE_DURATION_MS = 90_000;
+const LEASE_TIMEOUT_GRACE_MS = 30_000;
 const MAX_HISTORY = 50;
+const LEASE_EXPIRED_MESSAGE =
+  "The AI runner stopped before completing this attempt. Retry explicitly.";
+const CONFIG_CHANGED_MESSAGE =
+  "The configured AI provider or model changed after this job was queued. Retry explicitly to approve the current configuration.";
 
 class AiJobExecutionError extends Error {
   constructor(
-    readonly code: "ai_context_changed" | "ai_evidence_unavailable",
+    readonly code:
+      | "ai_context_changed"
+      | "ai_evidence_unavailable"
+      | "ai_execution_config_changed",
     message: string,
   ) {
     super(message);
@@ -152,21 +160,44 @@ function publicJob<T extends Record<string, unknown>>(job: T) {
 
 async function expireAbandonedJobs() {
   const now = new Date();
-  await getDb()
-    .update(aiJobs)
-    .set({
-      status: "failed",
-      errorCode: "ai_job_lease_expired",
-      errorMessage:
-        "The AI runner stopped before completing this attempt. Retry explicitly.",
-      leaseOwner: null,
-      leaseExpiresAt: null,
-      completedAt: now,
-      updatedAt: now,
-    })
-    .where(
-      and(eq(aiJobs.status, "running"), sql`${aiJobs.leaseExpiresAt} < ${now}`),
-    );
+  await getDb().transaction(async (transaction) => {
+    const expired = await transaction
+      .update(aiJobs)
+      .set({
+        status: "failed",
+        errorCode: "ai_job_lease_expired",
+        errorMessage: LEASE_EXPIRED_MESSAGE,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        completedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(aiJobs.status, "running"),
+          sql`${aiJobs.leaseExpiresAt} < ${now}`,
+        ),
+      )
+      .returning({ id: aiJobs.id });
+    if (!expired.length) return;
+    await transaction
+      .update(aiJobAttempts)
+      .set({
+        status: "failed",
+        errorCode: "ai_job_lease_expired",
+        errorMessage: LEASE_EXPIRED_MESSAGE,
+        completedAt: now,
+      })
+      .where(
+        and(
+          inArray(
+            aiJobAttempts.jobId,
+            expired.map((job) => job.id),
+          ),
+          eq(aiJobAttempts.status, "running"),
+        ),
+      );
+  });
 }
 
 export async function createAiJob(
@@ -581,6 +612,8 @@ export async function retryAiJob(
       .update(aiJobs)
       .set({
         status: "queued",
+        provider: config.provider,
+        model: config.model,
         contextSnapshot: context.snapshot,
         evidenceMap: context.evidenceMap,
         contextFingerprint: context.fingerprint,
@@ -655,11 +688,44 @@ export async function runAiJob(jobId: string) {
   if (!config.enabled) return;
   const runnerId = randomUUID();
   const now = new Date();
-  const leaseExpiresAt = new Date(now.getTime() + LEASE_DURATION_MS);
+  const leaseExpiresAt = new Date(
+    now.getTime() +
+      Math.max(
+        MINIMUM_LEASE_DURATION_MS,
+        config.timeoutMs + LEASE_TIMEOUT_GRACE_MS,
+      ),
+  );
   let job: typeof aiJobs.$inferSelect | undefined;
   let attemptId = "";
   let attemptNumber = 0;
   await getDb().transaction(async (transaction) => {
+    const queued = await transaction
+      .select({
+        status: aiJobs.status,
+        provider: aiJobs.provider,
+        model: aiJobs.model,
+      })
+      .from(aiJobs)
+      .where(eq(aiJobs.id, jobId))
+      .for("update")
+      .limit(1);
+    if (queued[0]?.status !== "queued") return;
+    if (
+      queued[0].provider !== config.provider ||
+      queued[0].model !== config.model
+    ) {
+      await transaction
+        .update(aiJobs)
+        .set({
+          status: "failed",
+          errorCode: "ai_execution_config_changed",
+          errorMessage: CONFIG_CHANGED_MESSAGE,
+          completedAt: now,
+          updatedAt: now,
+        })
+        .where(and(eq(aiJobs.id, jobId), eq(aiJobs.status, "queued")));
+      return;
+    }
     const claimed = await transaction
       .update(aiJobs)
       .set({
@@ -700,6 +766,15 @@ export async function runAiJob(jobId: string) {
       schema: z.toJSONSchema(schema) as Record<string, unknown>,
       ...prompt,
     });
+    if (
+      generation.provider !== job.provider ||
+      generation.model !== job.model
+    ) {
+      throw new AiJobExecutionError(
+        "ai_execution_config_changed",
+        "The AI provider response did not match the job's approved execution configuration.",
+      );
+    }
     const result = schema.parse(generation.output) as AiJobResult;
     validateEvidenceKeys(result, job.evidenceMap as Record<string, AiEvidence>);
     let currentFingerprint: string;
@@ -755,7 +830,12 @@ export async function runAiJob(jobId: string) {
           durationMs: generation.durationMs,
           completedAt,
         })
-        .where(eq(aiJobAttempts.id, attemptId));
+        .where(
+          and(
+            eq(aiJobAttempts.id, attemptId),
+            eq(aiJobAttempts.status, "running"),
+          ),
+        );
       if (finished[0]) {
         await transaction.insert(auditEvents).values({
           id: randomUUID(),
@@ -818,7 +898,12 @@ export async function runAiJob(jobId: string) {
           errorMessage: providerError.message,
           completedAt,
         })
-        .where(eq(aiJobAttempts.id, attemptId));
+        .where(
+          and(
+            eq(aiJobAttempts.id, attemptId),
+            eq(aiJobAttempts.status, "running"),
+          ),
+        );
     });
   }
 }

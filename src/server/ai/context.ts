@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, max, or, sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import {
@@ -148,6 +148,17 @@ async function scopeChangeContext(
   const access = await getProjectAccess(getDb(), actor, workspaceId, projectId);
   assertProjectManager(access, actor.userId);
   const db = getDb();
+  const latestScopeRevisions = db
+    .select({
+      scopeItemId: commercialScopeItemRevisions.scopeItemId,
+      revisionNumber: max(commercialScopeItemRevisions.revisionNumber).as(
+        "ai_latest_scope_revision_number",
+      ),
+    })
+    .from(commercialScopeItemRevisions)
+    .where(eq(commercialScopeItemRevisions.projectId, projectId))
+    .groupBy(commercialScopeItemRevisions.scopeItemId)
+    .as("ai_latest_scope_revisions");
   const [
     requestRows,
     decisionRows,
@@ -207,7 +218,12 @@ async function scopeChangeContext(
         effectiveAt: commercialBaselineVersions.effectiveAt,
       })
       .from(commercialBaselineVersions)
-      .where(eq(commercialBaselineVersions.projectId, projectId))
+      .where(
+        and(
+          eq(commercialBaselineVersions.projectId, projectId),
+          eq(commercialBaselineVersions.state, "effective"),
+        ),
+      )
       .orderBy(desc(commercialBaselineVersions.createdAt))
       .limit(20),
     db
@@ -217,15 +233,43 @@ async function scopeChangeContext(
         details: commercialScopeItemRevisions.details,
         kind: commercialScopeItemRevisions.kind,
         revisionNumber: commercialScopeItemRevisions.revisionNumber,
-        archivedAt: commercialScopeItems.archivedAt,
-        baselineVersionId: commercialScopeItems.baselineVersionId,
+        baselineLabel: commercialBaselineVersions.label,
+        baselineVersionNumber: commercialBaselineVersions.versionNumber,
+        baselineState: commercialBaselineVersions.state,
+        baselineEffectiveAt: commercialBaselineVersions.effectiveAt,
       })
       .from(commercialScopeItemRevisions)
       .innerJoin(
         commercialScopeItems,
         eq(commercialScopeItems.id, commercialScopeItemRevisions.scopeItemId),
       )
-      .where(eq(commercialScopeItemRevisions.projectId, projectId))
+      .innerJoin(
+        latestScopeRevisions,
+        and(
+          eq(
+            latestScopeRevisions.scopeItemId,
+            commercialScopeItemRevisions.scopeItemId,
+          ),
+          eq(
+            latestScopeRevisions.revisionNumber,
+            commercialScopeItemRevisions.revisionNumber,
+          ),
+        ),
+      )
+      .innerJoin(
+        commercialBaselineVersions,
+        eq(
+          commercialBaselineVersions.id,
+          commercialScopeItems.baselineVersionId,
+        ),
+      )
+      .where(
+        and(
+          eq(commercialScopeItemRevisions.projectId, projectId),
+          eq(commercialBaselineVersions.state, "effective"),
+          isNull(commercialScopeItems.archivedAt),
+        ),
+      )
       .orderBy(asc(commercialScopeItemRevisions.title))
       .limit(100),
     db
@@ -336,8 +380,13 @@ async function scopeChangeContext(
         details: item.details,
         kind: item.kind,
         revisionNumber: item.revisionNumber,
-        current: item.archivedAt === null,
-        baselineVersionId: item.baselineVersionId,
+        revisionState: "current",
+        baseline: {
+          label: item.baselineLabel,
+          versionNumber: item.baselineVersionNumber,
+          state: item.baselineState,
+          effectiveAt: item.baselineEffectiveAt,
+        },
       },
     })),
     ...requestRowsRelated

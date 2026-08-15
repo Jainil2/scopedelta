@@ -333,9 +333,13 @@ Mailpit is development-only and must never be public or connected to production.
   then let an authorized user retry explicitly; do not mutate attempts or bulk
   requeue jobs.
 - To stop new inference safely, set `AI_ENABLED=false` and redeploy. Existing
-  PostgreSQL results remain internal history; queued jobs will not be claimed.
-- Before changing providers, document the new processor/privacy boundary and
-  complete or cancel existing jobs. Do not operate overlapping fallback keys.
+  PostgreSQL results remain internal history; queued jobs become explicit
+  retryable failures without making provider calls.
+- Before changing providers, models, or base URLs, document the new
+  processor/privacy boundary and complete or cancel existing jobs. A queued
+  job fails closed when its approved route differs; an authorized retry
+  explicitly resnapshots the repaired route. Do not operate overlapping
+  fallback keys.
 - Use `pnpm ai:eval` only with synthetic fixtures and an intentionally selected
   model. The repository never downloads Ollama models automatically.
 

@@ -20,10 +20,13 @@ for OpenAI Responses, Anthropic Messages, Gemini `generateContent`, and Ollama
 chat. There is no automatic provider/model fallback.
 
 Each job persists a bounded immutable context snapshot, evidence-key map,
-prompt version, canonical fingerprint, provider/model identity, result, and
-immutable attempt/usage records. Execution uses PostgreSQL leases and Next.js
-post-response scheduling. An expired lease becomes an explicit recoverable
-failure; only a user-triggered retry can spend again.
+prompt version, canonical fingerprint, and a non-secret execution-route
+snapshot of normalized provider, model, and base URL. The same route fingerprint
+is copied to immutable attempt/usage records; API keys are never persisted.
+Execution uses PostgreSQL leases and Next.js post-response scheduling. Route
+drift, disabled/invalid runtime configuration, or an expired lease becomes an
+explicit recoverable failure; only a user-triggered retry can resnapshot and
+spend again.
 
 Model output is validated twice: provider JSON Schema and final Zod parsing.
 All cited evidence keys must exist in the stored server-issued map. Raw customer
@@ -38,8 +41,8 @@ both the confirming human and AI-agent provenance.
 
 ## Consequences
 
-- Provider changes are explicit deployment operations with a clear privacy
-  boundary.
+- Provider, model, and endpoint changes are explicit deployment operations with
+  a clear privacy boundary.
 - PostgreSQL is sufficient for current low-volume durable execution; no queue
   service is introduced.
 - Results can become stale and must be rerun before confirmation.

@@ -122,6 +122,10 @@ AI is disabled by default. Set `AI_ENABLED=true`, choose exactly one
 `AI_PROVIDER` (`openai`, `anthropic`, `gemini`, or `ollama`), and set an
 explicit `AI_MODEL`. Hosted providers also require their matching API key.
 ScopeDelta never falls back to a second provider/model.
+The normalized provider/model/base-URL route is snapshotted per job and attempt
+without API keys. A queued job fails before inference if that route changes or
+the runtime AI configuration becomes disabled/invalid; retry explicitly
+resnapshots the repaired route.
 
 For local evaluation, install and operate Ollama separately, explicitly obtain
 a model, and configure it. A practical development example on a capable Mac is

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { and, asc, count, desc, eq, gt, inArray, max, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -32,7 +32,7 @@ import {
   communityEntitlementPolicy,
   type EntitlementPolicy,
 } from "@/lib/entitlements";
-import { getAiConfig } from "@/lib/env";
+import { getAiConfig, type AiConfig } from "@/lib/env";
 import { notFound, PlatformError } from "@/lib/platform-errors";
 import {
   assertProjectManager,
@@ -55,7 +55,99 @@ const MAX_HISTORY = 50;
 const LEASE_EXPIRED_MESSAGE =
   "The AI runner stopped before completing this attempt. Retry explicitly.";
 const CONFIG_CHANGED_MESSAGE =
-  "The configured AI provider or model changed after this job was queued. Retry explicitly to approve the current configuration.";
+  "The configured AI provider, model, or destination changed after this job was queued. Retry explicitly to approve the current configuration.";
+
+type AiExecutionConfig = {
+  config: AiConfig;
+  providerBaseUrl: string;
+  fingerprint: string;
+};
+
+type AiExecutionConfigState =
+  | { ok: true; value: AiExecutionConfig }
+  | {
+      ok: false;
+      errorCode: "ai_execution_disabled" | "ai_execution_config_invalid";
+      errorMessage: string;
+    };
+
+function normalizeProviderBaseUrl(value: string) {
+  const url = new URL(value);
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error("ai_configuration_invalid");
+  }
+  url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+  return url.toString().replace(/\/$/, "");
+}
+
+function currentAiExecutionConfig(): AiExecutionConfigState {
+  try {
+    const config = getAiConfig();
+    if (!config.enabled) {
+      return {
+        ok: false,
+        errorCode: "ai_execution_disabled",
+        errorMessage:
+          "AI was disabled before this queued job started. Retry after an administrator enables AI.",
+      };
+    }
+    const providerBaseUrl = normalizeProviderBaseUrl(config.baseUrl);
+    const fingerprint = createHash("sha256")
+      .update(
+        JSON.stringify({
+          provider: config.provider,
+          model: config.model,
+          providerBaseUrl,
+        }),
+      )
+      .digest("hex");
+    return { ok: true, value: { config, providerBaseUrl, fingerprint } };
+  } catch {
+    return {
+      ok: false,
+      errorCode: "ai_execution_config_invalid",
+      errorMessage:
+        "The AI execution configuration became invalid before this queued job started. Retry after an administrator repairs it.",
+    };
+  }
+}
+
+function requireAiExecutionConfig() {
+  const state = currentAiExecutionConfig();
+  if (!state.ok) {
+    throw new PlatformError(
+      state.errorCode === "ai_execution_disabled"
+        ? "ai_disabled"
+        : "ai_configuration_invalid",
+      503,
+      state.errorMessage,
+    );
+  }
+  return state.value;
+}
+
+async function failQueuedExecutionConfig(
+  jobId: string,
+  state: Extract<AiExecutionConfigState, { ok: false }>,
+) {
+  const now = new Date();
+  await getDb()
+    .update(aiJobs)
+    .set({
+      status: "failed",
+      errorCode: state.errorCode,
+      errorMessage: state.errorMessage,
+      completedAt: now,
+      updatedAt: now,
+    })
+    .where(and(eq(aiJobs.id, jobId), eq(aiJobs.status, "queued")));
+}
 
 class AiJobExecutionError extends Error {
   constructor(
@@ -208,14 +300,8 @@ export async function createAiJob(
   entitlements: EntitlementPolicy = communityEntitlementPolicy,
 ) {
   const input = createAiJobSchema.parse(rawInput);
-  const config = getAiConfig();
-  if (!config.enabled) {
-    throw new PlatformError(
-      "ai_disabled",
-      503,
-      "AI delivery intelligence is not enabled for this deployment.",
-    );
-  }
+  const execution = requireAiExecutionConfig();
+  const { config } = execution;
   const access = await getProjectAccess(getDb(), actor, workspaceId, projectId);
   assertJobAuthorization(input.target.kind, access, actor.userId);
   await entitlements.assertAllowed("ai.job.run", {
@@ -367,6 +453,8 @@ export async function createAiJob(
       contextFingerprint: context.fingerprint,
       provider: config.provider,
       model: config.model,
+      providerBaseUrl: execution.providerBaseUrl,
+      executionConfigFingerprint: execution.fingerprint,
     });
     await transaction.insert(auditEvents).values({
       id: randomUUID(),
@@ -455,14 +543,8 @@ export async function retryAiJob(
   jobId: string,
   entitlements: EntitlementPolicy = communityEntitlementPolicy,
 ) {
-  const config = getAiConfig();
-  if (!config.enabled) {
-    throw new PlatformError(
-      "ai_disabled",
-      503,
-      "AI delivery intelligence is not enabled for this deployment.",
-    );
-  }
+  const execution = requireAiExecutionConfig();
+  const { config } = execution;
   const access = await getProjectAccess(getDb(), actor, workspaceId, projectId);
   await entitlements.assertAllowed("ai.job.run", {
     userId: actor.userId,
@@ -614,6 +696,8 @@ export async function retryAiJob(
         status: "queued",
         provider: config.provider,
         model: config.model,
+        providerBaseUrl: execution.providerBaseUrl,
+        executionConfigFingerprint: execution.fingerprint,
         contextSnapshot: context.snapshot,
         evidenceMap: context.evidenceMap,
         contextFingerprint: context.fingerprint,
@@ -684,8 +768,13 @@ export async function cancelAiJob(
 
 export async function runAiJob(jobId: string) {
   await expireAbandonedJobs();
-  const config = getAiConfig();
-  if (!config.enabled) return;
+  const executionState = currentAiExecutionConfig();
+  if (!executionState.ok) {
+    await failQueuedExecutionConfig(jobId, executionState);
+    return;
+  }
+  const execution = executionState.value;
+  const { config } = execution;
   const runnerId = randomUUID();
   const now = new Date();
   const leaseExpiresAt = new Date(
@@ -704,6 +793,8 @@ export async function runAiJob(jobId: string) {
         status: aiJobs.status,
         provider: aiJobs.provider,
         model: aiJobs.model,
+        providerBaseUrl: aiJobs.providerBaseUrl,
+        executionConfigFingerprint: aiJobs.executionConfigFingerprint,
       })
       .from(aiJobs)
       .where(eq(aiJobs.id, jobId))
@@ -712,7 +803,9 @@ export async function runAiJob(jobId: string) {
     if (queued[0]?.status !== "queued") return;
     if (
       queued[0].provider !== config.provider ||
-      queued[0].model !== config.model
+      queued[0].model !== config.model ||
+      queued[0].providerBaseUrl !== execution.providerBaseUrl ||
+      queued[0].executionConfigFingerprint !== execution.fingerprint
     ) {
       await transaction
         .update(aiJobs)
@@ -752,6 +845,8 @@ export async function runAiJob(jobId: string) {
       attemptNumber,
       provider: job.provider,
       model: job.model,
+      providerBaseUrl: job.providerBaseUrl,
+      executionConfigFingerprint: job.executionConfigFingerprint,
     });
   });
   if (!job) return;
@@ -850,6 +945,8 @@ export async function runAiJob(jobId: string) {
             kind: job!.kind,
             provider: job!.provider,
             model: job!.model,
+            providerBaseUrl: job!.providerBaseUrl,
+            executionConfigFingerprint: job!.executionConfigFingerprint,
           },
         });
       }

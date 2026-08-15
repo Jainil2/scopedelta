@@ -478,11 +478,17 @@ mappings, and internal clarification drafts. A job stores the exact bounded
 context snapshot, server-issued evidence map, prompt version, result, and
 canonical fingerprint used for staleness checks.
 
+Migration `0014_ai_execution_route.sql` adds the normalized provider base URL
+and a provider/model/base-URL fingerprint to jobs and attempts. API keys are
+excluded. Execution fails before any provider call if that route differs from
+the queued snapshot; only an explicit retry resnapshots the current route.
+
 Next.js `after()` schedules a claimed job after the creation/retry response.
 PostgreSQL remains authoritative: a queued job is atomically claimed with a
-lease, and an expired runner becomes a failed job that requires explicit retry.
-There is no automatic retry, provider routing, or fallback that could duplicate
-spend or move customer data to another processor.
+lease. An expired runner or disabled/invalid execution configuration becomes a
+failed job that requires explicit retry. There is no automatic retry, provider
+routing, or fallback that could duplicate spend or move customer data to
+another processor or endpoint.
 
 The server-only provider interface has native `fetch` adapters for OpenAI
 Responses (`store: false`), Anthropic Messages, Gemini `generateContent`, and

@@ -39,8 +39,8 @@
 - Do not use confidential customer contracts or client content as public fixtures, examples, or logs.
 - Synthetic/anonymized examples are preferred for development and tests.
 - Production AI providers must have acceptable data handling terms before real confidential customer documents are processed.
-- A deployment selects one AI provider/model. ScopeDelta must not route or fall
-  back to another provider automatically.
+- A deployment selects one AI provider/model/base-URL route. ScopeDelta must
+  fail closed on route drift and must not route or fall back automatically.
 - AI snapshots, results, and clarification drafts are customer content stored in
   PostgreSQL, not operational log metadata or client-safe projection fields.
 

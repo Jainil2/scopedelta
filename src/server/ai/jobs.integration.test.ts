@@ -202,6 +202,167 @@ describe("durable AI delivery intelligence", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("fails closed when the provider destination changes and resnapshots it on retry", async () => {
+    const fixture = await createFixture();
+    const job = await createAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        idempotencyKey: randomUUID(),
+        target: {
+          kind: "scope_change_analysis",
+          requestId: fixture.request.id,
+        },
+      },
+    );
+    const originalFingerprint = job.executionConfigFingerprint;
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+
+    process.env.OLLAMA_BASE_URL = "http://alternate-ollama.test/gateway/";
+    await runAiJob(job.id);
+    await expect(
+      getAiJob(fixture.owner, fixture.workspace.id, fixture.project.id, job.id),
+    ).resolves.toMatchObject({
+      status: "failed",
+      provider: "ollama",
+      model: "fixture-model",
+      providerBaseUrl: "http://ollama.test",
+      executionConfigFingerprint: originalFingerprint,
+      errorCode: "ai_execution_config_changed",
+      attempts: [],
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+
+    const retried = await retryAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      job.id,
+    );
+    expect(retried).toMatchObject({
+      status: "queued",
+      provider: "ollama",
+      model: "fixture-model",
+      providerBaseUrl: "http://alternate-ollama.test/gateway",
+    });
+    expect(retried.executionConfigFingerprint).not.toBe(originalFingerprint);
+
+    fetcher.mockResolvedValue(
+      Response.json({
+        message: { content: JSON.stringify(scopeResult()) },
+      }),
+    );
+    await runAiJob(job.id);
+    await expect(
+      getAiJob(fixture.owner, fixture.workspace.id, fixture.project.id, job.id),
+    ).resolves.toMatchObject({
+      status: "succeeded",
+      providerBaseUrl: "http://alternate-ollama.test/gateway",
+      attempts: [
+        expect.objectContaining({
+          providerBaseUrl: "http://alternate-ollama.test/gateway",
+          executionConfigFingerprint: retried.executionConfigFingerprint,
+        }),
+      ],
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "http://alternate-ollama.test/gateway/api/chat",
+    );
+  });
+
+  it("fails queued jobs durably when AI becomes disabled or invalid", async () => {
+    const fixture = await createFixture();
+    const disabledJob = await createAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        idempotencyKey: randomUUID(),
+        target: {
+          kind: "scope_change_analysis",
+          requestId: fixture.request.id,
+        },
+      },
+    );
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+
+    process.env.AI_ENABLED = "false";
+    await runAiJob(disabledJob.id);
+    await expect(
+      getAiJob(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        disabledJob.id,
+      ),
+    ).resolves.toMatchObject({
+      status: "failed",
+      errorCode: "ai_execution_disabled",
+      attempts: [],
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+
+    process.env.AI_ENABLED = "true";
+    const retriedDisabled = await retryAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      disabledJob.id,
+    );
+    expect(retriedDisabled.status).toBe("queued");
+    await cancelAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      disabledJob.id,
+    );
+
+    const invalidJob = await createAiJob(
+      fixture.owner,
+      fixture.workspace.id,
+      fixture.project.id,
+      {
+        idempotencyKey: randomUUID(),
+        target: {
+          kind: "scope_change_analysis",
+          requestId: fixture.request.id,
+        },
+      },
+    );
+    process.env.OLLAMA_BASE_URL = "not-a-valid-url";
+    await runAiJob(invalidJob.id);
+    await expect(
+      getAiJob(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        invalidJob.id,
+      ),
+    ).resolves.toMatchObject({
+      status: "failed",
+      errorCode: "ai_execution_config_invalid",
+      attempts: [],
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+
+    process.env.OLLAMA_BASE_URL = "http://repaired-ollama.test";
+    await expect(
+      retryAiJob(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        invalidJob.id,
+      ),
+    ).resolves.toMatchObject({
+      status: "queued",
+      providerBaseUrl: "http://repaired-ollama.test",
+    });
+  });
+
   it("keeps leases beyond the provider timeout and closes expired attempts", async () => {
     const fixture = await createFixture();
     process.env.AI_TIMEOUT_MS = "120000";
@@ -274,6 +435,8 @@ describe("durable AI delivery intelligence", () => {
       attemptNumber: 1,
       provider: expiredJob.provider,
       model: expiredJob.model,
+      providerBaseUrl: expiredJob.providerBaseUrl,
+      executionConfigFingerprint: expiredJob.executionConfigFingerprint,
     });
     const expired = await getAiJob(
       fixture.owner,

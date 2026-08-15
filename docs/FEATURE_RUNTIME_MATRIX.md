@@ -173,7 +173,7 @@ Layer-5 research and SC-009 are complete for review. See
 
 | Capability | Runtime class | Delivered slice |
 |---|---|---|
-| AI provider abstraction | Hybrid/optional external | SC-009; exactly one deployment-selected provider/model, no fallback |
+| AI provider abstraction | Hybrid/optional external | SC-009; exactly one snapshotted deployment provider/model/base-URL route, fail closed on drift, no fallback |
 | Local/BYO model support | Local/LAN | SC-009; explicit Ollama endpoint/model, no automatic download |
 | Requirement/work-item generation | Hybrid/optional external | SC-009; previewed backlog/unclassified drafts only |
 | Commercial/scope reasoning | Hybrid/optional external | SC-009 Scope Change Analyst with citations and uncertainty |

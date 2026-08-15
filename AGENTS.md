@@ -42,11 +42,12 @@ Quality gates remain mandatory. Optimize **when** expensive validation runs rath
 
 ### Development and review-candidate loop
 
-1. Run the smallest relevant unit/integration tests for the code being changed.
-2. Use focused browser/E2E coverage for the journey currently under construction.
-3. Run focused lint/typecheck/build checks when the touched boundary warrants them.
-4. Do not repeatedly run the complete hosted E2E + production build + smoke + Docker/container gate after every edit or review fix unless the specific change requires broad early confidence.
-5. Push a review candidate once focused regression evidence is strong enough for CEO/product review; **a full hosted gate is not a prerequisite for CEO review**.
+1. Keep ordinary hosted PR validation focused on obvious breakage, not formatting, lint, coverage telemetry, or code-quality observability.
+2. Run the smallest relevant unit/integration tests for the code being changed.
+3. Use focused browser/E2E coverage for the journey currently under construction.
+4. Run focused lint/typecheck/build checks when the touched boundary warrants them.
+5. Do not repeatedly run the complete hosted E2E + production build + smoke + Docker/container gate after every edit or review fix unless the specific change requires broad early confidence.
+6. Push a review candidate once focused regression evidence is strong enough for CEO/product review; **a full hosted gate is not a prerequisite for CEO review**.
 
 ### CEO/product review
 
@@ -63,6 +64,12 @@ Quality gates remain mandatory. Optimize **when** expensive validation runs rath
 4. If the final gate exposes a real defect, fix it, run targeted regression first, then rerun the necessary final hosted gate on the new code head.
 5. Any source-code change after the final green gate must be revalidated before merge; do not rely on a green result from an older SHA.
 6. Do not weaken, skip, or suppress the final merge-quality gate merely to save time.
+
+### Final-gate failure handling
+
+- If a fix can materially affect product behavior, security/authorization, architecture, migration semantics, or another approved requirement, run targeted regression coverage and request CEO/product re-review before validating the new merge-candidate SHA.
+- If a fix is mechanical or code-quality-only, such as formatting or lint cleanup with no material behavior/risk change, Codex fixes it autonomously, runs the relevant focused check, and validates the new SHA without another CEO/product review loop.
+- If a failure is flaky or infrastructure-only, retry or repair the CI path without a source change where possible.
 
 Prefer fewer meaningful pushes and full-CI cycles. The goal is **fast review feedback plus one authoritative pre-merge validation**, not repeated 12–15 minute validation before every product review.
 

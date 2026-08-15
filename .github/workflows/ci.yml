@@ -182,7 +182,7 @@ jobs:
           retention-days: 14
 
   browser:
-    name: Full browser journeys
+    name: Full browser journeys (${{ matrix.shard }}/2)
     if: >-
       github.event_name == 'pull_request' &&
       github.event.action == 'labeled' &&
@@ -190,6 +190,10 @@ jobs:
     needs: exact-sha
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     permissions:
       contents: read
     services:
@@ -233,6 +237,9 @@ jobs:
       - name: Apply migrations
         run: pnpm db:migrate
 
+      - name: Build browser application
+        run: pnpm build
+
       - name: Restore Chromium cache
         id: chromium-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -249,7 +256,18 @@ jobs:
         run: pnpm exec playwright install-deps chromium # NOSONAR — system packages only
 
       - name: Browser tests
-        run: pnpm test:e2e
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2
+
+      - name: Upload browser diagnostics
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-diagnostics-${{ github.event.pull_request.head.sha }}-${{ matrix.shard }}-of-2
+          path: |
+            output/playwright
+            output/playwright-report
+          if-no-files-found: warn
+          retention-days: 7
 
   production:
     name: Full production build and container

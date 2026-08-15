@@ -20,6 +20,207 @@
     "Segoe UI", sans-serif;
 }
 
+.engineering-page {
+  gap: 1.4rem;
+}
+
+.engineering-header {
+  align-items: flex-start;
+}
+
+.engineering-status-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  overflow: hidden;
+  background: var(--white);
+}
+
+.engineering-status-strip > div {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem;
+  border-right: 1px solid var(--line);
+}
+
+.engineering-status-strip > div:last-child {
+  border-right: 0;
+}
+
+.engineering-status-strip strong {
+  font-size: 1.5rem;
+}
+
+.engineering-status-strip span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.engineering-status-strip .status-critical strong {
+  color: var(--danger);
+}
+
+.engineering-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.engineering-section {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--white);
+}
+
+.engineering-card-list,
+.engineering-link-list,
+.engineering-gap-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.engineering-card {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: var(--white);
+}
+
+.engineering-card h3,
+.engineering-card p {
+  margin: 0;
+}
+
+.engineering-card-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.engineering-state,
+.engineering-gap-list span {
+  width: fit-content;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 58%, transparent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.engineering-passing,
+.engineering-passed,
+.engineering-resolved {
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+}
+
+.engineering-failing,
+.engineering-failed,
+.engineering-blocked {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.engineering-pending,
+.engineering-open {
+  color: #745514;
+  background: #f4e8bd;
+}
+
+.engineering-inline-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.engineering-inline-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.engineering-link-list span {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.engineering-link-list button {
+  padding: 0.2rem 0.45rem;
+  min-height: auto;
+}
+
+.engineering-gap-list {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.engineering-work-trace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.engineering-work-trace-grid > div {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--white);
+}
+
+.engineering-work-trace-grid h3,
+.engineering-work-trace-grid p {
+  margin-top: 0;
+}
+
+@media (max-width: 960px) {
+  .engineering-status-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .engineering-status-strip > div:nth-child(3) {
+    border-right: 0;
+  }
+
+  .engineering-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .engineering-work-trace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .engineering-status-strip,
+  .engineering-inline-form {
+    grid-template-columns: 1fr;
+  }
+
+  .engineering-status-strip > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .engineering-status-strip > div:last-child {
+    border-bottom: 0;
+  }
+
+  .engineering-card-title {
+    display: grid;
+  }
+}
+
 .commercial-change-control {
   margin-top: 2.5rem;
   padding-top: 2rem;

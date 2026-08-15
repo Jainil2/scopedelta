@@ -8,7 +8,12 @@ if (process.env.TEST_DATABASE_URL) {
 
 export default defineConfig({
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "server-only": fileURLToPath(
+        new URL("./src/test/server-only.ts", import.meta.url),
+      ),
+    },
   },
   test: {
     environment: "node",

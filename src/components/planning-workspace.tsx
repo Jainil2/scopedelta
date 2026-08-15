@@ -183,7 +183,7 @@ export function BoardWorkspace({
         Board moves update the same workflow state as the backlog. Changes only
         appear after the server accepts them.
       </p>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? <output>{message}</output> : null}
       <div className="backlog-toolbar">
         <PlanningFilters
           filters={filters}
@@ -221,6 +221,7 @@ export function BoardWorkspace({
                 return (
                   <article className="kanban-card" key={item.id}>
                     <button
+                      type="button"
                       className="kanban-card-title"
                       onClick={(event) => {
                         openerRef.current = event.currentTarget;
@@ -250,7 +251,7 @@ export function BoardWorkspace({
                       }
                     >
                       <label>
-                        Cycle
+                        <span>Cycle</span>
                         <select
                           name="cycleId"
                           defaultValue={item.cycleId || ""}
@@ -277,7 +278,9 @@ export function BoardWorkspace({
                             ))}
                         </select>
                       </label>
-                      <button disabled={pending}>Plan</button>
+                      <button type="submit" disabled={pending}>
+                        Plan
+                      </button>
                     </form>
                     <div
                       className="kanban-move-actions"
@@ -285,6 +288,7 @@ export function BoardWorkspace({
                     >
                       {previous && item.status !== "canceled" ? (
                         <button
+                          type="button"
                           disabled={pending}
                           onClick={() =>
                             patch(
@@ -299,6 +303,7 @@ export function BoardWorkspace({
                       ) : null}
                       {next && item.status !== "canceled" ? (
                         <button
+                          type="button"
                           disabled={pending}
                           onClick={() =>
                             patch(
@@ -318,6 +323,7 @@ export function BoardWorkspace({
                         aria-label={`Reorder ${item.identifier}`}
                       >
                         <button
+                          type="button"
                           disabled={pending}
                           title="Move up"
                           onClick={() => reorder(item, "up")}
@@ -325,6 +331,7 @@ export function BoardWorkspace({
                           ↑
                         </button>
                         <button
+                          type="button"
                           disabled={pending}
                           title="Move down"
                           onClick={() => reorder(item, "down")}
@@ -436,7 +443,7 @@ export function CyclesWorkspace({
         Cycles are optional internal timeboxes. Milestones remain unchanged when
         work is added to or removed from a cycle.
       </p>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? <output>{message}</output> : null}
       <div className="backlog-toolbar">
         <form className="backlog-filters">
           <select
@@ -451,7 +458,9 @@ export function CyclesWorkspace({
               </option>
             ))}
           </select>
-          <button className="button-secondary">Apply</button>
+          <button type="submit" className="button-secondary">
+            Apply
+          </button>
           {lifecycle ? <Link href="?">Clear</Link> : null}
         </form>
         <details className="delivery-composer" ref={composerRef}>
@@ -469,7 +478,7 @@ export function CyclesWorkspace({
             >
               <CycleFields cycle={cycle} />
               <label>
-                Lifecycle
+                <span>Lifecycle</span>
                 <select name="lifecycle" defaultValue={cycle.lifecycle}>
                   {cycleLifecycles.map((value) => (
                     <option value={value} key={value}>
@@ -478,7 +487,9 @@ export function CyclesWorkspace({
                   ))}
                 </select>
               </label>
-              <button disabled={pending}>Save cycle</button>
+              <button type="submit" disabled={pending}>
+                Save cycle
+              </button>
             </form>
           </article>
         ))}
@@ -543,7 +554,7 @@ export function MyWorkWorkspace({
           </p>
         </div>
       </header>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? <output>{message}</output> : null}
       <form className="my-work-filters">
         <input
           type="search"
@@ -611,7 +622,9 @@ export function MyWorkWorkspace({
           value={filters.labelId}
           options={facets.labels}
         />
-        <button className="button-secondary">Apply filters</button>
+        <button type="submit" className="button-secondary">
+          Apply filters
+        </button>
         {hasMyWorkFilters(filters) ? (
           <Link href={`/app/${workspaceSlug}/my-work`}>Clear</Link>
         ) : null}
@@ -644,7 +657,7 @@ export function MyWorkWorkspace({
               className="my-work-status"
             >
               <label>
-                Status
+                <span>Status</span>
                 <select
                   name="status"
                   defaultValue={item.status}
@@ -657,7 +670,10 @@ export function MyWorkWorkspace({
                   ))}
                 </select>
               </label>
-              <button disabled={pending || item.status === "canceled"}>
+              <button
+                type="submit"
+                disabled={pending || item.status === "canceled"}
+              >
                 Update
               </button>
             </form>
@@ -797,7 +813,9 @@ function PlanningFilters({
           </option>
         ))}
       </select>
-      <button className="button-secondary">Apply filters</button>
+      <button type="submit" className="button-secondary">
+        Apply filters
+      </button>
     </form>
   );
 }
@@ -850,6 +868,7 @@ export function ProjectTabs({
     | "cycles"
     | "brief"
     | "commercial"
+    | "engineering"
     | "activity";
 }>) {
   const tabs = [
@@ -866,6 +885,11 @@ export function ProjectTabs({
       "commercial",
       "Commercial",
       `/app/${workspaceSlug}/projects/${projectKey}/commercial`,
+    ],
+    [
+      "engineering",
+      "Engineering & QA",
+      `/app/${workspaceSlug}/projects/${projectKey}/engineering`,
     ],
     [
       "activity",
@@ -945,7 +969,12 @@ function WorkEditor({
           <span className="work-identifier">{item.identifier}</span>
           <h2 id="planning-editor-title">Edit work item</h2>
         </div>
-        <button ref={closeRef} className="button-secondary" onClick={close}>
+        <button
+          type="button"
+          ref={closeRef}
+          className="button-secondary"
+          onClick={close}
+        >
           Close
         </button>
       </header>
@@ -964,7 +993,9 @@ function CycleForm({
   return (
     <form action={action} className="delivery-form cycle-form">
       <CycleFields />
-      <button disabled={pending}>Create cycle</button>
+      <button type="submit" disabled={pending}>
+        Create cycle
+      </button>
     </form>
   );
 }
@@ -973,7 +1004,7 @@ function CycleFields({ cycle }: Readonly<{ cycle?: Cycle }>) {
   return (
     <>
       <label>
-        Cycle name
+        <span>Cycle name</span>
         <input
           name="name"
           required
@@ -984,7 +1015,7 @@ function CycleFields({ cycle }: Readonly<{ cycle?: Cycle }>) {
       </label>
       <div className="delivery-form-grid">
         <label>
-          Start date
+          <span>Start date</span>
           <input
             name="startDate"
             type="date"
@@ -993,7 +1024,7 @@ function CycleFields({ cycle }: Readonly<{ cycle?: Cycle }>) {
           />
         </label>
         <label>
-          End date
+          <span>End date</span>
           <input
             name="endDate"
             type="date"
@@ -1003,7 +1034,7 @@ function CycleFields({ cycle }: Readonly<{ cycle?: Cycle }>) {
         </label>
       </div>
       <label>
-        Goal / summary
+        <span>Goal / summary</span>
         <textarea
           name="goal"
           rows={3}
@@ -1112,5 +1143,5 @@ function hasMyWorkFilters(filters: MyWorkFilters) {
 }
 
 function nullable(value: FormDataEntryValue | null) {
-  return value ? String(value) : null;
+  return typeof value === "string" && value ? value : null;
 }

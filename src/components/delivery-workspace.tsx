@@ -141,9 +141,9 @@ export function ClientDirectory({
       `/api/v1/workspaces/${workspaceId}/clients`,
       "POST",
       {
-        name: String(formData.get("name") ?? ""),
-        internalReference: String(formData.get("internalReference") ?? ""),
-        summary: String(formData.get("summary") ?? ""),
+        name: formText(formData, "name"),
+        internalReference: formText(formData, "internalReference"),
+        summary: formText(formData, "summary"),
       },
     );
     setMessage(response.ok ? "Client created." : response.message);
@@ -191,22 +191,24 @@ export function ClientDirectory({
           <summary>New client</summary>
           <form action={create} className="delivery-form">
             <label>
-              Client name
+              <span>Client name</span>
               <input name="name" minLength={2} maxLength={120} required />
             </label>
             <label>
-              Internal reference
+              <span>Internal reference</span>
               <input name="internalReference" maxLength={80} />
             </label>
             <label>
-              Summary
+              <span>Summary</span>
               <textarea name="summary" maxLength={2000} rows={3} />
             </label>
-            <button disabled={pending}>Create client</button>
+            <button type="submit" disabled={pending}>
+              Create client
+            </button>
           </form>
         </details>
       </header>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? <output>{message}</output> : null}
       <div className="delivery-list" aria-label="Clients">
         {clients.length ? (
           clients.map((client) => (
@@ -229,29 +231,32 @@ export function ClientDirectory({
                     className="delivery-form"
                   >
                     <label>
-                      Name
+                      <span>Name</span>
                       <input name="name" defaultValue={client.name} required />
                     </label>
                     <label>
-                      Internal reference
+                      <span>Internal reference</span>
                       <input
                         name="internalReference"
                         defaultValue={client.internalReference || ""}
                       />
                     </label>
                     <label>
-                      Summary
+                      <span>Summary</span>
                       <textarea
                         name="summary"
                         rows={3}
                         defaultValue={client.summary || ""}
                       />
                     </label>
-                    <button disabled={pending}>Save client</button>
+                    <button type="submit" disabled={pending}>
+                      Save client
+                    </button>
                   </form>
                 </details>
                 {role !== "member" ? (
                   <button
+                    type="button"
                     className="button-secondary"
                     onClick={() => setLifecycle(client)}
                     disabled={pending}
@@ -331,7 +336,7 @@ export function ProjectDirectory({
       "POST",
       {
         clientId: formData.get("clientId"),
-        key: String(formData.get("key") ?? "").toUpperCase(),
+        key: formText(formData, "key").toUpperCase(),
         name: formData.get("name"),
         summary: formData.get("summary"),
         leadUserId: formData.get("leadUserId"),
@@ -362,7 +367,7 @@ export function ProjectDirectory({
           {activeClients.length ? (
             <form action={create} className="delivery-form delivery-form-grid">
               <label>
-                Client
+                <span>Client</span>
                 <select name="clientId" required>
                   {activeClients.map((client) => (
                     <option key={client.id} value={client.id}>
@@ -372,7 +377,7 @@ export function ProjectDirectory({
                 </select>
               </label>
               <label>
-                Project key
+                <span>Project key</span>
                 <input
                   name="key"
                   pattern="[A-Za-z][A-Za-z0-9]{1,9}"
@@ -381,11 +386,11 @@ export function ProjectDirectory({
                 />
               </label>
               <label className="form-span">
-                Project name
+                <span>Project name</span>
                 <input name="name" minLength={2} maxLength={160} required />
               </label>
               <label>
-                Lead
+                <span>Lead</span>
                 <select name="leadUserId" required>
                   {members.map((member) => (
                     <option key={member.userId} value={member.userId}>
@@ -395,14 +400,16 @@ export function ProjectDirectory({
                 </select>
               </label>
               <label>
-                Target date
+                <span>Target date</span>
                 <input name="targetDate" type="date" />
               </label>
               <label className="form-span">
-                Summary
+                <span>Summary</span>
                 <textarea name="summary" maxLength={5000} rows={3} />
               </label>
-              <button disabled={pending}>Create project</button>
+              <button type="submit" disabled={pending}>
+                Create project
+              </button>
             </form>
           ) : (
             <p>No active clients on this client page.</p>
@@ -443,7 +450,7 @@ export function ProjectDirectory({
           </nav>
         </details>
       </header>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? <output>{message}</output> : null}
       <form className="directory-search">
         <input type="hidden" name="clientPage" value={clientPageInfo.page} />
         <input
@@ -454,7 +461,9 @@ export function ProjectDirectory({
           defaultValue={query || ""}
           maxLength={120}
         />
-        <button className="button-secondary">Search</button>
+        <button type="submit" className="button-secondary">
+          Search
+        </button>
         {query ? (
           <Link href={`/app/${workspaceSlug}/projects`}>Clear</Link>
         ) : null}
@@ -684,6 +693,11 @@ export function ProjectOverview({
           >
             Commercial
           </Link>
+          <Link
+            href={`/app/${workspaceSlug}/projects/${project.key}/engineering`}
+          >
+            Engineering &amp; QA
+          </Link>
           <Link href={`/app/${workspaceSlug}/projects/${project.key}/activity`}>
             Activity
           </Link>
@@ -697,11 +711,11 @@ export function ProjectOverview({
             className="delivery-form delivery-form-grid"
           >
             <label className="form-span">
-              Project name
+              <span>Project name</span>
               <input name="name" defaultValue={project.name} required />
             </label>
             <label>
-              Lead
+              <span>Lead</span>
               <select name="leadUserId" defaultValue={project.leadUserId}>
                 {projectMembers.map((member) => (
                   <option value={member.userId} key={member.userId}>
@@ -711,7 +725,7 @@ export function ProjectOverview({
               </select>
             </label>
             <label>
-              Start date
+              <span>Start date</span>
               <input
                 name="startDate"
                 type="date"
@@ -719,7 +733,7 @@ export function ProjectOverview({
               />
             </label>
             <label>
-              Target date
+              <span>Target date</span>
               <input
                 name="targetDate"
                 type="date"
@@ -727,18 +741,20 @@ export function ProjectOverview({
               />
             </label>
             <label className="form-span">
-              Summary
+              <span>Summary</span>
               <textarea
                 name="summary"
                 rows={4}
                 defaultValue={project.summary || ""}
               />
             </label>
-            <button disabled={pending}>Save project</button>
+            <button type="submit" disabled={pending}>
+              Save project
+            </button>
           </form>
         </details>
       ) : null}
-      {message ? <p role="status">{message}</p> : null}
+      {message ? <output>{message}</output> : null}
       <section className="project-summary-strip" aria-label="Project status">
         {workflow.map(([id, label]) => (
           <div key={id}>
@@ -764,18 +780,20 @@ export function ProjectOverview({
                 <summary>New milestone</summary>
                 <form action={createMilestone} className="delivery-form">
                   <label>
-                    Name
+                    <span>Name</span>
                     <input name="name" required />
                   </label>
                   <label>
-                    Target date
+                    <span>Target date</span>
                     <input name="targetDate" type="date" />
                   </label>
                   <label>
-                    Description
+                    <span>Description</span>
                     <textarea name="description" rows={3} />
                   </label>
-                  <button disabled={pending}>Create milestone</button>
+                  <button type="submit" disabled={pending}>
+                    Create milestone
+                  </button>
                 </form>
               </details>
             ) : null}
@@ -811,7 +829,7 @@ export function ProjectOverview({
                       className="delivery-form"
                     >
                       <label>
-                        Name
+                        <span>Name</span>
                         <input
                           name="name"
                           defaultValue={milestone.name}
@@ -819,7 +837,7 @@ export function ProjectOverview({
                         />
                       </label>
                       <label>
-                        Target date
+                        <span>Target date</span>
                         <input
                           name="targetDate"
                           type="date"
@@ -827,14 +845,16 @@ export function ProjectOverview({
                         />
                       </label>
                       <label>
-                        Description
+                        <span>Description</span>
                         <textarea
                           name="description"
                           rows={3}
                           defaultValue={milestone.description || ""}
                         />
                       </label>
-                      <button disabled={pending}>Save milestone</button>
+                      <button type="submit" disabled={pending}>
+                        Save milestone
+                      </button>
                     </form>
                   </details>
                 </div>
@@ -859,6 +879,7 @@ export function ProjectOverview({
                 </span>
                 {canManage && member.userId !== project.leadUserId ? (
                   <button
+                    type="button"
                     className="danger-link"
                     onClick={() => removeMember(member)}
                     disabled={pending}
@@ -872,7 +893,7 @@ export function ProjectOverview({
           {canManage && available.length ? (
             <form action={addMember} className="inline-form">
               <label>
-                Add member
+                <span>Add member</span>
                 <select name="userId">
                   {available.map((member) => (
                     <option value={member.userId} key={member.userId}>
@@ -881,22 +902,30 @@ export function ProjectOverview({
                   ))}
                 </select>
               </label>
-              <button disabled={pending}>Add</button>
+              <button type="submit" disabled={pending}>
+                Add
+              </button>
             </form>
           ) : null}
           {canManage ? (
             <div className="lifecycle-actions">
               <span>Lifecycle</span>
               {project.lifecycle !== "active" ? (
-                <button onClick={() => updateLifecycle("active")}>
+                <button type="button" onClick={() => updateLifecycle("active")}>
                   Restore
                 </button>
               ) : (
                 <>
-                  <button onClick={() => updateLifecycle("completed")}>
+                  <button
+                    type="button"
+                    onClick={() => updateLifecycle("completed")}
+                  >
                     Complete
                   </button>
-                  <button onClick={() => updateLifecycle("archived")}>
+                  <button
+                    type="button"
+                    onClick={() => updateLifecycle("archived")}
+                  >
                     Archive
                   </button>
                 </>
@@ -1079,12 +1108,17 @@ export function BacklogWorkspace({
           >
             Commercial
           </Link>
+          <Link
+            href={`/app/${workspaceSlug}/projects/${project.key}/engineering`}
+          >
+            Engineering &amp; QA
+          </Link>
           <Link href={`/app/${workspaceSlug}/projects/${project.key}/activity`}>
             Activity
           </Link>
         </nav>
       </header>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? <output>{message}</output> : null}
       <div className="backlog-toolbar">
         <form className="backlog-filters">
           {filters.pageSize !== 50 ? (
@@ -1190,7 +1224,9 @@ export function BacklogWorkspace({
               </option>
             ))}
           </select>
-          <button className="button-secondary">Apply filters</button>
+          <button type="submit" className="button-secondary">
+            Apply filters
+          </button>
           {filtered ? (
             <Link
               href={`/app/${workspaceSlug}/projects/${project.key}/backlog`}
@@ -1223,6 +1259,7 @@ export function BacklogWorkspace({
               {group.items.map((item) => (
                 <article className="backlog-row" key={item.id}>
                   <button
+                    type="button"
                     className="work-summary"
                     onClick={() => setSelected(item)}
                   >
@@ -1253,12 +1290,14 @@ export function BacklogWorkspace({
                       aria-label={`Reorder ${item.identifier}`}
                     >
                       <button
+                        type="button"
                         title="Move up"
                         onClick={() => reorder(item, "up")}
                       >
                         ↑
                       </button>
                       <button
+                        type="button"
                         title="Move down"
                         onClick={() => reorder(item, "down")}
                       >
@@ -1294,11 +1333,11 @@ export function BacklogWorkspace({
         <summary>Manage labels</summary>
         <form action={createLabel} className="inline-form">
           <label>
-            Label name
+            <span>Label name</span>
             <input name="name" required maxLength={40} />
           </label>
           <label>
-            Color
+            <span>Color</span>
             <select name="color">
               {["slate", "blue", "green", "amber", "red", "violet"].map(
                 (color) => (
@@ -1307,15 +1346,16 @@ export function BacklogWorkspace({
               )}
             </select>
           </label>
-          <button disabled={pending}>Create label</button>
+          <button type="submit" disabled={pending}>
+            Create label
+          </button>
         </form>
       </details>
       {selected ? (
-        <div className="work-editor-backdrop" role="presentation">
-          <section
+        <div className="work-editor-backdrop">
+          <dialog
+            open
             className="work-editor"
-            role="dialog"
-            aria-modal="true"
             aria-labelledby="work-editor-title"
           >
             <header>
@@ -1324,6 +1364,7 @@ export function BacklogWorkspace({
                 <h2 id="work-editor-title">Edit work item</h2>
               </div>
               <button
+                type="button"
                 className="button-secondary"
                 onClick={() => setSelected(null)}
               >
@@ -1364,7 +1405,10 @@ export function BacklogWorkspace({
                           ? `Blocks ${dependency.blockedIdentifier} · ${dependency.blockedTitle}`
                           : `Blocked by ${dependency.blockerIdentifier} · ${dependency.blockerTitle}`}
                       </span>
-                      <button onClick={() => removeBlock(dependency)}>
+                      <button
+                        type="button"
+                        onClick={() => removeBlock(dependency)}
+                      >
                         Remove
                       </button>
                     </li>
@@ -1372,7 +1416,7 @@ export function BacklogWorkspace({
               </ul>
               <form action={addBlock} className="inline-form">
                 <label>
-                  This item blocks
+                  <span>This item blocks</span>
                   <select name="blockedWorkItemId" required>
                     {items
                       .filter((item) => item.id !== selected.id)
@@ -1383,15 +1427,19 @@ export function BacklogWorkspace({
                       ))}
                   </select>
                 </label>
-                <button disabled={pending || items.length < 2}>
+                <button type="submit" disabled={pending || items.length < 2}>
                   Add dependency
                 </button>
               </form>
             </section>
-            <button className="danger-link" onClick={() => archive(selected)}>
+            <button
+              type="button"
+              className="danger-link"
+              onClick={() => archive(selected)}
+            >
               Archive work item
             </button>
-          </section>
+          </dialog>
         </div>
       ) : null}
     </div>
@@ -1423,7 +1471,7 @@ export function WorkItemForm({
       className="delivery-form delivery-form-grid work-form"
     >
       <label className="form-span">
-        Title
+        <span>Title</span>
         <input
           name="title"
           required
@@ -1432,7 +1480,7 @@ export function WorkItemForm({
         />
       </label>
       <label>
-        Status
+        <span>Status</span>
         <select name="status" defaultValue={item?.status || "backlog"}>
           {workflow.map(([id, label]) => (
             <option value={id} key={id}>
@@ -1442,7 +1490,7 @@ export function WorkItemForm({
         </select>
       </label>
       <label>
-        Priority
+        <span>Priority</span>
         <select name="priority" defaultValue={item?.priority || "none"}>
           {["none", "low", "medium", "high", "urgent"].map((value) => (
             <option key={value}>{value}</option>
@@ -1450,7 +1498,7 @@ export function WorkItemForm({
         </select>
       </label>
       <label>
-        Assignee
+        <span>Assignee</span>
         <select name="assigneeUserId" defaultValue={item?.assigneeUserId || ""}>
           <option value="">Unassigned</option>
           {item?.assigneeUserId &&
@@ -1467,7 +1515,7 @@ export function WorkItemForm({
         </select>
       </label>
       <label>
-        Milestone
+        <span>Milestone</span>
         <select name="milestoneId" defaultValue={item?.milestoneId || ""}>
           <option value="">No milestone</option>
           {milestones
@@ -1485,7 +1533,7 @@ export function WorkItemForm({
         </select>
       </label>
       <label>
-        Cycle
+        <span>Cycle</span>
         <select name="cycleId" defaultValue={item?.cycleId || ""}>
           <option value="">Backlog / no cycle</option>
           {item?.cycleId &&
@@ -1513,7 +1561,7 @@ export function WorkItemForm({
         </select>
       </label>
       <label>
-        Estimate points
+        <span>Estimate points</span>
         <input
           name="estimatePoints"
           type="number"
@@ -1523,7 +1571,7 @@ export function WorkItemForm({
         />
       </label>
       <label>
-        Target date
+        <span>Target date</span>
         <input
           name="targetDate"
           type="date"
@@ -1532,7 +1580,7 @@ export function WorkItemForm({
       </label>
       {item || parents.length ? (
         <label className="form-span">
-          Parent work item
+          <span>Parent work item</span>
           <select name="parentId" defaultValue={item?.parentId || ""}>
             <option value="">Top-level work</option>
             {item?.parentId &&
@@ -1565,7 +1613,7 @@ export function WorkItemForm({
         {!labels.length ? <span>No labels created.</span> : null}
       </fieldset>
       <label className="form-span">
-        Description
+        <span>Description</span>
         <textarea
           name="description"
           rows={5}
@@ -1574,7 +1622,7 @@ export function WorkItemForm({
         />
       </label>
       <label className="form-span">
-        Acceptance criteria
+        <span>Acceptance criteria</span>
         <textarea
           name="acceptanceCriteria"
           rows={5}
@@ -1582,7 +1630,7 @@ export function WorkItemForm({
           defaultValue={item?.acceptanceCriteria || ""}
         />
       </label>
-      <button disabled={pending}>
+      <button type="submit" disabled={pending}>
         {item ? "Save changes" : "Create work item"}
       </button>
     </form>
@@ -1618,47 +1666,61 @@ function projectDirectoryHref(
   return `/app/${workspaceSlug}/projects?${query.toString()}`;
 }
 
-export function CommercialProvenanceBadge({
-  item,
-}: Readonly<{
-  item: Pick<
-    WorkItem,
-    | "purpose"
-    | "status"
-    | "archivedAt"
-    | "commercialBasisCount"
-    | "commercialHistoricalBasisCount"
-    | "commercialStaleBasisCount"
-  >;
-}>) {
+type CommercialProvenanceItem = Pick<
+  WorkItem,
+  | "purpose"
+  | "status"
+  | "archivedAt"
+  | "commercialBasisCount"
+  | "commercialHistoricalBasisCount"
+  | "commercialStaleBasisCount"
+>;
+
+function commercialProvenanceState(
+  item: CommercialProvenanceItem,
+): [string, string] {
   const historicalWork =
     item.status === "done" ||
     item.status === "canceled" ||
     Boolean(item.archivedAt);
-  const state =
-    item.purpose === "unclassified"
-      ? ["commercial-needs-classification", "Needs classification"]
-      : item.purpose === "client_delivery" &&
-          historicalWork &&
-          (item.commercialHistoricalBasisCount ?? 0) > 0
-        ? ["commercial-historical", "Historically authorized"]
-        : item.purpose === "client_delivery" &&
-            item.commercialBasisCount === 0 &&
-            (item.commercialStaleBasisCount ?? 0) > 0
-          ? ["commercial-stale", "Stale commercial basis"]
-          : item.purpose === "client_delivery" &&
-              item.commercialBasisCount === 0
-            ? ["commercial-unlinked", "Commercially unlinked"]
-            : item.purpose === "client_delivery"
-              ? ["commercial-linked", "Baseline linked"]
-              : item.purpose === "delivery_support"
-                ? ["commercial-support", "Delivery support"]
-                : ["commercial-internal", "Internal"];
+  if (item.purpose === "unclassified") {
+    return ["commercial-needs-classification", "Needs classification"];
+  }
+  if (
+    item.purpose === "client_delivery" &&
+    historicalWork &&
+    (item.commercialHistoricalBasisCount ?? 0) > 0
+  ) {
+    return ["commercial-historical", "Historically authorized"];
+  }
+  if (
+    item.purpose === "client_delivery" &&
+    item.commercialBasisCount === 0 &&
+    (item.commercialStaleBasisCount ?? 0) > 0
+  ) {
+    return ["commercial-stale", "Stale commercial basis"];
+  }
+  if (item.purpose === "client_delivery" && item.commercialBasisCount === 0) {
+    return ["commercial-unlinked", "Commercially unlinked"];
+  }
+  if (item.purpose === "client_delivery") {
+    return ["commercial-linked", "Baseline linked"];
+  }
+  if (item.purpose === "delivery_support") {
+    return ["commercial-support", "Delivery support"];
+  }
+  return ["commercial-internal", "Internal"];
+}
+
+export function CommercialProvenanceBadge({
+  item,
+}: Readonly<{ item: CommercialProvenanceItem }>) {
+  const state = commercialProvenanceState(item);
   return <span className={`commercial-badge ${state[0]}`}>{state[1]}</span>;
 }
 
 export function workItemPayload(formData: FormData) {
-  const estimate = String(formData.get("estimatePoints") ?? "");
+  const estimate = formText(formData, "estimatePoints");
   return {
     title: formData.get("title"),
     description: formData.get("description"),
@@ -1671,12 +1733,19 @@ export function workItemPayload(formData: FormData) {
     milestoneId: nullable(formData.get("milestoneId")),
     cycleId: nullable(formData.get("cycleId")),
     parentId: nullable(formData.get("parentId")),
-    labelIds: formData.getAll("labelIds"),
+    labelIds: formData
+      .getAll("labelIds")
+      .filter((value): value is string => typeof value === "string"),
   };
 }
 
 function nullable(value: FormDataEntryValue | null) {
-  return value ? String(value) : null;
+  return typeof value === "string" && value ? value : null;
+}
+
+function formText(formData: FormData, name: string) {
+  const value = formData.get(name);
+  return typeof value === "string" ? value : "";
 }
 
 export async function apiRequest(url: string, method: string, body: unknown) {

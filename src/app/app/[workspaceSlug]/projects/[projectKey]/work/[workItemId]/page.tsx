@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { WorkCollaborationWorkspace } from "@/components/collaboration-workspace";
 import { WorkCommercialPanel } from "@/components/commercial-workspace";
+import { WorkEngineeringPanel } from "@/components/engineering-workspace";
 import { paginationSchema } from "@/lib/delivery-validation";
 import { parseInput } from "@/lib/platform-validation";
 import { requireSession } from "@/lib/session";
@@ -16,7 +17,10 @@ import {
   listCommercialBasisOptions,
 } from "@/server/commercial";
 import { getProjectByKey, getWorkItem } from "@/server/delivery";
+import { getDeliveryEvidenceTrace } from "@/server/engineering-delivery";
 import { getWorkspaceBySlug } from "@/server/workspaces";
+
+type SearchParamValue = string | string[] | undefined;
 
 export default async function WorkCollaborationPage({
   params,
@@ -27,7 +31,7 @@ export default async function WorkCollaborationPage({
     projectKey: string;
     workItemId: string;
   }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+  searchParams: Promise<Record<string, SearchParamValue>>;
 }>) {
   const session = await requireSession();
   const actor = { userId: session.user.id, email: session.user.email };
@@ -63,6 +67,7 @@ export default async function WorkCollaborationPage({
           canManage={data.canManageCommercial}
         />
       }
+      engineeringPanel={<WorkEngineeringPanel trace={data.engineeringTrace} />}
     />
   );
 }
@@ -99,6 +104,7 @@ async function loadWorkCollaboration(
       subscription,
       provenance,
       basisOptions,
+      engineeringTrace,
     ] = await Promise.all([
       getWorkItem(actor, workspace.id, project.id, workItemId),
       listComments(
@@ -122,6 +128,7 @@ async function loadWorkCollaboration(
       canManageCommercial
         ? listCommercialBasisOptions(actor, workspace.id, project.id)
         : Promise.resolve([]),
+      getDeliveryEvidenceTrace(actor, workspace.id, project.id, workItemId),
     ]);
     return {
       workspace,
@@ -133,6 +140,7 @@ async function loadWorkCollaboration(
       subscription,
       provenance,
       basisOptions,
+      engineeringTrace,
       canManageCommercial,
     };
   } catch {

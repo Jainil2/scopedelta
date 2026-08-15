@@ -143,7 +143,7 @@ Warnings are advisory by default; they do not silently block delivery.
 
 Layer 2 remains Local/LAN and does not require semantic AI, OCR SaaS, e-signature, CRM, billing or another paid provider.
 
-### Layer 3 — Client Collaboration & Negotiation — RESEARCH COMPLETE / IMPLEMENTATION ACTIVE
+### Layer 3 — Client Collaboration & Negotiation — COMPLETE
 
 Durable research: `docs/research/LAYER3_CLIENT_COLLABORATION_RESEARCH_2026-08.md`.
 
@@ -235,20 +235,22 @@ External client participants should not consume normal paid internal employee se
 - The former SC-007A/B/C issues #36/#37/#38 are closed as superseded. Their
   boundaries remain implementation phases within SC-007, not separate releases.
 
-### Layer 4 — Engineering & QA Delivery Loop
+### Layer 4 — Engineering & QA Delivery Loop — RESEARCH COMPLETE / IMPLEMENTED FOR REVIEW
+
+Durable research: `docs/research/LAYER4_ENGINEERING_QA_DELIVERY_LOOP_RESEARCH_2026-08.md`.
 
 Connect delivery planning with engineering evidence without rebuilding source-control infrastructure:
 
-- GitHub/GitLab repository integration;
-- link work items to branches, commits, pull/merge requests and CI state;
-- development/review/release readiness;
-- bugs/defects and test evidence;
-- requirement/acceptance-criteria coverage;
+- read-only GitHub App repository integration through a provider-neutral evidence boundary, with a signed workspace/user setup state and GitHub user authorization proving repository-administrator authority for the exact installation repository;
+- manual and project-key links between work and pull-request evidence;
+- current pull-request, head, review and check rollups plus immutable historical snapshots;
+- lightweight manual/automated-reference QA verification and project defects;
+- factual requirement, implementation, verification, defect and acceptance evidence gaps;
 - trace requested → commercially authorized → planned → implemented → tested → accepted.
 
-ScopeDelta does not initially host Git repositories or build its own CI/CD runner platform.
+The local QA, defect, trace and readiness core remains useful with no provider connected. GitHub metadata is external evidence and is marked stale rather than deleted when access fails or is disconnected. Engineering and QA detail is internal-only and never inherits into the client projection.
 
-SC-008 research begins only after Layer 3 is complete.
+ScopeDelta does not host Git repositories, execute CI, render a code-review/diff UI or become a full test-management system. GitLab remains deferred behind the provider boundary until customer evidence justifies it.
 
 ### Layer 5 — AI-Native Delivery Intelligence
 
@@ -412,6 +414,8 @@ Layer 2 additionally avoids rebuilding PSA financial operations, CRM pipelines, 
 
 Layer 3 additionally avoids a generic portal builder, generic guest-permission framework, creative proofing suite, legal e-signature system and public anonymous project portal.
 
+Layer 4 additionally avoids Git hosting, CI execution, a code-review/diff surface, GitLab implementation and a generic test-case management suite.
+
 ## Production release principle
 
 A landing page or isolated AI demo is not a product release.
@@ -428,10 +432,12 @@ See:
 - `docs/research/LAYER1_DELIVERY_CORE_RESEARCH_2026-08.md`
 - `docs/research/LAYER2_COMMERCIAL_DELIVERY_GRAPH_RESEARCH_2026-08.md`
 - `docs/research/LAYER3_CLIENT_COLLABORATION_RESEARCH_2026-08.md`
+- `docs/research/LAYER4_ENGINEERING_QA_DELIVERY_LOOP_RESEARCH_2026-08.md`
 - `docs/research/DEPLOYMENT_RUNTIME_LICENSE_THESIS_2026-08.md`
 - `docs/FEATURE_RUNTIME_MATRIX.md`
 - SC-006 / #10 — complete
 - SC-007 / #11 — consolidated Layer-3 implementation; #36/#37/#38 superseded
+- SC-008 / #12 — consolidated Layer-4 engineering and QA delivery evidence
 - LIC-001
 - ARCH-001
 - DX-001

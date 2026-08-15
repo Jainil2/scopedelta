@@ -59,3 +59,68 @@ export function getSmtpConfig(): SmtpConfig {
 
   return { host, port, secure, user, password, from };
 }
+
+export type GitHubAppConfig = {
+  appId: string;
+  clientId: string;
+  clientSecret: string;
+  privateKey: string;
+  webhookSecret: string;
+  slug: string;
+};
+
+export function getGitHubAppConfig(): GitHubAppConfig {
+  const appId = process.env.GITHUB_APP_ID?.trim();
+  const clientId = process.env.GITHUB_APP_CLIENT_ID?.trim();
+  const clientSecret = process.env.GITHUB_APP_CLIENT_SECRET?.trim();
+  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY?.replaceAll(
+    String.raw`\n`,
+    "\n",
+  ).trim();
+  const webhookSecret = process.env.GITHUB_APP_WEBHOOK_SECRET?.trim();
+  const slug = process.env.GITHUB_APP_SLUG?.trim();
+  if (
+    !appId ||
+    !/^\d+$/.test(appId) ||
+    !clientId ||
+    !clientSecret ||
+    !privateKey ||
+    !webhookSecret ||
+    !slug
+  ) {
+    throw new Error("github_app_unconfigured");
+  }
+  if (webhookSecret.length < 24 || !/^[A-Za-z0-9-]+$/.test(slug)) {
+    throw new Error("github_app_unconfigured");
+  }
+  return { appId, clientId, clientSecret, privateKey, webhookSecret, slug };
+}
+
+export function getGitHubAppCallbackUrl() {
+  return `${getAppUrl()}/api/v1/integrations/github/callback`;
+}
+
+export function getGitHubAppInstallUrl(state: string) {
+  const { slug } = getGitHubAppConfig();
+  const url = new URL(`https://github.com/apps/${slug}/installations/new`);
+  url.searchParams.set("state", state);
+  return url.toString();
+}
+
+export function getGitHubAppAuthorizeUrl(state: string) {
+  const { clientId } = getGitHubAppConfig();
+  const url = new URL("https://github.com/login/oauth/authorize");
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("redirect_uri", getGitHubAppCallbackUrl());
+  url.searchParams.set("state", state);
+  return url.toString();
+}
+
+export function isGitHubAppConfigured() {
+  try {
+    getGitHubAppConfig();
+    return true;
+  } catch {
+    return false;
+  }
+}

@@ -13,7 +13,7 @@ export default defineConfig({
   outputDir: "output/playwright",
   timeout: 60_000,
   expect: { timeout: 10_000 },
-  fullyParallel: false,
+  fullyParallel: true,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI
@@ -35,7 +35,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm dev --port ${port}`,
+    command: process.env.CI
+      ? `pnpm start --port ${port}`
+      : `pnpm dev --port ${port}`,
     url: baseURL,
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,

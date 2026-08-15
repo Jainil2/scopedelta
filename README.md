@@ -75,6 +75,11 @@ connection is required for the Layer-0 workspace kernel.
 | `SMTP_USER`, `SMTP_PASSWORD`            | Optional SMTP credentials; set both or neither.                      |
 | `SMTP_FROM`                             | Verified sender identity.                                            |
 | `LEAD_WEBHOOK_URL`                      | Optional paid-pilot receiver.                                        |
+| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`      | Optional read-only GitHub engineering-evidence app identity.         |
+| `GITHUB_APP_CLIENT_ID`                  | Optional GitHub user-authorization flow identity.                    |
+| `GITHUB_APP_CLIENT_SECRET`              | Optional server-only GitHub user-authorization secret.               |
+| `GITHUB_APP_PRIVATE_KEY`                | Optional server-only GitHub App signing key.                         |
+| `GITHUB_APP_WEBHOOK_SECRET`             | Optional secret for `/api/v1/integrations/github/webhook`.           |
 
 All variables above are server-only. Only intentionally public, non-secret
 values may use `NEXT_PUBLIC_`. Never expose database URLs, auth secrets, SMTP
@@ -89,6 +94,23 @@ Netlify. The public
 landing page still renders when platform services are unavailable.
 `LEAD_WEBHOOK_URL` is independently required only to accept paid-pilot
 submissions.
+
+When GitHub evidence is enabled, create a read-only GitHub App, configure the
+six `GITHUB_APP_*` values, and point its webhook to
+`https://<your-host>/api/v1/integrations/github/webhook`. Use explicit
+repository grants. Grant read-only repository permissions for metadata, pull
+requests, checks and commit statuses, then subscribe to pull request, pull
+request review, check run, check suite and status events. ScopeDelta
+uses `https://<your-host>/api/v1/integrations/github/callback` as both the App
+setup URL and user-authorization callback URL. Keep "Request user authorization
+during installation" disabled: ScopeDelta starts that authorization itself
+after validating its signed workspace/user setup state, then verifies repository
+administrator authority for the exact installation repository through the
+resulting user token.
+ScopeDelta immediately discards that user token and
+stores bounded PR/review/check metadata, not source, diffs, CI logs, webhook
+payloads or installation tokens. QA, defects and readiness continue to work
+without this optional integration.
 
 ## Database workflow
 

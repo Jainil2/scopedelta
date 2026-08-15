@@ -136,7 +136,7 @@ Layer 2 was implemented through SC-006A/B/C (#30/#31/#32) and completed with PR 
 
 Required Layer-2 behavior is Local/LAN with no mandatory AI/OCR/document SaaS/paid provider.
 
-## Layer 3 — Client Collaboration & Negotiation — RESEARCH COMPLETE / IMPLEMENTATION ACTIVE
+## Layer 3 — Client Collaboration & Negotiation — COMPLETE
 
 ### Outcome
 Clients participate in the same authoritative commercial/delivery lifecycle without seeing the internal engineering workspace or forcing PMs to copy project truth into a separate portal.
@@ -201,7 +201,7 @@ Layer 3 introduces **no mandatory paid external provider**.
 
 External client participants should not consume normal paid internal employee seats; exact hosted pricing/limits remain SC-010/founder scope.
 
-### SC-007 / #11 — consolidated Layer-3 implementation — IMPLEMENTED / IN REVIEW
+### SC-007 / #11 — consolidated Layer-3 implementation — COMPLETE
 
 SC-007 is intentionally one engineering issue and one primary PR. The previously proposed SC-007A/B/C issues #36/#37/#38 are closed as superseded. Their boundaries remain useful internal implementation phases only:
 
@@ -242,15 +242,30 @@ SC-007 is complete and product-reviewed. A client can securely access only their
 Planning, implementation, QA and acceptance form one traceable delivery chain.
 
 ### Status
-Blocked until Layer 3 is complete and the required SC-008 research checkpoint is performed.
+Research complete 2026-08-12. SC-008 / #12 is implemented as one coherent review candidate.
 
-### Scope direction
-- GitHub integration first, GitLab when justified;
-- work ↔ branch/commit/PR/CI evidence;
-- bugs/defects and lightweight QA verification;
-- requirement/acceptance-criteria coverage;
-- release readiness;
-- trace requested → commercially authorized → planned → implemented → tested → accepted.
+Durable research: `docs/research/LAYER4_ENGINEERING_QA_DELIVERY_LOOP_RESEARCH_2026-08.md`.
+
+### Validated Layer-4 boundary
+
+- a least-privilege read-only GitHub App connects only explicitly granted repositories after a signed ScopeDelta setup state and GitHub user authorization prove the initiating user has repository-administrator authority for that exact installation repository;
+- provider-neutral normalized pull-request evidence stores bounded metadata, review/check rollups and immutable state snapshots, not code, diffs or logs;
+- title/branch project keys can link evidence automatically within the same project, while manual many-to-many linking remains authoritative and removable;
+- signed, deduplicated webhooks update evidence, bounded reconciliation repairs missed/out-of-order delivery, and disconnect/outage preserves history as stale;
+- append-only verification records and lightweight defects link to the Commercial Delivery Graph, work, implementation and acceptance evidence;
+- evidence coverage/readiness is a factual gap list with drill-down, never an opaque health score;
+- local QA, defects, traceability and readiness remain useful without a provider connection;
+- client acceptance remains distinct historical evidence and is never rewritten by QA or defect state.
+
+GitLab, Git hosting, CI execution, a code-review/diff UI and full test-management remain explicitly out of scope.
+
+### SC-008 / #12 — consolidated Layer-4 implementation — IMPLEMENTED / IN REVIEW
+
+The issue's provider spine, engineering mapping and QA/readiness sections are internal phases in one primary PR, not separate releases.
+
+### Review and merge validation
+
+CEO product/security review uses the exact PR head plus focused migration, provider-state, authorization and browser evidence. Once no product/security blockers remain, ordinary feature scope freezes and the complete hosted migration/lint/typecheck/unit/integration/E2E/build/smoke/container gate runs once on the exact merge-candidate SHA.
 
 Do not build Git hosting or a CI/CD runner platform.
 
@@ -327,7 +342,7 @@ Every capability must be classified before implementation as one of:
 
 `docs/FEATURE_RUNTIME_MATRIX.md` is the durable inventory and RS-002 maintains it.
 
-Current validated totals after Layer-3 research:
+Current validated totals after Layer-4 research:
 
 - Total planned capability units: 98
 - Local/LAN: 63
@@ -356,8 +371,8 @@ Current sequence:
 1. SC-004 / #8 — Layer 0 Platform Kernel — **DONE**.
 2. SC-005 / #9 — Layer 1 Delivery Core — **DONE**.
 3. SC-006 / #10 — Layer 2 Commercial Delivery Graph — **DONE**.
-4. SC-007 / #11 — Layer 3 client collaboration/negotiation/acceptance — **IMPLEMENTED / IN REVIEW** as one consolidated task/primary PR.
-5. SC-008 / #12 — Layer 4 engineering/QA evidence — blocked until Layer 3 completion + research.
+4. SC-007 / #11 — Layer 3 client collaboration/negotiation/acceptance — **DONE** as one consolidated task/primary PR.
+5. SC-008 / #12 — Layer 4 engineering/QA evidence — **IMPLEMENTED / IN REVIEW** as one consolidated task/primary PR.
 6. SC-009 / #17 — Layer 5 AI-native delivery intelligence.
 7. SC-010 / #13 — Layer 6 subscription/cloud economics/source distribution.
 8. SC-011 / #14 — Layer 7 portfolio/operations/self-service scale.

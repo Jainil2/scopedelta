@@ -191,7 +191,7 @@ function MentionControl({
     <div className="mention-picker">
       <div className="mention-search">
         <label>
-          Find member
+          <span>Find member</span>
           <input
             value={query}
             maxLength={100}
@@ -216,7 +216,7 @@ function MentionControl({
       </div>
       <div className="mention-control">
         <label>
-          Mention
+          <span>Mention</span>
           <select
             value={userId}
             onChange={(event) => setUserId(event.target.value)}
@@ -243,11 +243,7 @@ function MentionControl({
           Insert mention
         </button>
       </div>
-      {status ? (
-        <p className="metadata" role="status">
-          {status}
-        </p>
-      ) : null}
+      {status ? <output className="metadata">{status}</output> : null}
       {resultPage && resultPage.pages > 1 ? (
         <div className="mention-result-pages">
           <button
@@ -387,7 +383,7 @@ export function ProjectBriefWorkspace({
             </h2>
           </div>
           <label>
-            Title
+            <span>Title</span>
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
@@ -396,7 +392,7 @@ export function ProjectBriefWorkspace({
             />
           </label>
           <label>
-            Context
+            <span>Context</span>
             <textarea
               value={body}
               onChange={(event) => setBody(event.target.value)}
@@ -620,6 +616,7 @@ export function WorkCollaborationWorkspace({
   members,
   initialWatching,
   commercialPanel,
+  engineeringPanel,
 }: Readonly<{
   actorUserId: string;
   workspaceId: string;
@@ -633,6 +630,7 @@ export function WorkCollaborationWorkspace({
   members: Member[];
   initialWatching: boolean;
   commercialPanel?: ReactNode;
+  engineeringPanel?: ReactNode;
 }>) {
   const router = useRouter();
   const [comments, setComments] = useState(initialComments);
@@ -762,6 +760,7 @@ export function WorkCollaborationWorkspace({
         </button>
       </header>
       {commercialPanel}
+      {engineeringPanel}
       <div className="work-collaboration-grid">
         <div className="discussion-thread">
           <div className="section-heading">
@@ -968,7 +967,7 @@ function CommentRow({
           }}
         >
           <label>
-            Edit comment
+            <span>Edit comment</span>
             <textarea
               value={editBody}
               onChange={(event) => setEditBody(event.target.value)}
@@ -978,7 +977,9 @@ function CommentRow({
             />
           </label>
           <div className="comment-actions">
-            <button disabled={busy}>Save edit</button>
+            <button type="submit" disabled={busy}>
+              Save edit
+            </button>
             <button
               type="button"
               className="text-button"

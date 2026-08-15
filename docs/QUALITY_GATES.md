@@ -147,9 +147,11 @@ check. Never paste the secret into logs, issues, fixtures, or review comments.
 ## Caching and trust boundary
 
 Node setup uses pnpm's content-addressed store cache while every job still runs
-`pnpm install --frozen-lockfile --ignore-scripts`. The full browser job caches
-only Playwright's Chromium binary, keyed by the complete lockfile hash; system
-dependencies are installed on every fresh runner. Source, generated build
-output, databases, test results, and containers are not restored from cache.
-This limits stale-result risk while avoiding repeated dependency/browser
-downloads.
+`pnpm install --frozen-lockfile --ignore-scripts`. The full browser gate runs
+two isolated Playwright shards in parallel, each with its own ephemeral
+PostgreSQL and Mailpit services. Each shard caches only Playwright's Chromium
+binary, keyed by the complete lockfile hash; system dependencies are installed
+on every fresh runner. Failure diagnostics are retained for seven days. Source,
+generated build output, databases, test results, and containers are not restored
+from cache. This limits stale-result risk while avoiding repeated
+dependency/browser downloads.

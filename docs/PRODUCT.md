@@ -252,7 +252,9 @@ The local QA, defect, trace and readiness core remains useful with no provider c
 
 ScopeDelta does not host Git repositories, execute CI, render a code-review/diff UI or become a full test-management system. GitLab remains deferred behind the provider boundary until customer evidence justifies it.
 
-### Layer 5 — AI-Native Delivery Intelligence
+### Layer 5 — AI-Native Delivery Intelligence — IMPLEMENTED FOR REVIEW
+
+Durable research: `docs/research/LAYER5_AI_NATIVE_DELIVERY_INTELLIGENCE_RESEARCH_2026-08.md`.
 
 AI is a system layer, not a decorative chatbot:
 
@@ -265,6 +267,15 @@ AI is a system layer, not a decorative chatbot:
 - surface project health/drift from graph state;
 - take bounded actions with permission, audit and cost controls;
 - support managed AI plus BYO/local-model paths where practical.
+
+SC-009 implements three internal jobs: Scope Change Analyst, Delivery Risk
+Brief, and Work Context & QA Pack. Jobs use bounded immutable evidence
+snapshots, server-issued citation keys, durable PostgreSQL attempts, explicit
+retry/cancel, staleness fingerprints, and one deployment-selected OpenAI,
+Anthropic, Gemini, or Ollama adapter. Scope candidates may create only
+human-confirmed backlog/unclassified work and internal clarification drafts.
+They never change commercial authorization, client publication, delivery
+completion, or acceptance.
 
 AI may propose classifications/actions but may not fabricate commercial authorization, client approval or completion evidence.
 

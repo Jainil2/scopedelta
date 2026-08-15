@@ -1,0 +1,27 @@
+{
+  "kind": "scope_change_analysis",
+  "targetLabel": "Export request",
+  "facts": [
+    {
+      "evidenceKey": "ev_request_001",
+      "type": "request",
+      "label": "Add export workflow",
+      "content": {
+        "title": "Add export workflow",
+        "requestText": "A synthetic sponsor requests a CSV export.",
+        "state": "open"
+      }
+    },
+    {
+      "evidenceKey": "ev_baseline_002",
+      "type": "baseline",
+      "label": "Original delivery",
+      "content": {
+        "label": "Original delivery",
+        "versionNumber": 1,
+        "state": "effective"
+      }
+    }
+  ],
+  "truncated": false
+}

@@ -1309,6 +1309,15 @@ const ACTIVITY_LABELS: Record<string, string> = {
   "work_item.purpose.updated.v1": "classified the work item",
   "work_item.commercial_basis.linked.v1": "linked commercial basis",
   "work_item.commercial_basis.unlinked.v1": "removed commercial basis",
+  "ai_job.created.v1": "started an AI delivery analysis",
+  "ai_job.succeeded.v1": "generated an evidence-grounded AI result",
+  "ai_action.confirmed.v1": "confirmed AI-generated draft records",
+  "ai_work_candidate.created.v1": "generated draft backlog work",
+  "ai_clarification_candidate.created.v1":
+    "generated an internal clarification draft",
+  "commercial_clarification.resolved.v1": "resolved an AI clarification draft",
+  "commercial_clarification.dismissed.v1":
+    "dismissed an AI clarification draft",
 };
 
 export async function listActivity(
@@ -1370,9 +1379,12 @@ export async function listActivity(
   return pageResult(
     rows.map((row) => ({
       ...row,
-      actorName: row.actorId
-        ? (names.get(row.actorId) ?? "Former member")
-        : "System",
+      actorName:
+        row.actorType === "ai_agent"
+          ? "AI agent"
+          : row.actorId
+            ? (names.get(row.actorId) ?? "Former member")
+            : "System",
       description: ACTIVITY_LABELS[row.eventType] ?? "updated the project",
     })),
     filters.page,

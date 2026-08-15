@@ -180,6 +180,34 @@ export const workPurpose = pgEnum("work_purpose", [
   "internal",
 ]);
 
+export const aiJobKind = pgEnum("ai_job_kind", [
+  "scope_change_analysis",
+  "delivery_risk_brief",
+  "work_context_qa_pack",
+]);
+export const aiJobStatus = pgEnum("ai_job_status", [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "canceled",
+]);
+export const aiAttemptStatus = pgEnum("ai_attempt_status", [
+  "running",
+  "succeeded",
+  "failed",
+  "canceled",
+]);
+export const aiClarificationStatus = pgEnum("ai_clarification_status", [
+  "draft",
+  "resolved",
+  "dismissed",
+]);
+export const aiActionRecordType = pgEnum("ai_action_record_type", [
+  "work_item",
+  "clarification",
+]);
+
 export const commercialSourceKind = pgEnum("commercial_source_kind", [
   "pasted_text",
   "pdf",
@@ -3185,6 +3213,238 @@ export const defects = pgTable(
   ],
 );
 
+export const aiJobs = pgTable(
+  "ai_jobs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    kind: aiJobKind("kind").notNull(),
+    status: aiJobStatus("status").default("queued").notNull(),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    requestId: uuid("request_id"),
+    milestoneId: uuid("milestone_id"),
+    workItemId: uuid("work_item_id"),
+    promptVersion: text("prompt_version").notNull(),
+    contextSnapshot: jsonb("context_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    evidenceMap: jsonb("evidence_map")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    contextFingerprint: text("context_fingerprint").notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.projectId, table.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: "ai_jobs_project_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.requestId, table.projectId],
+      foreignColumns: [commercialRequests.id, commercialRequests.projectId],
+      name: "ai_jobs_request_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.milestoneId, table.projectId],
+      foreignColumns: [milestones.id, milestones.projectId],
+      name: "ai_jobs_milestone_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.workItemId, table.projectId],
+      foreignColumns: [workItems.id, workItems.projectId],
+      name: "ai_jobs_work_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("ai_jobs_project_creator_idempotency_uidx").on(
+      table.projectId,
+      table.createdByUserId,
+      table.idempotencyKey,
+    ),
+    index("ai_jobs_project_created_idx").on(
+      table.projectId,
+      table.createdAt,
+      table.id,
+    ),
+    index("ai_jobs_status_lease_idx").on(table.status, table.leaseExpiresAt),
+    check(
+      "ai_jobs_target_shape",
+      sql`(${table.kind} = 'scope_change_analysis' and ${table.requestId} is not null and ${table.milestoneId} is null and ${table.workItemId} is null) or (${table.kind} = 'delivery_risk_brief' and ${table.requestId} is null and ${table.workItemId} is null) or (${table.kind} = 'work_context_qa_pack' and ${table.requestId} is null and ${table.milestoneId} is null and ${table.workItemId} is not null)`,
+    ),
+    check(
+      "ai_jobs_lease_consistency",
+      sql`(${table.status} = 'running' and ${table.leaseOwner} is not null and ${table.leaseExpiresAt} is not null) or (${table.status} <> 'running' and ${table.leaseOwner} is null and ${table.leaseExpiresAt} is null)`,
+    ),
+  ],
+);
+
+export const aiJobAttempts = pgTable(
+  "ai_job_attempts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => aiJobs.id, { onDelete: "cascade" }),
+    attemptNumber: integer("attempt_number").notNull(),
+    status: aiAttemptStatus("status").default("running").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    providerRequestId: text("provider_request_id"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    cachedInputTokens: integer("cached_input_tokens"),
+    durationMs: integer("duration_ms"),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("ai_job_attempts_job_number_uidx").on(
+      table.jobId,
+      table.attemptNumber,
+    ),
+    index("ai_job_attempts_job_started_idx").on(
+      table.jobId,
+      table.startedAt,
+      table.id,
+    ),
+    check("ai_job_attempts_number_positive", sql`${table.attemptNumber} > 0`),
+  ],
+);
+
+export const aiActionExecutions = pgTable(
+  "ai_action_executions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => aiJobs.id, { onDelete: "restrict" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "restrict" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "restrict" }),
+    confirmedByUserId: uuid("confirmed_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    selection: jsonb("selection")
+      .$type<{
+        workCandidateKeys: string[];
+        clarificationCandidateKeys: string[];
+      }>()
+      .notNull(),
+    contextFingerprint: text("context_fingerprint").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("ai_action_executions_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    uniqueIndex("ai_action_executions_job_idempotency_uidx").on(
+      table.jobId,
+      table.idempotencyKey,
+    ),
+    index("ai_action_executions_project_created_idx").on(
+      table.projectId,
+      table.createdAt,
+      table.id,
+    ),
+  ],
+);
+
+export const commercialRequestClarifications = pgTable(
+  "commercial_request_clarifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
+    question: text("question").notNull(),
+    status: aiClarificationStatus("status").default("draft").notNull(),
+    originatingJobId: uuid("originating_job_id")
+      .notNull()
+      .references(() => aiJobs.id, { onDelete: "restrict" }),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    resolvedByUserId: uuid("resolved_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("commercial_request_clarifications_id_project_unique").on(
+      table.id,
+      table.projectId,
+    ),
+    foreignKey({
+      columns: [table.requestId, table.projectId],
+      foreignColumns: [commercialRequests.id, commercialRequests.projectId],
+      name: "commercial_request_clarifications_request_project_fk",
+    }).onDelete("cascade"),
+    index("commercial_request_clarifications_request_status_idx").on(
+      table.requestId,
+      table.status,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      "commercial_request_clarifications_question_length",
+      sql`char_length(btrim(${table.question})) between 1 and 2000`,
+    ),
+    check(
+      "commercial_request_clarifications_resolution_consistency",
+      sql`(${table.status} = 'draft' and ${table.resolvedAt} is null and ${table.resolvedByUserId} is null) or (${table.status} <> 'draft' and ${table.resolvedAt} is not null and ${table.resolvedByUserId} is not null)`,
+    ),
+  ],
+);
+
+export const aiActionRecords = pgTable(
+  "ai_action_records",
+  {
+    executionId: uuid("execution_id")
+      .notNull()
+      .references(() => aiActionExecutions.id, { onDelete: "cascade" }),
+    candidateKey: text("candidate_key").notNull(),
+    recordType: aiActionRecordType("record_type").notNull(),
+    recordId: uuid("record_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.executionId, table.candidateKey] }),
+    index("ai_action_records_record_idx").on(table.recordType, table.recordId),
+  ],
+);
+
 export const providerWebhookDeliveries = pgTable(
   "provider_webhook_deliveries",
   {
@@ -3228,6 +3488,11 @@ export type CycleLifecycle = (typeof cycleLifecycle.enumValues)[number];
 export type WorkItemStatus = (typeof workItemStatus.enumValues)[number];
 export type WorkItemPriority = (typeof workItemPriority.enumValues)[number];
 export type WorkPurpose = (typeof workPurpose.enumValues)[number];
+export type AiJobKind = (typeof aiJobKind.enumValues)[number];
+export type AiJobStatus = (typeof aiJobStatus.enumValues)[number];
+export type AiAttemptStatus = (typeof aiAttemptStatus.enumValues)[number];
+export type AiClarificationStatus =
+  (typeof aiClarificationStatus.enumValues)[number];
 export type CommercialSourceKind =
   (typeof commercialSourceKind.enumValues)[number];
 export type CommercialParseState =

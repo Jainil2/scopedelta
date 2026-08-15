@@ -311,6 +311,17 @@ export function EngineeringWorkspace({
           value={coverage.summary.pendingAcceptance ?? 0}
         />
       </section>
+      <div className="engineering-ai-entry">
+        <Link
+          className="button-link secondary"
+          href={`/app/${workspaceSlug}/projects/${project.key}/ai?kind=delivery_risk_brief`}
+        >
+          Interpret delivery risk
+        </Link>
+        <span className="metadata">
+          Deterministic readiness facts remain separate from AI interpretation.
+        </span>
+      </div>
 
       <section className="engineering-section">
         <div className="section-heading">
@@ -890,7 +901,8 @@ type DeliveryEvidenceTrace = {
 
 export function WorkEngineeringPanel({
   trace,
-}: Readonly<{ trace: DeliveryEvidenceTrace }>) {
+  aiHref,
+}: Readonly<{ trace: DeliveryEvidenceTrace; aiHref?: string }>) {
   return (
     <section className="commercial-provenance engineering-work-trace">
       <div className="section-heading">
@@ -898,6 +910,11 @@ export function WorkEngineeringPanel({
           <p className="eyebrow">Engineering &amp; QA evidence</p>
           <h2>{trace.work.identifier} delivery trace</h2>
         </div>
+        {aiHref ? (
+          <Link className="button-link secondary" href={aiHref}>
+            Create work &amp; QA pack
+          </Link>
+        ) : null}
       </div>
       <div className="engineering-work-trace-grid">
         <div>

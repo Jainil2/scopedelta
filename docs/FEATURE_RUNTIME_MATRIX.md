@@ -2,7 +2,7 @@
 
 ## Status
 
-Planning baseline, updated 2026-08-12 after the Layer-4 Engineering & QA Delivery Loop research checkpoint and SC-008 implementation. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
+Planning baseline, updated 2026-08-15 after the Layer-5 AI-Native Delivery Intelligence research checkpoint and SC-009 implementation. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
 
 ## Current capability count
 
@@ -167,19 +167,23 @@ Layer-4 runtime rules:
 
 ## Layer 5 — AI-Native Delivery Intelligence
 
-| Capability | Runtime class |
-|---|---|
-| AI provider abstraction | Hybrid/optional external |
-| Local/BYO model support | Local/LAN |
-| Requirement/work-item generation | Hybrid/optional external |
-| Commercial/scope reasoning | Hybrid/optional external |
+Layer-5 research and SC-009 are complete for review. See
+`docs/research/LAYER5_AI_NATIVE_DELIVERY_INTELLIGENCE_RESEARCH_2026-08.md` and
+`docs/decisions/ADR-011-ai-provider-data-and-action-boundary.md`.
+
+| Capability | Runtime class | Delivered slice |
+|---|---|---|
+| AI provider abstraction | Hybrid/optional external | SC-009; exactly one deployment-selected provider/model, no fallback |
+| Local/BYO model support | Local/LAN | SC-009; explicit Ollama endpoint/model, no automatic download |
+| Requirement/work-item generation | Hybrid/optional external | SC-009; previewed backlog/unclassified drafts only |
+| Commercial/scope reasoning | Hybrid/optional external | SC-009 Scope Change Analyst with citations and uncertainty |
 | PM backlog hygiene | Hybrid/optional external |
-| Dependency/risk/replanning assistant | Hybrid/optional external |
-| Developer context assistant | Hybrid/optional external |
-| QA test/risk assistant | Hybrid/optional external |
+| Dependency/risk/replanning assistant | Hybrid/optional external | SC-009 Delivery Risk Brief; facts remain server-authored |
+| Developer context assistant | Hybrid/optional external | SC-009 Work Context & QA Pack |
+| QA test/risk assistant | Hybrid/optional external | SC-009 cited draft test scenarios |
 | Client-safe AI summaries | Hybrid/optional external |
-| Bounded AI actions/agents | Hybrid/optional external |
-| AI evals/usage/cost controls | Local/LAN |
+| Bounded AI actions/agents | Hybrid/optional external | SC-009 human-confirmed work and internal clarification drafts |
+| AI evals/usage/cost controls | Local/LAN | SC-009 durable usage, limits, synthetic fixtures, provider-neutral runner |
 
 ## Layer 6 — Cloud Economics & Distribution
 

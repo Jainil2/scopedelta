@@ -50,6 +50,10 @@ export default defineConfig({
       SMTP_SECURE: "false",
       SMTP_FROM: "ScopeDelta <no-reply@scopedelta.local>",
       NEXT_TELEMETRY_DISABLED: "1",
+      AI_ENABLED: "true",
+      AI_PROVIDER: "ollama",
+      AI_MODEL: "deterministic-e2e-model",
+      OLLAMA_BASE_URL: "http://127.0.0.1:3902",
     },
   },
 });

@@ -30,7 +30,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:integration:coverage": "vitest run --config vitest.integration.config.ts --coverage",
     "coverage:verify": "node scripts/verify-coverage.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "ai:eval": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/ai-eval.ts"
   },
   "dependencies": {
     "better-auth": "^1.6.26",

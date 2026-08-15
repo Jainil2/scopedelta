@@ -271,6 +271,10 @@ Do not build Git hosting or a CI/CD runner platform.
 
 ## Layer 5 — AI-Native Delivery Intelligence
 
+Research complete 2026-08-15. SC-009 / #17 is implemented as one coherent
+review candidate with three evidence-grounded jobs, four explicit provider
+adapters, durable execution, contextual UX, and bounded confirmed draft actions.
+
 ### Outcome
 AI reduces coordination work across PM, developer, QA, commercial and client roles instead of acting as an isolated chatbot.
 
@@ -284,6 +288,15 @@ AI reduces coordination work across PM, developer, QA, commercial and client rol
 - bounded agent actions with permission/audit rules;
 - managed AI plus BYO/local paths where practical;
 - evaluation, retry/idempotency and cost controls.
+
+### SC-009 / #17 — consolidated Layer-5 implementation — IMPLEMENTED / IN REVIEW
+
+- deployment-wide OpenAI, Anthropic, Gemini, or local Ollama selection;
+- PostgreSQL jobs, leases, immutable attempts/usage, explicit retry/cancel;
+- scope analysis, delivery risk, and work-context/QA jobs with validated citations;
+- project, request, engineering-readiness, and work-detail entry points;
+- stale-aware preview and atomic human confirmation for bounded draft records;
+- synthetic evaluation fixtures and provider-neutral `pnpm ai:eval`.
 
 ## Layer 6 — Subscription, Cloud Economics & Source Distribution
 

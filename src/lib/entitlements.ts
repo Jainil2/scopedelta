@@ -6,7 +6,8 @@ export type PlatformCapability =
   | "delivery.client.manage"
   | "delivery.project.manage"
   | "delivery.work.manage"
-  | "commercial.baseline.manage";
+  | "commercial.baseline.manage"
+  | "ai.job.run";
 
 export type EntitlementContext = {
   userId: string;

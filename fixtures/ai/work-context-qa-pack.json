@@ -1,0 +1,26 @@
+{
+  "kind": "work_context_qa_pack",
+  "targetLabel": "SYN-1",
+  "facts": [
+    {
+      "evidenceKey": "ev_work_001",
+      "type": "work",
+      "label": "SYN-1",
+      "content": {
+        "identifier": "SYN-1",
+        "title": "Build export",
+        "acceptanceCriteria": "Downloads valid CSV."
+      }
+    },
+    {
+      "evidenceKey": "ev_implementation_002",
+      "type": "implementation",
+      "label": "Synthetic pull request",
+      "content": {
+        "state": "open",
+        "checkRollup": "passing"
+      }
+    }
+  ],
+  "truncated": false
+}

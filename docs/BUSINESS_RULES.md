@@ -6,6 +6,16 @@
 - Prefer traceability: conclusions should reference the relevant agreed scope item(s) or explicitly say when no supporting scope item was found.
 - Supported classifications for the initial product are: `in_scope`, `out_of_scope`, `partially_in_scope`, and `insufficient_information`.
 - Uncertainty should be surfaced rather than hidden. When evidence is insufficient, ask for clarification instead of fabricating certainty.
+- Model claims must cite server-issued evidence keys from the persisted context snapshot.
+- Scope analysis requires an owner, admin, or project lead. Work/QA context may
+  be run by any authorized internal project member. Client participants cannot
+  access AI jobs or results.
+- AI-created work is always backlog, unclassified, unassigned, and commercially
+  unlinked until a human deliberately changes it.
+- AI-created clarification questions are internal drafts and never enter client
+  discussion automatically.
+- Confirmation must fail when the originating request/evidence context is stale,
+  deleted, unavailable, or belongs to another project.
 
 ## Commercial information
 
@@ -29,6 +39,10 @@
 - Do not use confidential customer contracts or client content as public fixtures, examples, or logs.
 - Synthetic/anonymized examples are preferred for development and tests.
 - Production AI providers must have acceptable data handling terms before real confidential customer documents are processed.
+- A deployment selects one AI provider/model. ScopeDelta must not route or fall
+  back to another provider automatically.
+- AI snapshots, results, and clarification drafts are customer content stored in
+  PostgreSQL, not operational log metadata or client-safe projection fields.
 
 ## MVP operating constraints
 

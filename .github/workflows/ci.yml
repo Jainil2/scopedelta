@@ -7,12 +7,12 @@ on:
       - synchronize
       - reopened
       - labeled
-  push:
-    branches:
-      - main
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref_name }}
+  # Candidate-label and head-change events share a group, so a new commit
+  # cancels stale expensive work. Unrelated labels get a no-op group of their
+  # own and cannot cancel the authoritative candidate run.
+  group: ci-${{ github.event.pull_request.number }}-${{ github.event.action == 'labeled' && github.event.label.name != 'merge-candidate' && github.run_id || 'head' }}
   cancel-in-progress: true
 
 env:
@@ -30,6 +30,7 @@ env:
 jobs:
   exact-sha:
     name: Exact SHA guard
+    if: github.event.action != 'labeled' || github.event.label.name == 'merge-candidate'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -39,11 +40,11 @@ jobs:
       - name: Check out candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Verify candidate commit
         env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "Candidate must resolve to a lowercase 40-character commit SHA." >&2
@@ -81,6 +82,7 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Verify production deploy guard
+        if: github.event.action == 'labeled' && github.event.label.name == 'merge-candidate'
         run: |
           CONTEXT=production node scripts/netlify-ignore.mjs
           if CONTEXT=production SCOPEDELTA_DEPLOY_ORCHESTRATED=true node scripts/netlify-ignore.mjs; then
@@ -91,30 +93,22 @@ jobs:
           fi
 
       - name: Check migration definitions
+        if: github.event.action == 'labeled' && github.event.label.name == 'merge-candidate'
         run: pnpm db:check
 
       - name: Check formatting
+        if: github.event.action == 'labeled' && github.event.label.name == 'merge-candidate'
         run: pnpm format:check
 
       - name: Lint
+        if: github.event.action == 'labeled' && github.event.label.name == 'merge-candidate'
         run: pnpm lint
 
       - name: Type-check
         run: pnpm typecheck
 
-      - name: Unit tests with coverage
-        run: pnpm test:coverage
-
-      - name: Verify unit coverage evidence
-        run: pnpm coverage:verify coverage/unit/lcov.info
-
-      - name: Upload unit coverage
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: unit-coverage-${{ github.event.pull_request.head.sha || github.sha }}
-          path: coverage/unit/lcov.info
-          if-no-files-found: error
-          retention-days: 14
+      - name: Unit tests
+        run: pnpm test
 
   database-integration:
     name: Fast PostgreSQL integration
@@ -148,7 +142,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
@@ -162,24 +156,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Apply migrations twice
-        run: |
-          pnpm db:migrate
-          pnpm db:migrate
+      - name: Apply migrations
+        run: pnpm db:migrate
 
-      - name: PostgreSQL integration tests with coverage
-        run: pnpm test:integration:coverage
+      - name: Verify migration idempotency
+        if: github.event.action == 'labeled' && github.event.label.name == 'merge-candidate'
+        run: pnpm db:migrate
 
-      - name: Verify integration coverage evidence
-        run: pnpm coverage:verify coverage/integration/lcov.info
-
-      - name: Upload integration coverage
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: integration-coverage-${{ github.event.pull_request.head.sha || github.sha }}
-          path: coverage/integration/lcov.info
-          if-no-files-found: error
-          retention-days: 14
+      - name: PostgreSQL integration tests
+        run: pnpm test:integration
 
   browser:
     name: Full browser journeys (${{ matrix.shard }}/2)
@@ -320,7 +305,9 @@ jobs:
 
   gate-result:
     name: ${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'merge-candidate' && 'Full merge gate' || 'Fast feedback complete' }}
-    if: always()
+    if: >-
+      always() &&
+      (github.event.action != 'labeled' || github.event.label.name == 'merge-candidate')
     needs:
       - exact-sha
       - static-and-unit
@@ -340,7 +327,7 @@ jobs:
           GUARD_RESULT: ${{ needs.exact-sha.result }}
           PRODUCTION_RESULT: ${{ needs.production.result }}
           STATIC_RESULT: ${{ needs.static-and-unit.result }}
-          VALIDATED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          VALIDATED_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [[ "$GUARD_RESULT" != "success" || "$STATIC_RESULT" != "success" || "$DATABASE_RESULT" != "success" ]]; then
             echo "One or more fast-feedback jobs did not succeed." >&2

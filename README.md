@@ -80,6 +80,10 @@ connection is required for the Layer-0 workspace kernel.
 | `GITHUB_APP_CLIENT_SECRET`              | Optional server-only GitHub user-authorization secret.               |
 | `GITHUB_APP_PRIVATE_KEY`                | Optional server-only GitHub App signing key.                         |
 | `GITHUB_APP_WEBHOOK_SECRET`             | Optional secret for `/api/v1/integrations/github/webhook`.           |
+| `AI_ENABLED`, `AI_PROVIDER`, `AI_MODEL` | Explicit deployment-wide AI switch, provider, and required model.    |
+| `OPENAI_*`, `ANTHROPIC_*`, `GEMINI_*`   | Server-only hosted-provider credentials and optional base URLs.      |
+| `OLLAMA_BASE_URL`                       | Explicit local Ollama endpoint; defaults to `127.0.0.1:11434`.       |
+| AI limit and timeout variables          | Context/output/response/concurrency/start limits within hard caps.   |
 
 All variables above are server-only. Only intentionally public, non-secret
 values may use `NEXT_PUBLIC_`. Never expose database URLs, auth secrets, SMTP
@@ -112,6 +116,35 @@ stores bounded PR/review/check metadata, not source, diffs, CI logs, webhook
 payloads or installation tokens. QA, defects and readiness continue to work
 without this optional integration.
 
+### AI delivery intelligence
+
+AI is disabled by default. Set `AI_ENABLED=true`, choose exactly one
+`AI_PROVIDER` (`openai`, `anthropic`, `gemini`, or `ollama`), and set an
+explicit `AI_MODEL`. Hosted providers also require their matching API key.
+ScopeDelta never falls back to a second provider/model.
+The normalized provider/model/base-URL route is snapshotted per job and attempt
+without API keys. A queued job fails before inference if that route changes or
+the runtime AI configuration becomes disabled/invalid; retry explicitly
+resnapshots the repaired route.
+
+For local evaluation, install and operate Ollama separately, explicitly obtain
+a model, and configure it. A practical development example on a capable Mac is
+`gemma3:4b`:
+
+```bash
+ollama pull gemma3:4b
+```
+
+ScopeDelta never runs that command or downloads a model automatically. When
+the app itself runs in Compose and Ollama runs on the host, use
+`OLLAMA_BASE_URL=http://host.docker.internal:11434`. Protect any non-loopback
+Ollama endpoint as customer-data infrastructure.
+
+`pnpm ai:eval` sends only the checked-in synthetic fixtures to the explicitly
+configured provider and validates all three structured result contracts. It is
+optional and may incur provider cost for hosted models; normal CI uses mocked
+HTTP responses and makes no paid model calls.
+
 ## Database workflow
 
 The checked-in SQL under `db/migrations/` is immutable deployment history.
@@ -137,6 +170,7 @@ expand/contract sequencing so old and new application versions can overlap.
 | `pnpm test` / `pnpm test:watch`     | Run unit/component tests once or in watch mode.               |
 | `pnpm test:integration`             | Run PostgreSQL-backed domain tests using `TEST_DATABASE_URL`. |
 | `pnpm test:e2e`                     | Run Chromium flows against PostgreSQL and Mailpit.            |
+| `pnpm ai:eval`                      | Evaluate all three synthetic jobs on the configured provider. |
 | `pnpm build` / `pnpm start`         | Build and serve the production application.                   |
 
 ## Interfaces and repository conventions

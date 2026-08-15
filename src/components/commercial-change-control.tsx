@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 
 import { apiRequest } from "@/components/delivery-workspace";
+import { ClarificationDrafts } from "@/components/ai-delivery-workspace";
 
 type Source = {
   id: string;
@@ -412,11 +413,19 @@ function RequestCard({
           <h4>{request.title}</h4>
           <p>{request.requestText}</p>
         </div>
-        {request.contradictionCount ? (
-          <span className="commercial-badge commercial-commercially-unlinked">
-            {request.contradictionCount} work contradiction
-          </span>
-        ) : null}
+        <div className="commercial-request-ai-actions">
+          {request.contradictionCount ? (
+            <span className="commercial-badge commercial-commercially-unlinked">
+              {request.contradictionCount} work contradiction
+            </span>
+          ) : null}
+          <Link
+            className="button-link secondary"
+            href={`/app/${workspaceSlug}/projects/${projectKey}/ai?kind=scope_change_analysis&requestId=${request.id}`}
+          >
+            Analyze scope change
+          </Link>
+        </div>
       </div>
       <p className="metadata">
         Received {new Date(request.receivedAt).toLocaleString()}
@@ -426,6 +435,9 @@ function RequestCard({
         anchors={request.anchors}
         workspaceId={workspaceId}
         projectId={projectId}
+      />
+      <ClarificationDrafts
+        base={`/api/v1/workspaces/${workspaceId}/projects/${projectId}/commercial/requests/${request.id}/clarifications`}
       />
       {request.affectedScopeItems.length ? (
         <p className="metadata">

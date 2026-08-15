@@ -1,0 +1,32 @@
+{
+  "kind": "delivery_risk_brief",
+  "targetLabel": "Synthetic milestone",
+  "facts": [
+    {
+      "evidenceKey": "ev_coverage_001",
+      "type": "coverage",
+      "label": "SYN-1",
+      "content": {
+        "identifier": "SYN-1",
+        "status": "in_progress",
+        "gaps": ["missing_verification"]
+      }
+    },
+    {
+      "evidenceKey": "ev_commercial_request_002",
+      "type": "commercial_request",
+      "label": "Pending export",
+      "content": {
+        "title": "Pending export",
+        "state": "open"
+      }
+    }
+  ],
+  "deterministicFacts": {
+    "summary": {
+      "missingVerification": 1,
+      "unresolvedRequests": 1
+    }
+  },
+  "truncated": false
+}

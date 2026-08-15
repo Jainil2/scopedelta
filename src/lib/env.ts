@@ -124,3 +124,97 @@ export function isGitHubAppConfigured() {
     return false;
   }
 }
+
+export type AiProviderName = "openai" | "anthropic" | "gemini" | "ollama";
+
+export type AiConfig = {
+  enabled: boolean;
+  provider: AiProviderName;
+  model: string;
+  apiKey?: string;
+  baseUrl: string;
+  timeoutMs: number;
+  responseBytes: number;
+  contextCharacters: number;
+  outputTokens: number;
+  runningPerUser: number;
+  runningPerWorkspace: number;
+  startsPerUserHour: number;
+  startsPerWorkspaceDay: number;
+};
+
+function boundedInteger(name: string, fallback: number, hardMaximum: number) {
+  const raw = process.env[name]?.trim();
+  const value = raw ? Number(raw) : fallback;
+  if (!Number.isInteger(value) || value < 1 || value > hardMaximum) {
+    throw new Error("ai_configuration_invalid");
+  }
+  return value;
+}
+
+export function getAiConfig(): AiConfig {
+  const enabled = process.env.AI_ENABLED?.trim().toLowerCase() === "true";
+  const provider = z
+    .enum(["openai", "anthropic", "gemini", "ollama"])
+    .parse(process.env.AI_PROVIDER?.trim() || "ollama");
+  const model = process.env.AI_MODEL?.trim();
+  const values = {
+    enabled,
+    provider,
+    model: model || "",
+    timeoutMs: boundedInteger("AI_TIMEOUT_MS", 60_000, 120_000),
+    responseBytes: boundedInteger("AI_RESPONSE_MAX_BYTES", 524_288, 1_048_576),
+    contextCharacters: boundedInteger(
+      "AI_CONTEXT_MAX_CHARACTERS",
+      40_000,
+      80_000,
+    ),
+    outputTokens: boundedInteger("AI_OUTPUT_MAX_TOKENS", 4_000, 8_000),
+    runningPerUser: boundedInteger("AI_RUNNING_PER_USER", 1, 2),
+    runningPerWorkspace: boundedInteger("AI_RUNNING_PER_WORKSPACE", 3, 10),
+    startsPerUserHour: boundedInteger("AI_STARTS_PER_USER_HOUR", 10, 50),
+    startsPerWorkspaceDay: boundedInteger(
+      "AI_STARTS_PER_WORKSPACE_DAY",
+      100,
+      500,
+    ),
+  };
+  if (enabled && !model) throw new Error("ai_configuration_invalid");
+
+  if (provider === "openai") {
+    const apiKey = process.env.OPENAI_API_KEY?.trim();
+    if (enabled && !apiKey) throw new Error("ai_configuration_invalid");
+    return {
+      ...values,
+      apiKey,
+      baseUrl:
+        process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1",
+    };
+  }
+  if (provider === "anthropic") {
+    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    if (enabled && !apiKey) throw new Error("ai_configuration_invalid");
+    return {
+      ...values,
+      apiKey,
+      baseUrl:
+        process.env.ANTHROPIC_BASE_URL?.trim() ||
+        "https://api.anthropic.com/v1",
+    };
+  }
+  if (provider === "gemini") {
+    const apiKey = process.env.GEMINI_API_KEY?.trim();
+    if (enabled && !apiKey) throw new Error("ai_configuration_invalid");
+    return {
+      ...values,
+      apiKey,
+      baseUrl:
+        process.env.GEMINI_BASE_URL?.trim() ||
+        "https://generativelanguage.googleapis.com/v1beta",
+    };
+  }
+  return {
+    ...values,
+    baseUrl: process.env.OLLAMA_BASE_URL?.trim() || "http://127.0.0.1:11434",
+  };
+}

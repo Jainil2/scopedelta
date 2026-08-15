@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createServer, type Server } from "node:http";
 
 import {
   expect,
@@ -9,11 +10,51 @@ import {
 import { Pool } from "pg";
 
 const mailpitUrl = "http://127.0.0.1:8025";
+let aiStub: Server;
 
 test.beforeAll(async () => {
+  aiStub = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.on("data", (chunk) => {
+      body += String(chunk);
+    });
+    incoming.on("end", () => {
+      const requestBody = JSON.parse(body) as {
+        messages?: Array<{ content?: string }>;
+      };
+      const context = JSON.parse(
+        requestBody.messages?.[1]?.content || "{}",
+      ) as {
+        kind?: string;
+        facts?: Array<{ evidenceKey?: string }>;
+      };
+      const result = aiFixtureResult(
+        context.kind,
+        context.facts?.[0]?.evidenceKey,
+      );
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(
+        JSON.stringify({
+          message: { role: "assistant", content: JSON.stringify(result) },
+          prompt_eval_count: 120,
+          eval_count: 48,
+        }),
+      );
+    });
+  });
+  await new Promise<void>((resolve) =>
+    aiStub.listen(3902, "127.0.0.1", resolve),
+  );
   await withTestDatabase(async (pool) => {
     await pool.query("truncate table auth_rate_limits, action_rate_limits");
   });
+});
+
+test.afterAll(async () => {
+  aiStub.closeAllConnections();
+  await new Promise<void>((resolve, reject) =>
+    aiStub.close((error) => (error ? reject(error) : resolve())),
+  );
 });
 
 test("verified signup, workspace persistence, invitation, and role management", async ({
@@ -1410,6 +1451,209 @@ test("local engineering QA evidence and defects stay traceable without GitHub", 
     ),
   ).toBeVisible();
 });
+
+test("AI delivery jobs stay cited, stale-aware, and human-confirmed", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const email = `ai-${suffix}@example.test`;
+  const password = "test-password-123";
+  await signUpAndVerify(page, request, email, password, "/onboarding");
+  await page.getByLabel(/Workspace name/).fill("AI Delivery");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await page.getByText("New client").click();
+  await page.getByLabel("Client name").fill("Synthetic AI Client");
+  await page.getByRole("button", { name: "Create client" }).click();
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
+  await page.getByText("New project").click();
+  await page.getByLabel("Project key").fill("AIDEV");
+  await page.getByLabel("Project name").fill("AI delivery evidence");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await page.getByRole("link", { name: /AI delivery evidence/ }).click();
+  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByText("New work item").click();
+  const workForm = page.locator("form.work-form").filter({
+    has: page.getByRole("button", { name: "Create work item" }),
+  });
+  await workForm.getByLabel("Title").fill("Deliver synthetic export");
+  await workForm
+    .getByLabel("Acceptance criteria")
+    .fill("Authorized users download a valid CSV file.");
+  await workForm.getByLabel("Status").selectOption("in_progress");
+  await workForm.getByRole("button", { name: "Create work item" }).click();
+  await expect(page.getByRole("status")).toHaveText("Work item created.");
+
+  const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
+  await page.goto(`/app/${workspaceSlug}/projects/AIDEV/commercial`);
+  await page.getByText("Record a client request").click();
+  const requestForm = page.locator("form.commercial-change-form").filter({
+    has: page.getByRole("button", { name: "Record request" }),
+  });
+  await requestForm.getByLabel("Request title").fill("Add downloadable export");
+  await requestForm
+    .getByLabel("Original language or concise description")
+    .fill("The synthetic sponsor asked for a downloadable CSV export.");
+  await requestForm.getByRole("button", { name: "Record request" }).click();
+  await expect(page.getByRole("status")).toHaveText("Client request recorded.");
+  const requestCard = page.locator("article.commercial-request-card").filter({
+    hasText: "Add downloadable export",
+  });
+  await requestCard.getByRole("link", { name: "Analyze scope change" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "AI delivery intelligence" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Run analysis" }).click();
+  await expect(page.getByText("succeeded", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("The request needs a commercial decision."),
+  ).toBeVisible();
+  await page.locator(".ai-candidates input[type=checkbox]").first().check();
+  await page.locator(".ai-candidates input[type=checkbox]").nth(1).check();
+  await page.getByRole("button", { name: "Preview selected drafts" }).click();
+  await expect(
+    page.getByText(/No request, decision, client publication/),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Confirm and create drafts" }).click();
+  await expect(page.getByText(/created atomically/)).toBeVisible();
+
+  await page
+    .locator(".ai-launcher select")
+    .first()
+    .selectOption("delivery_risk_brief");
+  await page.getByRole("button", { name: "Run analysis" }).click();
+  await expect(page.getByText("AI interpretation")).toBeVisible();
+  await expect(
+    page.getByText("One work item lacks QA evidence."),
+  ).toBeVisible();
+
+  await page
+    .locator(".ai-launcher select")
+    .first()
+    .selectOption("work_context_qa_pack");
+  await page.getByRole("button", { name: "Run analysis" }).click();
+  await expect(page.getByText("Draft test scenarios")).toBeVisible();
+  await expect(page.getByText("Download valid CSV")).toBeVisible();
+
+  await page
+    .getByRole("button", { name: /Scope Change Analyst/ })
+    .first()
+    .click();
+  await expect(page.getByText(/This result is stale/)).toBeVisible();
+
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1200 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-009-ai-intelligence-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-009-ai-intelligence-mobile.png",
+      fullPage: true,
+    });
+  }
+
+  await page.goto(`/app/${workspaceSlug}/projects/AIDEV/commercial`);
+  const refreshedRequest = page
+    .locator("article.commercial-request-card")
+    .filter({
+      hasText: "Add downloadable export",
+    });
+  await expect(refreshedRequest).toContainText("open");
+  await expect(
+    refreshedRequest.getByText("Which export format is required?"),
+  ).toBeVisible();
+  await refreshedRequest.getByRole("button", { name: "Resolve" }).click();
+  await expect(
+    refreshedRequest.getByText("resolved", { exact: true }),
+  ).toBeVisible();
+});
+
+function aiFixtureResult(kind?: string, evidenceKey = "ev_request_001") {
+  if (kind === "delivery_risk_brief") {
+    return {
+      interpretation: [
+        {
+          title: "Verification gap",
+          detail: "One work item lacks QA evidence.",
+          evidenceKeys: [evidenceKey],
+        },
+      ],
+      recommendedActions: [
+        {
+          title: "Verify export",
+          detail: "Record a focused export verification before acceptance.",
+          evidenceKeys: [evidenceKey],
+        },
+      ],
+      watchItems: [],
+    };
+  }
+  if (kind === "work_context_qa_pack") {
+    return {
+      contextSummary: {
+        text: "The export work has explicit acceptance criteria.",
+        evidenceKeys: [evidenceKey],
+      },
+      contradictions: [],
+      missingInformation: [],
+      testScenarios: [
+        {
+          title: "Download valid CSV",
+          preconditions: ["An authorized user is signed in."],
+          steps: ["Open export.", "Download the CSV file."],
+          expectedResult: "The downloaded file is valid CSV.",
+          evidenceKeys: [evidenceKey],
+        },
+      ],
+    };
+  }
+  return {
+    summary: {
+      text: "The request needs a commercial decision.",
+      evidenceKeys: [evidenceKey],
+    },
+    findings: [
+      {
+        title: "Requested export",
+        detail: "The sponsor requested a downloadable export.",
+        evidenceKeys: [evidenceKey],
+      },
+    ],
+    uncertainties: [],
+    conflicts: [],
+    missingQuestions: ["Which format is required?"],
+    draftDecision: {
+      text: "Review commercial treatment before scheduling.",
+      evidenceKeys: [evidenceKey],
+    },
+    clientSafeWording: {
+      text: "We are reviewing the export request.",
+      evidenceKeys: [evidenceKey],
+    },
+    workCandidates: [
+      {
+        candidateKey: "work_export",
+        title: "Prepare export delivery work",
+        description: "Implement the confirmed export workflow.",
+        acceptanceCriteria: "Authorized users download valid CSV.",
+        evidenceKeys: [evidenceKey],
+      },
+    ],
+    clarificationCandidates: [
+      {
+        candidateKey: "question_format",
+        question: "Which export format is required?",
+        evidenceKeys: [evidenceKey],
+      },
+    ],
+  };
+}
 
 async function signUpAndVerify(
   page: Page,

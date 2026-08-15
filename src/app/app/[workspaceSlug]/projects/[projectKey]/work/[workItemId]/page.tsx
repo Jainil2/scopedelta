@@ -67,7 +67,12 @@ export default async function WorkCollaborationPage({
           canManage={data.canManageCommercial}
         />
       }
-      engineeringPanel={<WorkEngineeringPanel trace={data.engineeringTrace} />}
+      engineeringPanel={
+        <WorkEngineeringPanel
+          trace={data.engineeringTrace}
+          aiHref={`/app/${workspaceSlug}/projects/${data.project.key}/ai?kind=work_context_qa_pack&workItemId=${data.workItem.id}`}
+        />
+      }
     />
   );
 }

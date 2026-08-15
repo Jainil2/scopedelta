@@ -1757,6 +1757,270 @@ h2 {
   }
 }
 
+.ai-delivery-page {
+  gap: 1.4rem;
+}
+
+.ai-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(17rem, 0.72fr) minmax(0, 2fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.ai-job-rail,
+.ai-result-pane {
+  display: grid;
+  gap: 1rem;
+}
+
+.ai-launcher,
+.ai-history,
+.ai-result-header,
+.ai-result-section,
+.ai-draft-copy,
+.ai-candidates,
+.ai-empty-state,
+.ai-deterministic-facts,
+.ai-clarifications,
+.ai-attempts,
+.ai-evidence-inspector {
+  padding: 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--white);
+}
+
+.ai-launcher {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.ai-launcher label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.ai-history {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.ai-history > button {
+  display: grid;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.ai-history > button:hover,
+.ai-history > button.is-selected {
+  border-color: var(--line);
+  background: var(--accent-soft);
+}
+
+.ai-history small,
+.ai-candidates small {
+  display: block;
+  color: var(--muted);
+}
+
+.ai-result-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ai-result-header h2,
+.ai-result-section h3,
+.ai-result-section h4,
+.ai-result-section p,
+.ai-draft-copy h3,
+.ai-draft-copy p,
+.ai-clarifications h3,
+.ai-clarifications p {
+  margin: 0;
+}
+
+.ai-status {
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.ai-status-succeeded {
+  color: var(--accent-dark);
+}
+
+.ai-status-failed,
+.ai-error {
+  color: var(--danger);
+}
+
+.ai-message,
+.ai-stale-banner,
+.ai-error,
+.ai-running,
+.ai-confirmation-preview,
+.engineering-ai-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: var(--accent-soft);
+}
+
+.ai-stale-banner,
+.ai-error {
+  display: block;
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, var(--white));
+}
+
+.ai-running span {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--accent-dark);
+  animation: ai-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ai-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.ai-result-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.ai-summary {
+  margin: 0;
+  padding: 1rem 0;
+  font-family: var(--serif);
+  font-size: 1.2rem;
+  line-height: 1.55;
+}
+
+.ai-result-section {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.ai-result-section article,
+.ai-clarifications article {
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+}
+
+.ai-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ai-citations button {
+  padding: 0.18rem 0.42rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--accent-dark);
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+}
+
+.ai-draft-copy {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.ai-draft-copy > div + div {
+  padding-left: 1rem;
+  border-left: 1px solid var(--line);
+}
+
+.ai-candidates {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ai-candidates > label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+}
+
+.ai-evidence-inspector {
+  position: sticky;
+  bottom: 1rem;
+  box-shadow: 0 0.8rem 2rem rgb(32 35 31 / 12%);
+}
+
+.ai-evidence-inspector pre,
+.ai-deterministic-facts pre {
+  overflow: auto;
+  max-height: 22rem;
+  padding: 0.8rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.commercial-request-ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.engineering-ai-entry {
+  justify-content: flex-start;
+}
+
+@media (max-width: 860px) {
+  .ai-workspace-grid,
+  .ai-draft-copy {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-draft-copy > div + div {
+    padding-top: 1rem;
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .ai-result-header,
+  .engineering-ai-entry {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-running span {
+    animation: none;
+  }
+}
+
 /* Client collaboration is intentionally quieter than the internal delivery UI. */
 .client-shell {
   --client-ink: #17212b;

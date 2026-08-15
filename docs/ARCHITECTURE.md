@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented through SC-008. The SC-004 production platform kernel now supports
+Implemented through SC-009. The SC-004 production platform kernel now supports
 the client-project delivery foundation plus production board, optional cycle
 planning, authorized cross-project daily execution, and internal project
 collaboration. SC-006A adds the first evidence-backed commercial baseline and
@@ -17,6 +17,9 @@ granted read-only GitHub repository metadata, normalized pull-request state and
 immutable snapshots, project-scoped work links, append-only QA verification,
 lightweight defects, and factual readiness/trace queries. The local QA and
 readiness core does not require a provider connection.
+SC-009 adds an internal-only AI delivery projection backed by PostgreSQL jobs,
+immutable attempts/usage, action executions, candidate mappings, and request
+clarifications. It is absent from the client-safe projection.
 
 ## System decision
 
@@ -467,6 +470,39 @@ All mutations and authorization live in `src/server/`. Routes are protocol
 adapters and Server Components are read adapters. This prevents UI and API
 authorization from drifting.
 
+## AI delivery execution and provider boundary
+
+Migration `0013_ai_delivery_intelligence.sql` adds durable AI jobs, immutable
+attempt/usage history, idempotent action executions, candidate-to-record
+mappings, and internal clarification drafts. A job stores the exact bounded
+context snapshot, server-issued evidence map, prompt version, result, and
+canonical fingerprint used for staleness checks.
+
+Migration `0014_ai_execution_route.sql` adds the normalized provider base URL
+and a provider/model/base-URL fingerprint to jobs and attempts. API keys are
+excluded. Execution fails before any provider call if that route differs from
+the queued snapshot; only an explicit retry resnapshots the current route.
+
+Next.js `after()` schedules a claimed job after the creation/retry response.
+PostgreSQL remains authoritative: a queued job is atomically claimed with a
+lease. An expired runner or disabled/invalid execution configuration becomes a
+failed job that requires explicit retry. There is no automatic retry, provider
+routing, or fallback that could duplicate spend or move customer data to
+another processor or endpoint.
+
+The server-only provider interface has native `fetch` adapters for OpenAI
+Responses (`store: false`), Anthropic Messages, Gemini `generateContent`, and
+Ollama chat. All use JSON Schema derived from the same Zod result contract and
+then undergo final Zod/citation validation. Adapters normalize refusal/error,
+provider request ID, model, duration, input/output/cached tokens, timeouts, and
+bounded response bytes without logging provider bodies.
+
+Authorization precedes context assembly. Scope/risk jobs require workspace
+owner/admin or project lead; work/QA jobs allow authorized internal project
+members. Client participants have no route into this projection. Confirmation
+rechecks manager authority, `delivery.work.manage`, tenant/target scope, job
+state, and fingerprint inside the transactional action boundary.
+
 ## Repository and test boundaries
 
 - `src/app/`: UI and HTTP adapters.
@@ -542,3 +578,6 @@ and does not rely on source secrecy for security.
   e-signature, CRM, billing, or automated change-order generation.
 - SC-008 integrates read-only provider evidence instead of adding Git hosting,
   GitLab, CI execution, a code-review/diff surface or a test-management system.
+- SC-009 adds bounded structured AI jobs and confirmed drafts instead of vector
+  search, repository-source ingestion, a coding agent, autonomous client
+  messaging, per-workspace provider routing, or a general agent framework.

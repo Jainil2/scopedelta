@@ -318,6 +318,31 @@ Mailpit is development-only and must never be public or connected to production.
 
 ## Release verification
 
+### AI provider operations
+
+- Keep `AI_ENABLED=false` until one provider/model, privacy terms, credentials,
+  limits, and data location are approved for the deployment.
+- Configure only the selected provider credential. Removing or rotating it
+  causes explicit job failure; ScopeDelta does not fail over.
+- Keep hosted API keys and Ollama endpoints server-only. Never expose an Ollama
+  port to an untrusted LAN or the public internet without authenticated network
+  controls.
+- Review `ai_job_attempts` usage/duration and failure codes without copying
+  stored customer context/results into logs or tickets.
+- An expired runner lease is a recoverable failed job. Diagnose the runtime,
+  then let an authorized user retry explicitly; do not mutate attempts or bulk
+  requeue jobs.
+- To stop new inference safely, set `AI_ENABLED=false` and redeploy. Existing
+  PostgreSQL results remain internal history; queued jobs become explicit
+  retryable failures without making provider calls.
+- Before changing providers, models, or base URLs, document the new
+  processor/privacy boundary and complete or cancel existing jobs. A queued
+  job fails closed when its approved route differs; an authorized retry
+  explicitly resnapshots the repaired route. Do not operate overlapping
+  fallback keys.
+- Use `pnpm ai:eval` only with synthetic fixtures and an intentionally selected
+  model. The repository never downloads Ollama models automatically.
+
 - Public `/` returns 200 and the existing paid-pilot flow remains usable.
 - A new synthetic account receives one verification email; unverified sign-in
   is rejected without account-enumeration detail.

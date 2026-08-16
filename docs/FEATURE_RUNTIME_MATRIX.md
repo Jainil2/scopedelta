@@ -2,7 +2,7 @@
 
 ## Status
 
-Planning baseline, updated 2026-08-15 after the Layer-5 AI-Native Delivery Intelligence research checkpoint and SC-009 implementation. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
+Planning baseline, updated 2026-08-16 after the Layer-6 cloud economics and distribution research checkpoint and SC-010 implementation. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
 
 ## Current capability count
 
@@ -16,6 +16,8 @@ Planning baseline, updated 2026-08-15 after the Layer-5 AI-Native Delivery Intel
 The Layer-3 review reclassifies the core client portal/request/approval capabilities from Hybrid to Local/LAN. Client identity, project-safe projection, request intake, commercial packet publication/actions and delivery acceptance are all server-authoritative ScopeDelta behavior and do not inherently require ScopeDelta Cloud or another SaaS provider. Outbound email is Hybrid/optional external: ScopeDelta Cloud may manage it while self-host customers can supply SMTP/local mail infrastructure or distribute invitation/action links manually.
 
 Layer 3 therefore introduces **no mandatory paid external service dependency**. Layer 4 preserves that local core for QA, defects, traceability and readiness; the implemented GitHub evidence connection is an explicitly selected external provider dependency. GitLab remains deferred and classified Hybrid because a future adapter could target self-hosted or hosted GitLab.
+
+Layer 5 is complete through SC-009 / PR #43. Layer 6 preserves the distinction between software capability and ScopeDelta-managed resources: self-host core operation is Local/LAN and does not call cloud billing, while hosted checkout/portal/lifecycle inherently use an external payment service. Active-project/internal-user rules and managed usage accounting remain provider-neutral local domain behavior. External client participants remain separate from internal-user capacity.
 
 ### Runtime meaning
 
@@ -143,7 +145,7 @@ Layer-3 runtime rules:
 
 ## Layer 4 — Engineering & QA Delivery Loop
 
-Layer-4 research and SC-008 are complete for review. See `docs/research/LAYER4_ENGINEERING_QA_DELIVERY_LOOP_RESEARCH_2026-08.md`.
+Layer 4 is complete through SC-008 / PR #41. See `docs/research/LAYER4_ENGINEERING_QA_DELIVERY_LOOP_RESEARCH_2026-08.md`.
 
 | Capability | Runtime class | Delivered slice |
 |---|---|---|
@@ -167,7 +169,7 @@ Layer-4 runtime rules:
 
 ## Layer 5 — AI-Native Delivery Intelligence
 
-Layer-5 research and SC-009 are complete for review. See
+Layer 5 is complete through SC-009 / PR #43. See
 `docs/research/LAYER5_AI_NATIVE_DELIVERY_INTELLIGENCE_RESEARCH_2026-08.md` and
 `docs/decisions/ADR-011-ai-provider-data-and-action-boundary.md`.
 
@@ -187,17 +189,32 @@ Layer-5 research and SC-009 are complete for review. See
 
 ## Layer 6 — Cloud Economics & Distribution
 
-| Capability | Runtime class |
-|---|---|
-| Self-host installer/package | Local/LAN |
-| Managed cloud deployment | Managed-cloud only |
-| Cloud tenant provisioning | Managed-cloud only |
-| Subscription checkout | External API/service |
-| Billing webhooks/lifecycle | External API/service |
-| Hosted billing portal | External API/service |
-| Usage metering/entitlements | Local/LAN |
-| Managed backups/observability | Managed-cloud only |
-| Managed email/AI/storage allowances | Managed-cloud only |
+Layer-6 research is complete and SC-010 is implemented for review. See
+`docs/research/LAYER6_CLOUD_ECONOMICS_DISTRIBUTION_RESEARCH_2026-08.md`,
+`docs/SELF_HOST.md`, and
+`docs/decisions/ADR-012-billing-entitlement-resource-boundary.md`.
+
+| Capability | Runtime class | Delivered slice |
+|---|---|---|
+| Self-host installer/package | Local/LAN | SC-010 shared image/Compose plus production upgrade/backup runbook; no cloud phone-home |
+| Managed cloud deployment | Managed-cloud only | Existing managed artifact/runtime; live provider activation remains founder-gated |
+| Cloud tenant provisioning | Managed-cloud only | Entry entitlement initialized with workspace; broader infrastructure provisioning deferred |
+| Subscription checkout | External API/service | SC-010 Paddle sandbox hosted transaction checkout; browser return non-authoritative |
+| Billing webhooks/lifecycle | External API/service | SC-010 raw-body signature, dedupe/order reconciliation, grace/cancel/expiry |
+| Hosted billing portal | External API/service | SC-010 temporary Paddle customer-portal session |
+| Usage metering/entitlements | Local/LAN | SC-010 provider-neutral plan snapshots, project/member guards, AI/email usage ledger |
+| Managed backups/observability | Managed-cloud only | Existing backup/deploy operations plus bounded billing/usage exception evidence |
+| Managed email/AI/storage allowances | Managed-cloud only | SC-010 AI reservation and email attempt enforcement; storage/processing dimensions retained without speculative infrastructure |
+
+Layer-6 runtime rules:
+
+- `DISTRIBUTION_MODE=self_host` is the default. Local/LAN and BYO/local AI never require a ScopeDelta Cloud billing row or remote entitlement check.
+- Managed-cloud plan names, prices, provider price IDs, and allowances are server configuration rather than source constants.
+- External client participants do not consume optional internal-user capacity.
+- Active project creation/reactivation and internal invitation acceptance are workspace-serialized.
+- Managed AI reserves before provider execution; raw token/model/duration evidence remains separate from vendor price tables.
+- Managed email counts provider attempts; self-host/customer SMTP does not consume a ScopeDelta-managed allowance.
+- Live payment activation and public source/license distribution remain founder/legal gates.
 
 ## Layer 7 — Portfolio & Self-Service Scale
 

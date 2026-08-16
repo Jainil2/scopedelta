@@ -64,26 +64,30 @@ connection is required for the Layer-0 workspace kernel.
 
 ## Environment contract
 
-| Variable                                | Purpose                                                              |
-| --------------------------------------- | -------------------------------------------------------------------- |
-| `APP_URL`                               | Canonical HTTPS origin; localhost is the development fallback.       |
-| `DATABASE_URL`                          | Pooled PostgreSQL runtime connection.                                |
-| `DATABASE_MIGRATION_URL`                | Direct PostgreSQL connection for migrations and operational tooling. |
-| `TEST_DATABASE_URL`                     | Disposable PostgreSQL database used only by local/CI tests.          |
-| `BETTER_AUTH_SECRET`                    | Random server secret, at least 32 characters.                        |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` | Provider-neutral SMTP transport.                                     |
-| `SMTP_USER`, `SMTP_PASSWORD`            | Optional SMTP credentials; set both or neither.                      |
-| `SMTP_FROM`                             | Verified sender identity.                                            |
-| `LEAD_WEBHOOK_URL`                      | Optional paid-pilot receiver.                                        |
-| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`      | Optional read-only GitHub engineering-evidence app identity.         |
-| `GITHUB_APP_CLIENT_ID`                  | Optional GitHub user-authorization flow identity.                    |
-| `GITHUB_APP_CLIENT_SECRET`              | Optional server-only GitHub user-authorization secret.               |
-| `GITHUB_APP_PRIVATE_KEY`                | Optional server-only GitHub App signing key.                         |
-| `GITHUB_APP_WEBHOOK_SECRET`             | Optional secret for `/api/v1/integrations/github/webhook`.           |
-| `AI_ENABLED`, `AI_PROVIDER`, `AI_MODEL` | Explicit deployment-wide AI switch, provider, and required model.    |
-| `OPENAI_*`, `ANTHROPIC_*`, `GEMINI_*`   | Server-only hosted-provider credentials and optional base URLs.      |
-| `OLLAMA_BASE_URL`                       | Explicit local Ollama endpoint; defaults to `127.0.0.1:11434`.       |
-| AI limit and timeout variables          | Context/output/response/concurrency/start limits within hard caps.   |
+| Variable                                       | Purpose                                                              |
+| ---------------------------------------------- | -------------------------------------------------------------------- |
+| `APP_URL`                                      | Canonical HTTPS origin; localhost is the development fallback.       |
+| `DATABASE_URL`                                 | Pooled PostgreSQL runtime connection.                                |
+| `DATABASE_MIGRATION_URL`                       | Direct PostgreSQL connection for migrations and operational tooling. |
+| `TEST_DATABASE_URL`                            | Disposable PostgreSQL database used only by local/CI tests.          |
+| `BETTER_AUTH_SECRET`                           | Random server secret, at least 32 characters.                        |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`        | Provider-neutral SMTP transport.                                     |
+| `SMTP_USER`, `SMTP_PASSWORD`                   | Optional SMTP credentials; set both or neither.                      |
+| `SMTP_FROM`                                    | Verified sender identity.                                            |
+| `LEAD_WEBHOOK_URL`                             | Optional paid-pilot receiver.                                        |
+| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`             | Optional read-only GitHub engineering-evidence app identity.         |
+| `GITHUB_APP_CLIENT_ID`                         | Optional GitHub user-authorization flow identity.                    |
+| `GITHUB_APP_CLIENT_SECRET`                     | Optional server-only GitHub user-authorization secret.               |
+| `GITHUB_APP_PRIVATE_KEY`                       | Optional server-only GitHub App signing key.                         |
+| `GITHUB_APP_WEBHOOK_SECRET`                    | Optional secret for `/api/v1/integrations/github/webhook`.           |
+| `AI_ENABLED`, `AI_PROVIDER`, `AI_MODEL`        | Explicit deployment-wide AI switch, provider, and required model.    |
+| `OPENAI_*`, `ANTHROPIC_*`, `GEMINI_*`          | Server-only hosted-provider credentials and optional base URLs.      |
+| `OLLAMA_BASE_URL`                              | Explicit local Ollama endpoint; defaults to `127.0.0.1:11434`.       |
+| AI limit and timeout variables                 | Context/output/response/concurrency/start limits within hard caps.   |
+| `DISTRIBUTION_MODE`                            | `self_host` (default) or explicitly configured `managed_cloud`.      |
+| `BILLING_ENTRY_PLAN_KEY`, `BILLING_PLANS_JSON` | Server-only provider-neutral managed plan catalog.                   |
+| `MANAGED_AI`, `MANAGED_EMAIL`                  | Whether this deployment supplies and meters managed resources.       |
+| `PADDLE_*`                                     | Sandbox API/webhook configuration; live mode is rejected.            |
 
 All variables above are server-only. Only intentionally public, non-secret
 values may use `NEXT_PUBLIC_`. Never expose database URLs, auth secrets, SMTP
@@ -144,6 +148,28 @@ Ollama endpoint as customer-data infrastructure.
 configured provider and validates all three structured result contracts. It is
 optional and may incur provider cost for hosted models; normal CI uses mocked
 HTTP responses and makes no paid model calls.
+
+### Self-host and managed billing boundary
+
+`DISTRIBUTION_MODE=self_host` is the default. Local/LAN product capability and
+BYO/local AI run without a ScopeDelta Cloud phone-home or billing-record
+dependency. The Compose example sets this mode explicitly.
+
+Managed-cloud evaluation requires `DISTRIBUTION_MODE=managed_cloud`, an entry
+plan key, and a JSON plan catalog. Each catalog entry centralizes a stable plan
+key, display copy, optional Paddle sandbox price ID, active-project and optional
+internal-user capacities, managed AI/email/storage/processing allowances, and
+software capability flags. No public plan name, price, or production allowance
+is checked into the repository. The browser return is informational and never
+activates an entitlement; only a verified webhook at
+`/api/v1/billing/paddle/webhook` reconciles provider state.
+
+Workspace owners can inspect billing and usage under Settings → Billing.
+Operators can export bounded, content-free unit-economics evidence with
+`pnpm billing:economics`. The export contains workspace IDs, plan/subscription
+state, participant/project counts, raw AI usage totals, managed reservations,
+email attempt/failure counts, and billing-event exception counts—never document
+bodies, email content, or provider payloads.
 
 ## Database workflow
 

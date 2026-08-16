@@ -49,3 +49,22 @@
 - Optimize for a fast paid-pilot launch.
 - Avoid introducing paid infrastructure without a clear reason and founder approval when material.
 - Avoid broad integrations until a pilot/customer demonstrates that the integration is necessary for conversion, activation, or retention.
+
+## Distribution and subscription economics
+
+- Self-host is the default distribution mode. Core Local/LAN and BYO/local AI
+  capabilities must not depend on ScopeDelta Cloud availability or a cloud
+  subscription check.
+- Managed-cloud entitlements are stored as an effective workspace snapshot.
+  Public plan names, prices, and final allowances remain configuration and
+  founder decisions rather than source-code constants.
+- Active-project and optional internal-user limits apply to transitions that
+  consume capacity. Lowering a limit must preserve history and existing records;
+  the next capacity-consuming transition fails instead.
+- External client participants do not consume internal-user capacity.
+- ScopeDelta-managed AI and email attempts consume the configured allowance.
+  BYO/local AI and self-hosted SMTP do not consume ScopeDelta-managed usage.
+- Browser checkout return pages are informational. Only authenticated provider
+  events may activate, change, or expire a subscription.
+- Payment failure, grace, cancellation, and expiry may block new managed or
+  capacity-consuming actions, but must not delete history or block normal reads.

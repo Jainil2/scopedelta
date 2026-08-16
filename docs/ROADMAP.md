@@ -242,7 +242,7 @@ SC-007 is complete and product-reviewed. A client can securely access only their
 Planning, implementation, QA and acceptance form one traceable delivery chain.
 
 ### Status
-Research complete 2026-08-12. SC-008 / #12 is implemented as one coherent review candidate.
+Complete through SC-008 / PR #41.
 
 Durable research: `docs/research/LAYER4_ENGINEERING_QA_DELIVERY_LOOP_RESEARCH_2026-08.md`.
 
@@ -259,7 +259,7 @@ Durable research: `docs/research/LAYER4_ENGINEERING_QA_DELIVERY_LOOP_RESEARCH_20
 
 GitLab, Git hosting, CI execution, a code-review/diff UI and full test-management remain explicitly out of scope.
 
-### SC-008 / #12 — consolidated Layer-4 implementation — IMPLEMENTED / IN REVIEW
+### SC-008 / #12 — consolidated Layer-4 implementation — COMPLETE
 
 The issue's provider spine, engineering mapping and QA/readiness sections are internal phases in one primary PR, not separate releases.
 
@@ -271,9 +271,10 @@ Do not build Git hosting or a CI/CD runner platform.
 
 ## Layer 5 — AI-Native Delivery Intelligence
 
-Research complete 2026-08-15. SC-009 / #17 is implemented as one coherent
-review candidate with three evidence-grounded jobs, four explicit provider
-adapters, durable execution, contextual UX, and bounded confirmed draft actions.
+Complete through SC-009 / PR #43 / merge
+`469fbe0b54f10246a776506612fe8b0785048db3`, with three evidence-grounded
+jobs, four explicit provider adapters, durable execution, contextual UX, and
+bounded confirmed draft actions.
 
 ### Outcome
 AI reduces coordination work across PM, developer, QA, commercial and client roles instead of acting as an isolated chatbot.
@@ -289,7 +290,7 @@ AI reduces coordination work across PM, developer, QA, commercial and client rol
 - managed AI plus BYO/local paths where practical;
 - evaluation, retry/idempotency and cost controls.
 
-### SC-009 / #17 — consolidated Layer-5 implementation — IMPLEMENTED / IN REVIEW
+### SC-009 / #17 — consolidated Layer-5 implementation — COMPLETE
 
 - deployment-wide OpenAI, Anthropic, Gemini, or local Ollama selection;
 - PostgreSQL jobs, leases, immutable attempts/usage, explicit retry/cancel;
@@ -300,16 +301,30 @@ AI reduces coordination work across PM, developer, QA, commercial and client rol
 
 ## Layer 6 — Subscription, Cloud Economics & Source Distribution
 
+### Status
+
+Research complete 2026-08-16. SC-010 / #13 is implemented as one coherent
+review candidate.
+
 ### Outcome
 ScopeDelta can grow without founder-funded variable costs while supporting useful free self-hosting and a protected managed-cloud business.
 
-### Scope direction
-- self-host packaging/upgrade path;
-- managed cloud onboarding;
-- recurring billing/entitlements;
-- managed AI/storage/email/processing allowances;
-- usage enforcement and operational cost controls;
-- source/package boundaries aligned with LIC-001.
+### Implemented boundary
+
+- production-oriented self-host deployment/upgrade/backup path, with
+  `self_host` as the default and no cloud entitlement phone-home;
+- centralized provider-neutral plan/effective-entitlement catalog;
+- workspace subscription state with entry, pending checkout, active, grace,
+  canceled-paid-through, and expired behavior;
+- workspace-locked active-project/internal-user enforcement;
+- managed-AI reservation/settlement and managed-email allowance enforcement;
+- Paddle sandbox hosted checkout, raw-body signature verification,
+  duplicate/out-of-order-safe lifecycle reconciliation, and hosted portal;
+- owner usage/economics view and bounded content-free operator export;
+- LIC-001 founder/legal boundary preserved.
+
+Durable research:
+`docs/research/LAYER6_CLOUD_ECONOMICS_DISTRIBUTION_RESEARCH_2026-08.md`.
 
 Exact source-license/public-package boundary, public prices/allowances, live billing-provider commitments and legal/customer terms require explicit founder approval before activation.
 
@@ -385,9 +400,9 @@ Current sequence:
 2. SC-005 / #9 — Layer 1 Delivery Core — **DONE**.
 3. SC-006 / #10 — Layer 2 Commercial Delivery Graph — **DONE**.
 4. SC-007 / #11 — Layer 3 client collaboration/negotiation/acceptance — **DONE** as one consolidated task/primary PR.
-5. SC-008 / #12 — Layer 4 engineering/QA evidence — **IMPLEMENTED / IN REVIEW** as one consolidated task/primary PR.
-6. SC-009 / #17 — Layer 5 AI-native delivery intelligence.
-7. SC-010 / #13 — Layer 6 subscription/cloud economics/source distribution.
+5. SC-008 / #12 — Layer 4 engineering/QA evidence — **DONE** through PR #41.
+6. SC-009 / #17 — Layer 5 AI-native delivery intelligence — **DONE** through PR #43.
+7. SC-010 / #13 — Layer 6 subscription/cloud economics/source distribution — **IMPLEMENTED / IN REVIEW**.
 8. SC-011 / #14 — Layer 7 portfolio/operations/self-service scale.
 9. SC-012 / #15 — Layer 8 enterprise/GA hardening.
 

@@ -7,9 +7,11 @@ import {
   clientCollaborationNotifications,
   clientProjectInvitations,
   clientProjectParticipants,
+  projects,
   users,
 } from "@/db/schema";
 import { getAppUrl, getSmtpConfig } from "@/lib/env";
+import { consumeManagedEmailUsage } from "@/server/billing";
 
 type Mail = {
   to: string;
@@ -97,6 +99,25 @@ export function scheduleClientInvitationEmail(
   const safeUrl = escapeHtml(url);
   after(async () => {
     try {
+      const invitation = await getDb()
+        .select({
+          workspaceId: projects.workspaceId,
+          emailAttemptCount: clientProjectInvitations.emailAttemptCount,
+        })
+        .from(clientProjectInvitations)
+        .innerJoin(
+          projects,
+          eq(projects.id, clientProjectInvitations.projectId),
+        )
+        .where(eq(clientProjectInvitations.id, invitationId))
+        .limit(1);
+      if (!invitation[0]) return;
+      await consumeManagedEmailUsage({
+        workspaceId: invitation[0].workspaceId,
+        sourceType: "client_invitation",
+        sourceId: invitationId,
+        attemptNumber: invitation[0].emailAttemptCount + 1,
+      });
       await deliver({
         to,
         subject: `Join ${projectName} in ScopeDelta`,
@@ -142,6 +163,8 @@ export async function scheduleClientCollaborationNotificationEmails(
         id: clientCollaborationNotifications.id,
         email: users.email,
         participantId: clientCollaborationNotifications.recipientParticipantId,
+        workspaceId: clientCollaborationNotifications.workspaceId,
+        emailAttemptCount: clientCollaborationNotifications.emailAttemptCount,
       })
       .from(clientCollaborationNotifications)
       .innerJoin(
@@ -191,6 +214,12 @@ export async function scheduleClientCollaborationNotificationEmails(
       const url = `${getAppUrl()}${destination}`;
       after(async () => {
         try {
+          await consumeManagedEmailUsage({
+            workspaceId: notification.workspaceId,
+            sourceType: "client_notification",
+            sourceId: notification.id,
+            attemptNumber: notification.emailAttemptCount + 1,
+          });
           await deliver({
             to: notification.email,
             subject: "ScopeDelta needs your attention",

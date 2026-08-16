@@ -538,8 +538,11 @@ customer-operated and unmetered by ScopeDelta.
 
 The Paddle adapter is server-only and sandbox-only. Checkout initiation first
 claims a workspace/idempotency attempt, then creates an automatically collected
-transaction with exact workspace/plan/attempt metadata. Provider-hosted portal
-sessions are temporary. The browser return is informational. Only a raw-body
+transaction with exact workspace/plan/attempt metadata and sends the buyer to a
+validated `sandbox.pay.paddle.io` hosted checkout. Provider-hosted portal
+sessions are temporary. The browser return is informational. Canceled or
+expired subscriptions can be replaced only by a new subscription carrying the
+exact still-open checkout-attempt binding. Only a raw-body
 HMAC-verified event may reconcile provider customer/subscription state.
 Duplicate event IDs are ignored, older events cannot regress the latest state,
 and customer/subscription/workspace/price mismatches are rejected without

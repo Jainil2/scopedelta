@@ -42,6 +42,10 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Executor = Database | Transaction;
 
 const ACTIVE_USAGE_STATES = ["reserved", "consumed"] as const;
+const TERMINAL_RESUBSCRIBE_STATES: BillingSubscriptionStatus[] = [
+  "canceled_paid_through",
+  "expired",
+];
 
 function periodFor(
   state: typeof workspaceBillingStates.$inferSelect,
@@ -635,14 +639,22 @@ export async function startCheckout(
   const prepared = await getDb().transaction(async (transaction) => {
     await owner(transaction, actor, workspaceId);
     const workspaceRows = await transaction
-      .select({ slug: workspaces.slug })
+      .select({ id: workspaces.id })
       .from(workspaces)
       .where(eq(workspaces.id, workspaceId))
       .for("update")
       .limit(1);
     if (!workspaceRows[0]) throw notFound();
     const state = await ensureBillingState(transaction, workspaceId);
-    if (state.providerSubscriptionId || state.status === "active") {
+    const terminalResubscribe = TERMINAL_RESUBSCRIBE_STATES.includes(
+      state.status,
+    );
+    if (
+      (state.providerSubscriptionId && !terminalResubscribe) ||
+      (!state.providerSubscriptionId &&
+        !terminalResubscribe &&
+        !["entry", "checkout_pending"].includes(state.status))
+    ) {
       throw new PlatformError(
         "billing_subscription_exists",
         409,
@@ -689,6 +701,13 @@ export async function startCheckout(
         "A checkout is already being reconciled for this workspace.",
       );
     }
+    if (state.status === "checkout_pending") {
+      throw new PlatformError(
+        "billing_checkout_in_progress",
+        409,
+        "A checkout is already being reconciled for this workspace.",
+      );
+    }
     const recentlyFailed = await transaction
       .select({ id: billingCheckoutAttempts.id })
       .from(billingCheckoutAttempts)
@@ -726,20 +745,27 @@ export async function startCheckout(
       .update(workspaceBillingStates)
       .set({
         pendingPlanKey: planKey,
-        status: "checkout_pending",
+        status: terminalResubscribe ? state.status : "checkout_pending",
         updatedAt: new Date(),
       })
       .where(eq(workspaceBillingStates.workspaceId, workspaceId));
-    return { attemptId, workspaceSlug: workspaceRows[0].slug } as const;
+    return {
+      attemptId,
+      customerId: state.providerCustomerId,
+      checkoutStateStatus: terminalResubscribe
+        ? state.status
+        : ("checkout_pending" as const),
+      previousStatus: state.status,
+    } as const;
   });
   if ("existingUrl" in prepared) return { checkoutUrl: prepared.existingUrl };
   try {
     const checkout = await createPaddleCheckout({
       workspaceId,
-      workspaceSlug: prepared.workspaceSlug,
       planKey,
       priceId: plan.providerPriceId,
       checkoutAttemptId: prepared.attemptId,
+      customerId: prepared.customerId,
     });
     await getDb().transaction(async (transaction) => {
       await transaction
@@ -785,13 +811,16 @@ export async function startCheckout(
         );
       await transaction
         .update(workspaceBillingStates)
-        .set({ status: "entry", pendingPlanKey: null, updatedAt: new Date() })
+        .set({
+          status: prepared.previousStatus,
+          pendingPlanKey: null,
+          updatedAt: new Date(),
+        })
         .where(
           and(
             eq(workspaceBillingStates.workspaceId, workspaceId),
-            eq(workspaceBillingStates.status, "checkout_pending"),
+            eq(workspaceBillingStates.status, prepared.checkoutStateStatus),
             eq(workspaceBillingStates.pendingPlanKey, planKey),
-            isNull(workspaceBillingStates.providerSubscriptionId),
           ),
         );
     });
@@ -951,6 +980,11 @@ export async function processPaddleSubscriptionEvent(
         typeof event.data.custom_data?.scopedelta_plan_key === "string"
           ? event.data.custom_data.scopedelta_plan_key
           : null;
+      const attemptId =
+        typeof event.data.custom_data?.scopedelta_checkout_attempt_id ===
+        "string"
+          ? event.data.custom_data.scopedelta_checkout_attempt_id
+          : null;
       const bySubscription = await transaction
         .select({ workspaceId: workspaceBillingStates.workspaceId })
         .from(workspaceBillingStates)
@@ -992,9 +1026,32 @@ export async function processPaddleSubscriptionEvent(
         };
       }
       const current = await ensureBillingState(transaction, workspaceId);
+      const checkoutAttempts = attemptId
+        ? await transaction
+            .select({
+              workspaceId: billingCheckoutAttempts.workspaceId,
+              planKey: billingCheckoutAttempts.planKey,
+              status: billingCheckoutAttempts.status,
+            })
+            .from(billingCheckoutAttempts)
+            .where(eq(billingCheckoutAttempts.id, attemptId))
+            .limit(1)
+        : [];
+      const checkoutAttempt = checkoutAttempts[0];
+      const replacingSubscription = Boolean(
+        current.providerSubscriptionId &&
+        current.providerSubscriptionId !== event.data.id,
+      );
+      const replacementIsBound = Boolean(
+        replacingSubscription &&
+        TERMINAL_RESUBSCRIBE_STATES.includes(current.status) &&
+        checkoutAttempt &&
+        checkoutAttempt.workspaceId === workspaceId &&
+        checkoutAttempt.planKey === plan.key &&
+        ["creating", "pending"].includes(checkoutAttempt.status),
+      );
       if (
-        (current.providerSubscriptionId &&
-          current.providerSubscriptionId !== event.data.id) ||
+        (replacingSubscription && !replacementIsBound) ||
         (current.providerCustomerId &&
           current.providerCustomerId !== event.data.customer_id)
       ) {
@@ -1033,11 +1090,6 @@ export async function processPaddleSubscriptionEvent(
           updatedAt: new Date(),
         })
         .where(eq(workspaceBillingStates.workspaceId, workspaceId));
-      const attemptId =
-        typeof event.data.custom_data?.scopedelta_checkout_attempt_id ===
-        "string"
-          ? event.data.custom_data.scopedelta_checkout_attempt_id
-          : null;
       if (attemptId) {
         await transaction
           .update(billingCheckoutAttempts)
@@ -1047,6 +1099,7 @@ export async function processPaddleSubscriptionEvent(
               eq(billingCheckoutAttempts.id, attemptId),
               eq(billingCheckoutAttempts.workspaceId, workspaceId),
               eq(billingCheckoutAttempts.planKey, plan.key),
+              inArray(billingCheckoutAttempts.status, ["creating", "pending"]),
             ),
           );
       }

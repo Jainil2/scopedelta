@@ -51,6 +51,8 @@ describe("subscription, entitlements, and managed usage", () => {
       PADDLE_API_KEY: "pdl_sdbx_test_key",
       PADDLE_WEBHOOK_SECRET: "pdl_ntfset_test_secret",
       PADDLE_API_BASE_URL: "https://sandbox-api.paddle.com",
+      PADDLE_HOSTED_CHECKOUT_URL:
+        "https://sandbox.pay.paddle.io/checkout/hsc_scope_delta_test",
     };
     await db.execute(sql`truncate table workspaces, users cascade`);
     vi.unstubAllGlobals();
@@ -413,6 +415,9 @@ describe("subscription, entitlements, and managed usage", () => {
       key,
     );
     expect(retry).toEqual(first);
+    expect(first.checkoutUrl).toBe(
+      "https://sandbox.pay.paddle.io/checkout/hsc_scope_delta_test?transaction_id=txn_test",
+    );
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const overview = await getWorkspaceBillingOverview(
       fixture.owner,
@@ -424,6 +429,101 @@ describe("subscription, entitlements, and managed usage", () => {
       status: "checkout_pending",
     });
   });
+
+  it.each(["canceled_paid_through", "expired"] as const)(
+    "binds a %s subscription replacement to a fresh checkout attempt",
+    async (terminalStatus) => {
+      const fixture = await createFixture();
+      const active = subscriptionEvent({
+        id: "evt_replacement_active",
+        occurredAt: "2026-08-16T06:00:00.000Z",
+        workspaceId: fixture.workspace.id,
+        status: "active",
+      });
+      await processPaddleSubscriptionEvent(active, JSON.stringify(active));
+      const canceled = subscriptionEvent({
+        id: "evt_replacement_canceled",
+        occurredAt: "2026-08-17T06:00:00.000Z",
+        workspaceId: fixture.workspace.id,
+        status: "canceled",
+      });
+      await processPaddleSubscriptionEvent(canceled, JSON.stringify(canceled));
+      await db
+        .update(workspaceBillingStates)
+        .set({
+          paidThrough: new Date(
+            terminalStatus === "expired"
+              ? "2020-01-01T00:00:00.000Z"
+              : "2099-01-01T00:00:00.000Z",
+          ),
+        })
+        .where(eq(workspaceBillingStates.workspaceId, fixture.workspace.id));
+      await expect(
+        getWorkspaceBillingOverview(fixture.owner, fixture.workspace.id),
+      ).resolves.toMatchObject({ subscription: { status: terminalStatus } });
+
+      let checkoutAttemptId = "";
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init?: RequestInit) => {
+          const body = JSON.parse(String(init?.body)) as {
+            customer_id?: string;
+            custom_data: { scopedelta_checkout_attempt_id: string };
+          };
+          expect(body.customer_id).toBe("ctm_test");
+          checkoutAttemptId = body.custom_data.scopedelta_checkout_attempt_id;
+          return Response.json({ data: { id: "txn_replacement" } });
+        }),
+      );
+      await expect(
+        startCheckout(
+          fixture.owner,
+          fixture.workspace.id,
+          "paid_test",
+          randomUUID(),
+        ),
+      ).resolves.toEqual({
+        checkoutUrl:
+          "https://sandbox.pay.paddle.io/checkout/hsc_scope_delta_test?transaction_id=txn_replacement",
+      });
+
+      const unbound = subscriptionEvent({
+        id: "evt_replacement_unbound",
+        occurredAt: "2026-08-18T06:00:00.000Z",
+        workspaceId: fixture.workspace.id,
+        subscriptionId: "sub_replacement_unbound",
+        status: "active",
+      });
+      await expect(
+        processPaddleSubscriptionEvent(unbound, JSON.stringify(unbound)),
+      ).resolves.toEqual({ duplicate: false, processed: false });
+
+      const replacement = subscriptionEvent({
+        id: "evt_replacement_bound",
+        occurredAt: "2026-08-19T06:00:00.000Z",
+        workspaceId: fixture.workspace.id,
+        subscriptionId: "sub_replacement",
+        checkoutAttemptId,
+        status: "active",
+      });
+      await expect(
+        processPaddleSubscriptionEvent(
+          replacement,
+          JSON.stringify(replacement),
+        ),
+      ).resolves.toEqual({ duplicate: false, processed: true });
+      const state = await db
+        .select()
+        .from(workspaceBillingStates)
+        .where(eq(workspaceBillingStates.workspaceId, fixture.workspace.id));
+      expect(state[0]).toMatchObject({
+        providerCustomerId: "ctm_test",
+        providerSubscriptionId: "sub_replacement",
+        status: "active",
+        pendingPlanKey: null,
+      });
+    },
+  );
 
   it("does not let an outbound checkout error overwrite provider-confirmed activation", async () => {
     const fixture = await createFixture();
@@ -560,6 +660,9 @@ function subscriptionEvent(input: {
   workspaceId: string;
   status: "active" | "past_due" | "canceled";
   scheduledCancel?: boolean;
+  subscriptionId?: string;
+  customerId?: string;
+  checkoutAttemptId?: string;
 }): PaddleWebhookEvent {
   return {
     event_id: input.id,
@@ -571,12 +674,17 @@ function subscriptionEvent(input: {
           : "subscription.canceled",
     occurred_at: input.occurredAt,
     data: {
-      id: "sub_test",
+      id: input.subscriptionId ?? "sub_test",
       status: input.status,
-      customer_id: "ctm_test",
+      customer_id: input.customerId ?? "ctm_test",
       custom_data: {
         scopedelta_workspace_id: input.workspaceId,
         scopedelta_plan_key: "paid_test",
+        ...(input.checkoutAttemptId
+          ? {
+              scopedelta_checkout_attempt_id: input.checkoutAttemptId,
+            }
+          : {}),
       },
       current_billing_period: {
         starts_at: "2026-08-01T00:00:00.000Z",

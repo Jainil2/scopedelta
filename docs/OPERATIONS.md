@@ -392,8 +392,15 @@ Mailpit is development-only and must never be public or connected to production.
 
 ### Billing sandbox operations
 
-- Do not set `PADDLE_ENVIRONMENT` to live. The adapter rejects every mode except
-  `sandbox`, and SC-010 authorizes no live account, fees, or customer money.
+- Do not set `PADDLE_ENVIRONMENT` to live. The adapter accepts only sandbox API
+  keys beginning `pdl_sdbx_`, the canonical `https://sandbox-api.paddle.com` API
+  origin, and a `PADDLE_HOSTED_CHECKOUT_URL` copied from
+  `https://sandbox.pay.paddle.io/checkout/hsc_...`. SC-010 authorizes no live
+  account, fees, or customer money.
+- Create the sandbox hosted checkout in Paddle and configure its completion
+  redirect back to ScopeDelta. ScopeDelta appends the server-created
+  `transaction_id`; it never sends buyers to an application page that lacks a
+  payment form.
 - Configure plan JSON only in the server secret/configuration boundary. Never
   expose Paddle API/webhook secrets through `NEXT_PUBLIC_`, browser payloads,
   database rows, screenshots, or logs.
@@ -403,6 +410,10 @@ Mailpit is development-only and must never be public or connected to production.
 - A checkout browser return changes no entitlement. Inspect the signed webhook,
   sanitized `billing_provider_events` state, and current workspace snapshot when
   a sandbox payment appears complete but access remains pending.
+- Canceled-paid-through and expired workspaces may start a fresh checkout. The
+  existing Paddle customer is reused, and a different subscription ID is
+  accepted only when its webhook carries the exact still-open workspace/plan
+  checkout-attempt binding.
 - Duplicate event IDs are normal and idempotent. Older events are recorded as
   ignored and cannot regress a newer subscription. Rejected workspace/customer/
   subscription/price mappings require configuration investigation; never edit

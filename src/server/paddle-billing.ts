@@ -4,13 +4,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { z } from "zod";
 
-import { getAppUrl } from "@/lib/env";
 import { PlatformError } from "@/lib/platform-errors";
 
 const paddleResponseSchema = z.object({
   data: z.object({
     id: z.string().min(1),
-    checkout: z.object({ url: z.string().url().nullable() }).nullable(),
   }),
 });
 
@@ -73,8 +71,12 @@ const webhookEventSchema = z.object({
 type PaddleConfig = {
   apiKey: string;
   apiBaseUrl: string;
+  hostedCheckoutUrl: string;
   timeoutMs: number;
 };
+
+const PADDLE_SANDBOX_API_ORIGIN = "https://sandbox-api.paddle.com";
+const PADDLE_SANDBOX_CHECKOUT_ORIGIN = "https://sandbox.pay.paddle.io";
 
 function requireSandboxEnvironment() {
   const environment = process.env.PADDLE_ENVIRONMENT?.trim() || "sandbox";
@@ -87,13 +89,29 @@ function getPaddleConfig(): PaddleConfig {
   requireSandboxEnvironment();
   const apiKey = process.env.PADDLE_API_KEY?.trim();
   const configuredBase =
-    process.env.PADDLE_API_BASE_URL?.trim() || "https://sandbox-api.paddle.com";
-  const parsed = new URL(configuredBase);
+    process.env.PADDLE_API_BASE_URL?.trim() || PADDLE_SANDBOX_API_ORIGIN;
+  const configuredHostedCheckout =
+    process.env.PADDLE_HOSTED_CHECKOUT_URL?.trim();
   const timeoutMs = Number(process.env.PADDLE_TIMEOUT_MS?.trim() || "8000");
+  let apiBaseUrl: URL;
+  let hostedCheckoutUrl: URL;
+  try {
+    apiBaseUrl = new URL(configuredBase);
+    hostedCheckoutUrl = new URL(configuredHostedCheckout || "invalid:");
+  } catch {
+    throw new Error("paddle_sandbox_unconfigured");
+  }
   if (
     !apiKey ||
-    (!configuredBase.startsWith("https://") &&
-      parsed.hostname !== "localhost") ||
+    !apiKey.startsWith("pdl_sdbx_") ||
+    apiBaseUrl.origin !== PADDLE_SANDBOX_API_ORIGIN ||
+    !["", "/"].includes(apiBaseUrl.pathname) ||
+    Boolean(apiBaseUrl.search || apiBaseUrl.hash) ||
+    Boolean(apiBaseUrl.username || apiBaseUrl.password) ||
+    hostedCheckoutUrl.origin !== PADDLE_SANDBOX_CHECKOUT_ORIGIN ||
+    !/^\/checkout\/hsc_[A-Za-z0-9_]+$/.test(hostedCheckoutUrl.pathname) ||
+    Boolean(hostedCheckoutUrl.search || hostedCheckoutUrl.hash) ||
+    Boolean(hostedCheckoutUrl.username || hostedCheckoutUrl.password) ||
     !Number.isInteger(timeoutMs) ||
     timeoutMs < 1_000 ||
     timeoutMs > 15_000
@@ -102,7 +120,8 @@ function getPaddleConfig(): PaddleConfig {
   }
   return {
     apiKey,
-    apiBaseUrl: configuredBase.replace(/\/$/, ""),
+    apiBaseUrl: PADDLE_SANDBOX_API_ORIGIN,
+    hostedCheckoutUrl: hostedCheckoutUrl.toString(),
     timeoutMs,
   };
 }
@@ -149,17 +168,18 @@ async function paddleRequest(path: string, body: unknown) {
 
 export async function createPaddleCheckout(input: {
   workspaceId: string;
-  workspaceSlug: string;
   planKey: string;
   priceId: string;
   checkoutAttemptId: string;
+  customerId?: string | null;
 }) {
-  const returnUrl = `${getAppUrl()}/app/${input.workspaceSlug}/settings/billing?checkout=returned`;
+  const config = getPaddleConfig();
   const payload = paddleResponseSchema.parse(
     await paddleRequest("/transactions", {
       items: [{ price_id: input.priceId, quantity: 1 }],
       collection_mode: "automatic",
-      checkout: { url: returnUrl },
+      checkout: { url: null },
+      ...(input.customerId ? { customer_id: input.customerId } : {}),
       custom_data: {
         scopedelta_workspace_id: input.workspaceId,
         scopedelta_plan_key: input.planKey,
@@ -167,16 +187,11 @@ export async function createPaddleCheckout(input: {
       },
     }),
   );
-  if (!payload.data.checkout?.url) {
-    throw new PlatformError(
-      "billing_checkout_unavailable",
-      503,
-      "The billing provider did not return a checkout link.",
-    );
-  }
+  const checkoutUrl = new URL(config.hostedCheckoutUrl);
+  checkoutUrl.searchParams.set("transaction_id", payload.data.id);
   return {
     providerTransactionId: payload.data.id,
-    checkoutUrl: payload.data.checkout.url,
+    checkoutUrl: checkoutUrl.toString(),
   };
 }
 

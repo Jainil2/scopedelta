@@ -1,10 +1,10 @@
 import { createHmac } from "node:crypto";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PlatformError } from "@/lib/platform-errors";
 
-import { verifyPaddleWebhook } from "./paddle-billing";
+import { createPaddleCheckout, verifyPaddleWebhook } from "./paddle-billing";
 
 const originalEnv = { ...process.env };
 
@@ -16,11 +16,14 @@ describe("Paddle sandbox webhook verification", () => {
       PADDLE_API_KEY: "pdl_sdbx_test_key",
       PADDLE_WEBHOOK_SECRET: "pdl_ntfset_test_secret",
       PADDLE_API_BASE_URL: "https://sandbox-api.paddle.com",
+      PADDLE_HOSTED_CHECKOUT_URL:
+        "https://sandbox.pay.paddle.io/checkout/hsc_scope_delta_test",
     };
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
+    vi.unstubAllGlobals();
   });
 
   it("accepts the exact raw body and any valid h1 during signature rotation", () => {
@@ -88,6 +91,86 @@ describe("Paddle sandbox webhook verification", () => {
     ).toThrowError(PlatformError);
   });
 });
+
+describe("Paddle sandbox checkout configuration", () => {
+  beforeEach(() => {
+    process.env = {
+      ...originalEnv,
+      APP_URL: "https://app.scopedelta.test",
+      PADDLE_ENVIRONMENT: "sandbox",
+      PADDLE_API_KEY: "pdl_sdbx_test_key",
+      PADDLE_API_BASE_URL: "https://sandbox-api.paddle.com",
+      PADDLE_HOSTED_CHECKOUT_URL:
+        "https://sandbox.pay.paddle.io/checkout/hsc_scope_delta_test",
+    };
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    vi.unstubAllGlobals();
+  });
+
+  it("opens the created transaction on Paddle's sandbox-hosted payment flow", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        data: {
+          id: "txn_test",
+          checkout: {
+            url: "https://app.scopedelta.test/settings/billing?_ptxn=txn_test",
+          },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(checkout({ customerId: "ctm_test" })).resolves.toEqual({
+      providerTransactionId: "txn_test",
+      checkoutUrl:
+        "https://sandbox.pay.paddle.io/checkout/hsc_scope_delta_test?transaction_id=txn_test",
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://sandbox-api.paddle.com/transactions",
+    );
+    const request = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    ) as Record<string, unknown>;
+    expect(request).toMatchObject({
+      collection_mode: "automatic",
+      checkout: { url: null },
+      customer_id: "ctm_test",
+    });
+    expect(JSON.stringify(request)).not.toContain("app.scopedelta.test");
+  });
+
+  it.each([
+    ["live environment", "PADDLE_ENVIRONMENT", "live"],
+    ["live API origin", "PADDLE_API_BASE_URL", "https://api.paddle.com"],
+    ["live API key", "PADDLE_API_KEY", "pdl_live_test_key"],
+    [
+      "live hosted checkout",
+      "PADDLE_HOSTED_CHECKOUT_URL",
+      "https://pay.paddle.io/checkout/hsc_scope_delta_test",
+    ],
+  ])("rejects a %s before calling Paddle", async (_label, name, value) => {
+    process.env[name] = value;
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(checkout()).rejects.toThrow("paddle_sandbox_unconfigured");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+function checkout(input: { customerId?: string } = {}) {
+  return createPaddleCheckout({
+    workspaceId: "workspace",
+    planKey: "paid_test",
+    priceId: "pri_test",
+    checkoutAttemptId: "attempt",
+    customerId: input.customerId,
+  });
+}
 
 function event() {
   return {

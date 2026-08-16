@@ -62,6 +62,9 @@ export function AppShell({
           <Link href={`/app/${current.slug}/inbox`}>Inbox</Link>
           <Link href={`/app/${current.slug}/settings`}>Settings</Link>
           <Link href={`/app/${current.slug}/settings/members`}>Members</Link>
+          {current.role === "owner" ? (
+            <Link href={`/app/${current.slug}/settings/billing`}>Billing</Link>
+          ) : null}
         </nav>
         <div className="app-account">
           <span>{userName}</span>

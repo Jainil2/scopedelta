@@ -28,10 +28,7 @@ import {
   type AiJobTarget,
   type ScopeChangeAnalysisResult,
 } from "@/lib/ai/contracts";
-import {
-  communityEntitlementPolicy,
-  type EntitlementPolicy,
-} from "@/lib/entitlements";
+import type { EntitlementPolicy } from "@/lib/entitlements";
 import { getAiConfig, type AiConfig } from "@/lib/env";
 import { notFound, PlatformError } from "@/lib/platform-errors";
 import {
@@ -40,6 +37,11 @@ import {
   getProjectAccess,
 } from "@/server/delivery";
 import type { UserActor } from "@/server/workspaces";
+import {
+  deploymentEntitlementPolicy,
+  reserveManagedAiUsage,
+  settleManagedUsageInTransaction,
+} from "@/server/billing";
 
 import {
   assembleAiContext,
@@ -272,7 +274,7 @@ async function expireAbandonedJobs() {
       )
       .returning({ id: aiJobs.id });
     if (!expired.length) return;
-    await transaction
+    const usageRecords = await transaction
       .update(aiJobAttempts)
       .set({
         status: "failed",
@@ -288,7 +290,15 @@ async function expireAbandonedJobs() {
           ),
           eq(aiJobAttempts.status, "running"),
         ),
+      )
+      .returning({ managedUsageRecordId: aiJobAttempts.managedUsageRecordId });
+    for (const { managedUsageRecordId } of usageRecords) {
+      await settleManagedUsageInTransaction(
+        transaction,
+        managedUsageRecordId,
+        "consumed",
       );
+    }
   });
 }
 
@@ -297,7 +307,7 @@ export async function createAiJob(
   workspaceId: string,
   projectId: string,
   rawInput: unknown,
-  entitlements: EntitlementPolicy = communityEntitlementPolicy,
+  entitlements: EntitlementPolicy = deploymentEntitlementPolicy,
 ) {
   const input = createAiJobSchema.parse(rawInput);
   const execution = requireAiExecutionConfig();
@@ -541,7 +551,7 @@ export async function retryAiJob(
   workspaceId: string,
   projectId: string,
   jobId: string,
-  entitlements: EntitlementPolicy = communityEntitlementPolicy,
+  entitlements: EntitlementPolicy = deploymentEntitlementPolicy,
 ) {
   const execution = requireAiExecutionConfig();
   const { config } = execution;
@@ -734,35 +744,51 @@ export async function cancelAiJob(
   if (!rows[0]) throw notFound();
   assertJobAuthorization(rows[0].kind, access, actor.userId);
   const now = new Date();
-  const updated = await getDb()
-    .update(aiJobs)
-    .set({
-      status: "canceled",
-      canceledAt: now,
-      completedAt: now,
-      leaseOwner: null,
-      leaseExpiresAt: null,
-      errorCode: null,
-      errorMessage: null,
-      updatedAt: now,
-    })
-    .where(
-      and(eq(aiJobs.id, jobId), inArray(aiJobs.status, ["queued", "running"])),
-    )
-    .returning({ id: aiJobs.id });
-  if (!updated[0]) {
-    throw new PlatformError(
-      "ai_job_not_cancelable",
-      409,
-      "This AI job can no longer be canceled.",
-    );
-  }
-  await getDb()
-    .update(aiJobAttempts)
-    .set({ status: "canceled", completedAt: now })
-    .where(
-      and(eq(aiJobAttempts.jobId, jobId), eq(aiJobAttempts.status, "running")),
-    );
+  await getDb().transaction(async (transaction) => {
+    const updated = await transaction
+      .update(aiJobs)
+      .set({
+        status: "canceled",
+        canceledAt: now,
+        completedAt: now,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        errorCode: null,
+        errorMessage: null,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(aiJobs.id, jobId),
+          inArray(aiJobs.status, ["queued", "running"]),
+        ),
+      )
+      .returning({ id: aiJobs.id });
+    if (!updated[0]) {
+      throw new PlatformError(
+        "ai_job_not_cancelable",
+        409,
+        "This AI job can no longer be canceled.",
+      );
+    }
+    const attempts = await transaction
+      .update(aiJobAttempts)
+      .set({ status: "canceled", completedAt: now })
+      .where(
+        and(
+          eq(aiJobAttempts.jobId, jobId),
+          eq(aiJobAttempts.status, "running"),
+        ),
+      )
+      .returning({ managedUsageRecordId: aiJobAttempts.managedUsageRecordId });
+    for (const { managedUsageRecordId } of attempts) {
+      await settleManagedUsageInTransaction(
+        transaction,
+        managedUsageRecordId,
+        "consumed",
+      );
+    }
+  });
   return getAiJob(actor, workspaceId, projectId, jobId);
 }
 
@@ -787,75 +813,108 @@ export async function runAiJob(jobId: string) {
   let job: typeof aiJobs.$inferSelect | undefined;
   let attemptId = "";
   let attemptNumber = 0;
-  await getDb().transaction(async (transaction) => {
-    const queued = await transaction
-      .select({
-        status: aiJobs.status,
-        provider: aiJobs.provider,
-        model: aiJobs.model,
-        providerBaseUrl: aiJobs.providerBaseUrl,
-        executionConfigFingerprint: aiJobs.executionConfigFingerprint,
-      })
-      .from(aiJobs)
-      .where(eq(aiJobs.id, jobId))
-      .for("update")
-      .limit(1);
-    if (queued[0]?.status !== "queued") return;
+  let usageRecordId: string | null = null;
+  try {
+    await getDb().transaction(async (transaction) => {
+      const queued = await transaction
+        .select({
+          status: aiJobs.status,
+          workspaceId: aiJobs.workspaceId,
+          provider: aiJobs.provider,
+          model: aiJobs.model,
+          providerBaseUrl: aiJobs.providerBaseUrl,
+          executionConfigFingerprint: aiJobs.executionConfigFingerprint,
+        })
+        .from(aiJobs)
+        .where(eq(aiJobs.id, jobId))
+        .for("update")
+        .limit(1);
+      if (queued[0]?.status !== "queued") return;
+      if (
+        queued[0].provider !== config.provider ||
+        queued[0].model !== config.model ||
+        queued[0].providerBaseUrl !== execution.providerBaseUrl ||
+        queued[0].executionConfigFingerprint !== execution.fingerprint
+      ) {
+        await transaction
+          .update(aiJobs)
+          .set({
+            status: "failed",
+            errorCode: "ai_execution_config_changed",
+            errorMessage: CONFIG_CHANGED_MESSAGE,
+            completedAt: now,
+            updatedAt: now,
+          })
+          .where(and(eq(aiJobs.id, jobId), eq(aiJobs.status, "queued")));
+        return;
+      }
+      const attempts = await transaction
+        .select({ value: count() })
+        .from(aiJobAttempts)
+        .where(eq(aiJobAttempts.jobId, jobId));
+      attemptNumber = (attempts[0]?.value ?? 0) + 1;
+      usageRecordId = await reserveManagedAiUsage(transaction, {
+        workspaceId: queued[0].workspaceId,
+        jobId,
+        attemptNumber,
+      });
+      const claimed = await transaction
+        .update(aiJobs)
+        .set({
+          status: "running",
+          leaseOwner: runnerId,
+          leaseExpiresAt,
+          startedAt: now,
+          completedAt: null,
+          updatedAt: now,
+        })
+        .where(and(eq(aiJobs.id, jobId), eq(aiJobs.status, "queued")))
+        .returning();
+      job = claimed[0];
+      if (!job) return;
+      attemptId = randomUUID();
+      await transaction.insert(aiJobAttempts).values({
+        id: attemptId,
+        jobId,
+        attemptNumber,
+        provider: job.provider,
+        model: job.model,
+        providerBaseUrl: job.providerBaseUrl,
+        executionConfigFingerprint: job.executionConfigFingerprint,
+        managedUsageRecordId: usageRecordId,
+      });
+    });
+  } catch (error) {
     if (
-      queued[0].provider !== config.provider ||
-      queued[0].model !== config.model ||
-      queued[0].providerBaseUrl !== execution.providerBaseUrl ||
-      queued[0].executionConfigFingerprint !== execution.fingerprint
+      error instanceof PlatformError &&
+      [
+        "managed_ai_entitlement_inactive",
+        "managed_ai_allowance_exhausted",
+      ].includes(error.code)
     ) {
-      await transaction
+      await getDb()
         .update(aiJobs)
         .set({
           status: "failed",
-          errorCode: "ai_execution_config_changed",
-          errorMessage: CONFIG_CHANGED_MESSAGE,
+          errorCode: error.code,
+          errorMessage: error.message,
           completedAt: now,
           updatedAt: now,
         })
         .where(and(eq(aiJobs.id, jobId), eq(aiJobs.status, "queued")));
       return;
     }
-    const claimed = await transaction
-      .update(aiJobs)
-      .set({
-        status: "running",
-        leaseOwner: runnerId,
-        leaseExpiresAt,
-        startedAt: now,
-        completedAt: null,
-        updatedAt: now,
-      })
-      .where(and(eq(aiJobs.id, jobId), eq(aiJobs.status, "queued")))
-      .returning();
-    job = claimed[0];
-    if (!job) return;
-    const attempts = await transaction
-      .select({ value: count() })
-      .from(aiJobAttempts)
-      .where(eq(aiJobAttempts.jobId, jobId));
-    attemptNumber = (attempts[0]?.value ?? 0) + 1;
-    attemptId = randomUUID();
-    await transaction.insert(aiJobAttempts).values({
-      id: attemptId,
-      jobId,
-      attemptNumber,
-      provider: job.provider,
-      model: job.model,
-      providerBaseUrl: job.providerBaseUrl,
-      executionConfigFingerprint: job.executionConfigFingerprint,
-    });
-  });
+    throw error;
+  }
   if (!job) return;
+  let providerCallStarted = false;
   try {
     const schema = resultSchemas[job.kind];
     const prompt = jobPrompt(
       job.kind,
       job.contextSnapshot as AiContextSnapshot,
     );
+    providerCallStarted = true;
     const generation = await createAiProvider(config).generate({
       schemaName: job.kind,
       schema: z.toJSONSchema(schema) as Record<string, unknown>,
@@ -931,6 +990,11 @@ export async function runAiJob(jobId: string) {
             eq(aiJobAttempts.status, "running"),
           ),
         );
+      await settleManagedUsageInTransaction(
+        transaction,
+        usageRecordId,
+        "consumed",
+      );
       if (finished[0]) {
         await transaction.insert(auditEvents).values({
           id: randomUUID(),
@@ -1001,6 +1065,11 @@ export async function runAiJob(jobId: string) {
             eq(aiJobAttempts.status, "running"),
           ),
         );
+      await settleManagedUsageInTransaction(
+        transaction,
+        usageRecordId,
+        providerCallStarted ? "consumed" : "released",
+      );
     });
   }
 }
@@ -1127,7 +1196,7 @@ export async function confirmAiActions(
   projectId: string,
   jobId: string,
   rawInput: unknown,
-  entitlements: EntitlementPolicy = communityEntitlementPolicy,
+  entitlements: EntitlementPolicy = deploymentEntitlementPolicy,
 ) {
   const prepared = await actionJob(
     actor,

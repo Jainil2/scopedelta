@@ -18,6 +18,11 @@ import {
 } from "@/lib/entitlements";
 import { forbidden, notFound, PlatformError } from "@/lib/platform-errors";
 import { consumeActionLimit } from "@/server/action-rate-limit";
+import {
+  assertInternalMemberCapacity,
+  deploymentEntitlementPolicy,
+  initializeWorkspaceBillingState,
+} from "@/server/billing";
 
 export type UserActor = { userId: string; email: string };
 
@@ -78,6 +83,7 @@ export async function createWorkspace(
       workspaceId: settingsId,
       timezone: "UTC",
     });
+    await initializeWorkspaceBillingState(transaction, workspaceId);
     await transaction.insert(memberships).values({
       id: membershipId,
       workspaceId,
@@ -368,7 +374,7 @@ export async function verifyInvitationToken(token: string) {
 export async function acceptWorkspaceInvitation(
   actor: UserActor,
   token: string,
-  entitlements: EntitlementPolicy = communityEntitlementPolicy,
+  entitlements: EntitlementPolicy = deploymentEntitlementPolicy,
 ) {
   const db = getDb();
   const tokenHash = hashToken(token);
@@ -414,6 +420,10 @@ export async function acceptWorkspaceInvitation(
       userId: actor.userId,
       workspaceId: invitation.workspaceId,
     });
+    await transaction.execute(
+      sql`select ${workspaces.id} from ${workspaces} where ${workspaces.id} = ${invitation.workspaceId} for update`,
+    );
+    await assertInternalMemberCapacity(transaction, invitation.workspaceId);
 
     const claimed = await transaction
       .update(workspaceInvitations)

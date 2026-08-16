@@ -33,6 +33,7 @@ import {
   projectMemberships,
   projects,
   users,
+  workspaces,
   workItemDependencies,
   workItemLabels,
   workItems,
@@ -58,13 +59,14 @@ import type {
   MyWorkFilters,
   WorkItemFilters,
 } from "@/lib/delivery-validation";
-import {
-  communityEntitlementPolicy,
-  type EntitlementPolicy,
-} from "@/lib/entitlements";
+import type { EntitlementPolicy } from "@/lib/entitlements";
 import { forbidden, notFound, PlatformError } from "@/lib/platform-errors";
 import { recordWorkItemAssignment } from "@/server/collaboration-events";
 import type { UserActor } from "@/server/workspaces";
+import {
+  assertActiveProjectCapacity,
+  deploymentEntitlementPolicy,
+} from "@/server/billing";
 
 export type Database = ReturnType<typeof getDb>;
 export type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -107,7 +109,7 @@ export async function createClient(
   actor: UserActor,
   workspaceId: string,
   input: CreateClientInput,
-  entitlements: EntitlementPolicy = communityEntitlementPolicy,
+  entitlements: EntitlementPolicy = deploymentEntitlementPolicy,
 ) {
   const db = getDb();
   await getWorkspaceAccess(db, actor, workspaceId);
@@ -149,7 +151,7 @@ export async function updateClient(
   workspaceId: string,
   clientId: string,
   input: UpdateClientInput,
-  entitlements: EntitlementPolicy = communityEntitlementPolicy,
+  entitlements: EntitlementPolicy = deploymentEntitlementPolicy,
 ) {
   const db = getDb();
   await getWorkspaceAccess(db, actor, workspaceId);
@@ -288,7 +290,7 @@ export async function createProject(
   actor: UserActor,
   workspaceId: string,
   input: CreateProjectInput,
-  entitlements: EntitlementPolicy = communityEntitlementPolicy,
+  entitlements: EntitlementPolicy = deploymentEntitlementPolicy,
 ) {
   const db = getDb();
   await getWorkspaceAccess(db, actor, workspaceId);
@@ -301,6 +303,10 @@ export async function createProject(
   try {
     await db.transaction(async (transaction) => {
       await getWorkspaceAccess(transaction, actor, workspaceId);
+      await transaction.execute(
+        sql`select ${workspaces.id} from ${workspaces} where ${workspaces.id} = ${workspaceId} for update`,
+      );
+      await assertActiveProjectCapacity(transaction, workspaceId);
       const client = await transaction
         .select({ id: clients.id, lifecycle: clients.lifecycle })
         .from(clients)
@@ -421,7 +427,7 @@ export async function updateProject(
   workspaceId: string,
   projectId: string,
   input: UpdateProjectInput,
-  entitlements: EntitlementPolicy = communityEntitlementPolicy,
+  entitlements: EntitlementPolicy = deploymentEntitlementPolicy,
 ) {
   const db = getDb();
   const access = await getProjectAccess(db, actor, workspaceId, projectId);
@@ -448,6 +454,12 @@ export async function updateProject(
       .limit(1);
     if (!current[0]) throw notFound();
     const lifecycle = input.lifecycle ?? current[0].lifecycle;
+    if (current[0].lifecycle !== "active" && lifecycle === "active") {
+      await transaction.execute(
+        sql`select ${workspaces.id} from ${workspaces} where ${workspaces.id} = ${workspaceId} for update`,
+      );
+      await assertActiveProjectCapacity(transaction, workspaceId);
+    }
     await transaction
       .update(projects)
       .set({
@@ -1282,7 +1294,7 @@ export async function createWorkItem(
   workspaceId: string,
   projectId: string,
   input: CreateWorkItemInput,
-  entitlements: EntitlementPolicy = communityEntitlementPolicy,
+  entitlements: EntitlementPolicy = deploymentEntitlementPolicy,
 ) {
   const db = getDb();
   await getProjectAccess(db, actor, workspaceId, projectId);

@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented through SC-009. The SC-004 production platform kernel now supports
+Implemented through SC-010. The SC-004 production platform kernel now supports
 the client-project delivery foundation plus production board, optional cycle
 planning, authorized cross-project daily execution, and internal project
 collaboration. SC-006A adds the first evidence-backed commercial baseline and
@@ -20,6 +20,10 @@ readiness core does not require a provider connection.
 SC-009 adds an internal-only AI delivery projection backed by PostgreSQL jobs,
 immutable attempts/usage, action executions, candidate mappings, and request
 clarifications. It is absent from the client-safe projection.
+SC-010 adds provider-neutral plan/subscription snapshots, workspace-serialized
+capacity rules, managed-resource usage reservations, Paddle sandbox lifecycle,
+owner billing/usage UI, operator economics evidence, and a documented self-host
+boundary with no cloud entitlement phone-home.
 
 ## System decision
 
@@ -48,6 +52,7 @@ Browser
        ├─ /api/auth/* ───────────────> Better Auth
        ├─ /api/v1/* ────────────────> tenant-aware domain services
        ├─ signed GitHub webhook ────> normalized engineering evidence
+       ├─ signed Paddle webhook ────> subscription + effective entitlements
        ├─ Server Components ─────────> the same domain services
        ├─ node-postgres/Drizzle ─────> PostgreSQL
        └─ Next after() + Nodemailer ─> SMTP
@@ -502,6 +507,48 @@ owner/admin or project lead; work/QA jobs allow authorized internal project
 members. Client participants have no route into this projection. Confirmation
 rechecks manager authority, `delivery.work.manage`, tenant/target scope, job
 state, and fingerprint inside the transactional action boundary.
+
+## Subscription and managed-resource boundary
+
+Migration `0015_subscription_cloud_economics.sql` creates one effective billing
+snapshot per workspace, idempotent checkout attempts, sanitized provider-event
+evidence, and an idempotent managed-usage ledger. Plan configuration is
+provider-neutral and separates software capability flags, active-project and
+optional internal-user capacity, and ScopeDelta-managed AI/email/storage/
+processing allowances.
+
+`self_host` is the default distribution mode. It uses the community-compatible
+entitlement behavior and never queries ScopeDelta Cloud for Local/LAN or
+BYO/local AI access. Managed cloud lazily initializes a configured entry plan.
+No public plan names, prices, or final allowances are source constants.
+
+Creating/reactivating an active project and accepting an internal invitation
+lock the workspace before counting current usage. A lowered limit preserves all
+history and existing active records but prevents the next capacity-consuming
+transition. External project participants are stored outside memberships and
+do not consume the internal-user guardrail.
+
+Managed AI reserves one configured credit inside the job-attempt transaction
+before provider execution. The attempt references that usage record. A provider
+call settles the credit as consumed even when provider/result processing fails;
+pre-provider configuration/validation failure creates no charge. Cancellation
+or lease expiry after an attempt begins settles the reserved spend. Managed
+client email similarly consumes one attempt before SMTP, while self-host SMTP is
+customer-operated and unmetered by ScopeDelta.
+
+The Paddle adapter is server-only and sandbox-only. Checkout initiation first
+claims a workspace/idempotency attempt, then creates an automatically collected
+transaction with exact workspace/plan/attempt metadata. Provider-hosted portal
+sessions are temporary. The browser return is informational. Only a raw-body
+HMAC-verified event may reconcile provider customer/subscription state.
+Duplicate event IDs are ignored, older events cannot regress the latest state,
+and customer/subscription/workspace/price mismatches are rejected without
+persisting payloads.
+
+Payment problems derive grace; cancellation preserves paid-through access;
+temporal reconciliation produces expiry. These transitions affect new managed
+or capacity-consuming actions, never destructive deletion or normal historical
+reads. See `docs/decisions/ADR-012-billing-entitlement-resource-boundary.md`.
 
 ## Repository and test boundaries
 

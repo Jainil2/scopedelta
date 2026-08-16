@@ -235,7 +235,7 @@ External client participants should not consume normal paid internal employee se
 - The former SC-007A/B/C issues #36/#37/#38 are closed as superseded. Their
   boundaries remain implementation phases within SC-007, not separate releases.
 
-### Layer 4 — Engineering & QA Delivery Loop — RESEARCH COMPLETE / IMPLEMENTED FOR REVIEW
+### Layer 4 — Engineering & QA Delivery Loop — COMPLETE
 
 Durable research: `docs/research/LAYER4_ENGINEERING_QA_DELIVERY_LOOP_RESEARCH_2026-08.md`.
 
@@ -252,7 +252,9 @@ The local QA, defect, trace and readiness core remains useful with no provider c
 
 ScopeDelta does not host Git repositories, execute CI, render a code-review/diff UI or become a full test-management system. GitLab remains deferred behind the provider boundary until customer evidence justifies it.
 
-### Layer 5 — AI-Native Delivery Intelligence — IMPLEMENTED FOR REVIEW
+Layer 4 completed through SC-008 / PR #41.
+
+### Layer 5 — AI-Native Delivery Intelligence — COMPLETE
 
 Durable research: `docs/research/LAYER5_AI_NATIVE_DELIVERY_INTELLIGENCE_RESEARCH_2026-08.md`.
 
@@ -279,14 +281,25 @@ completion, or acceptance.
 
 AI may propose classifications/actions but may not fabricate commercial authorization, client approval or completion evidence.
 
-### Layer 6 — Subscription, Cloud Economics & Source Distribution
+Layer 5 completed through SC-009 / PR #43 / merge `469fbe0b54f10246a776506612fe8b0785048db3`.
 
-- useful self-host packaging and upgrade path;
-- managed-cloud provisioning/operations;
-- recurring billing and provider-neutral entitlements;
-- managed AI/storage/email/background-processing allowances;
-- cost/usage limits and observability;
-- source/package boundaries aligned with LIC-001.
+### Layer 6 — Subscription, Cloud Economics & Source Distribution — IMPLEMENTED FOR REVIEW
+
+Durable research: `docs/research/LAYER6_CLOUD_ECONOMICS_DISTRIBUTION_RESEARCH_2026-08.md`.
+
+SC-010 implements:
+
+- repeatable production-oriented self-host packaging/upgrade/backup guidance;
+- explicit self-host vs managed-cloud distribution mode with no cloud phone-home for Local/LAN core capability;
+- centralized provider-neutral plan and effective-entitlement configuration;
+- concurrency-safe active-project and optional internal-member capacity;
+- managed-AI reservation/settlement and managed-email attempt enforcement;
+- provider-neutral workspace subscription lifecycle and non-destructive grace/cancellation/expiry;
+- Paddle sandbox hosted checkout, signed/idempotent webhook reconciliation, and hosted customer portal;
+- owner billing/usage visibility plus bounded operator unit-economics export;
+- source/package behavior that leaves public release and exact license text under LIC-001.
+
+External client participants remain separate and non-billable by default. Browser checkout return never activates paid access. Final public plans/prices/allowances, live payments, and public source distribution remain founder/legal gates.
 
 ### Layer 7 — Portfolio, Operations & Self-Service Scale
 
@@ -445,6 +458,9 @@ See:
 - `docs/research/LAYER3_CLIENT_COLLABORATION_RESEARCH_2026-08.md`
 - `docs/research/LAYER4_ENGINEERING_QA_DELIVERY_LOOP_RESEARCH_2026-08.md`
 - `docs/research/DEPLOYMENT_RUNTIME_LICENSE_THESIS_2026-08.md`
+- `docs/research/LAYER6_CLOUD_ECONOMICS_DISTRIBUTION_RESEARCH_2026-08.md`
+- `docs/decisions/ADR-012-billing-entitlement-resource-boundary.md`
+- `docs/SELF_HOST.md`
 - `docs/FEATURE_RUNTIME_MATRIX.md`
 - SC-006 / #10 — complete
 - SC-007 / #11 — consolidated Layer-3 implementation; #36/#37/#38 superseded

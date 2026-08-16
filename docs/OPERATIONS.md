@@ -2,14 +2,14 @@
 
 ## Status and change boundary
 
-Implemented through SC-007. This runbook covers the public lead flow, production
-platform kernel, additive client-project backlog migration, and optional cycle
-planning, internal collaboration, commercial-delivery graph, and client
-collaboration migrations. It does not
-authorize production credentials, database creation, DNS changes, a paid
-service, or destructive database work without founder approval. It does not
-cover OCR/AI extraction, billing, SSO, anonymous action links, or legal
-e-signature.
+Implemented through SC-010. This runbook covers the public lead flow,
+production platform kernel, delivery/commercial/client/engineering/QA/AI
+history, provider-neutral billing/entitlements, Paddle sandbox lifecycle, and
+the production-oriented self-host path. It does not authorize production
+credentials, database creation, DNS changes, live payments, a paid service,
+public source release, or destructive database work without founder approval.
+It does not cover OCR extraction, SSO, anonymous action links, legal
+e-signature, live plan/pricing policy, or the final LIC-001 license boundary.
 
 ## Supported deployment shapes
 
@@ -39,20 +39,30 @@ place the app behind a maintained reverse proxy that terminates TLS, redirects
 HTTP to HTTPS, preserves the original host/scheme, and supplies a trustworthy
 client-IP header.
 
+Keep `DISTRIBUTION_MODE=self_host`; do not configure Paddle. Local/LAN core,
+customer SMTP, and customer-hosted/BYO AI have no ScopeDelta Cloud entitlement
+dependency. The complete initial deployment, upgrade, backup, restore, and
+provider-independent verification procedure is in `docs/SELF_HOST.md`.
+
 ## Production environment
 
 Set these runtime values only in the Netlify Production deploy context or the
 self-host secret manager:
 
-| Variable                                | Requirement                                                       |
-| --------------------------------------- | ----------------------------------------------------------------- |
-| `APP_URL`                               | Exact canonical HTTPS origin, no trailing slash.                  |
-| `DATABASE_URL`                          | Pooled runtime PostgreSQL URL with least-privilege app access.    |
-| `BETTER_AUTH_SECRET`                    | At least 32 cryptographically random characters.                  |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` | Transactional SMTP endpoint and TLS mode.                         |
-| `SMTP_USER`, `SMTP_PASSWORD`            | Set together when authentication is required.                     |
-| `SMTP_FROM`                             | Verified sender, for example `ScopeDelta <no-reply@example.com>`. |
-| `LEAD_WEBHOOK_URL`                      | Existing paid-pilot JSON receiver.                                |
+| Variable                                       | Requirement                                                        |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| `APP_URL`                                      | Exact canonical HTTPS origin, no trailing slash.                   |
+| `DATABASE_URL`                                 | Pooled runtime PostgreSQL URL with least-privilege app access.     |
+| `BETTER_AUTH_SECRET`                           | At least 32 cryptographically random characters.                   |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`        | Transactional SMTP endpoint and TLS mode.                          |
+| `SMTP_USER`, `SMTP_PASSWORD`                   | Set together when authentication is required.                      |
+| `SMTP_FROM`                                    | Verified sender, for example `ScopeDelta <no-reply@example.com>`.  |
+| `LEAD_WEBHOOK_URL`                             | Existing paid-pilot JSON receiver.                                 |
+| `DISTRIBUTION_MODE`                            | `self_host` by default; `managed_cloud` only for configured cloud. |
+| `BILLING_ENTRY_PLAN_KEY`, `BILLING_PLANS_JSON` | Managed-cloud plan and allowance catalog; server-only.             |
+| `BILLING_GRACE_DAYS`                           | Configured payment-problem grace interval, 1–30 days.              |
+| `MANAGED_AI`, `MANAGED_EMAIL`                  | Enable ScopeDelta-managed allowance enforcement.                   |
+| `PADDLE_*`                                     | Sandbox-only API/webhook values; no live credentials.              |
 
 Set these separately as GitHub Actions **repository secrets** used by
 `.github/workflows/production-deploy.yml`. Repository secrets work for a
@@ -279,6 +289,43 @@ must preserve revoked participant attribution, packet/target version history,
 terminal actions, discussion order, notification read/delivery state, and the
 nullable client-request provenance reference.
 
+### SC-008 migrations `0011_engineering_qa_delivery_evidence.sql` and `0012_verification_implementation_set.sql`
+
+These additive migrations create internal engineering-provider, repository,
+pull-request snapshot/link, verification, defect, and webhook-delivery state.
+The follow-up makes the verification-to-implementation relationship explicit.
+They store bounded provider metadata, not source, diffs, review bodies, CI logs,
+tokens, or webhook payloads. Local QA/readiness remains usable without GitHub.
+
+### SC-009 migrations `0013_ai_delivery_intelligence.sql` and `0014_ai_execution_route.sql`
+
+These additive migrations create durable AI jobs, immutable attempts/usage,
+bounded action mappings, and the snapshotted provider/model/base-URL route.
+They contain customer-confidential context/results and must be protected in
+primary storage, replicas, backups, and restored tests. API keys are not stored.
+Existing delivery history requires no backfill.
+
+### SC-010 migration `0015_subscription_cloud_economics.sql`
+
+This additive migration creates provider-neutral workspace billing snapshots,
+checkout attempts, sanitized provider-event processing evidence, and managed
+usage reservations/settlements. It adds one nullable usage reference to AI
+attempts. Existing workspaces are not assigned a public plan by SQL: the server
+lazily initializes the explicitly configured entry/self-host entitlement while
+holding the workspace lock. No project, membership, client, commercial, AI, or
+audit history is rewritten or deleted.
+
+Apply the full chain before serving billing routes. Verify duplicate and
+out-of-order Paddle events, active-project/AI concurrency, grace/expiry, and
+self-host mode against a disposable database. If application deployment fails,
+the previous application ignores the additive structures; leave them in place
+and fix forward.
+
+Billing backups contain provider-safe customer/subscription/transaction
+references and checkout URLs, plus plan keys, limits, usage counts, and event
+hashes. They must never contain card details, Paddle API/webhook secrets, or
+full provider payloads. Operational logs use fixed failure names only.
+
 ## SMTP and DNS readiness
 
 Use a transactional sender and a company-controlled domain. Before enabling
@@ -342,6 +389,37 @@ Mailpit is development-only and must never be public or connected to production.
   fallback keys.
 - Use `pnpm ai:eval` only with synthetic fixtures and an intentionally selected
   model. The repository never downloads Ollama models automatically.
+
+### Billing sandbox operations
+
+- Do not set `PADDLE_ENVIRONMENT` to live. The adapter rejects every mode except
+  `sandbox`, and SC-010 authorizes no live account, fees, or customer money.
+- Configure plan JSON only in the server secret/configuration boundary. Never
+  expose Paddle API/webhook secrets through `NEXT_PUBLIC_`, browser payloads,
+  database rows, screenshots, or logs.
+- Configure the Paddle notification destination for
+  `/api/v1/billing/paddle/webhook`. Signature verification uses the exact raw
+  body, the destination-specific secret, HMAC-SHA256, and timestamp tolerance.
+- A checkout browser return changes no entitlement. Inspect the signed webhook,
+  sanitized `billing_provider_events` state, and current workspace snapshot when
+  a sandbox payment appears complete but access remains pending.
+- Duplicate event IDs are normal and idempotent. Older events are recorded as
+  ignored and cannot regress a newer subscription. Rejected workspace/customer/
+  subscription/price mappings require configuration investigation; never edit
+  the event into `processed` manually.
+- A checkout stuck in `creating` is deliberately fail-closed because Paddle
+  does not accept a generic idempotency key. Reconcile the provider transaction
+  and local attempt before allowing another checkout; do not delete the attempt
+  merely to retry.
+- Payment problems enter configured grace. Existing history remains readable.
+  Do not delete projects or customer history because a subscription expires.
+- Use `pnpm billing:economics` for bounded content-free unit-economics evidence.
+  Apply provider price data outside the authoritative domain; never write token
+  price tables into entitlement state.
+- Alert operationally on persistent `failed`/`rejected` billing events, growing
+  `creating` checkout attempts, reserved usage that outlives the AI lease window,
+  and repeated managed-email/AI allowance denials. Layer 6 records evidence but
+  does not authorize a paid observability commitment.
 
 - Public `/` returns 200 and the existing paid-pilot flow remains usable.
 - A new synthetic account receives one verification email; unverified sign-in

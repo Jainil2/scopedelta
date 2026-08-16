@@ -207,6 +207,39 @@ export const aiActionRecordType = pgEnum("ai_action_record_type", [
   "work_item",
   "clarification",
 ]);
+export const billingSubscriptionStatus = pgEnum("billing_subscription_status", [
+  "entry",
+  "checkout_pending",
+  "active",
+  "grace",
+  "canceled_paid_through",
+  "expired",
+]);
+export const billingCheckoutStatus = pgEnum("billing_checkout_status", [
+  "creating",
+  "pending",
+  "completed",
+  "failed",
+  "superseded",
+]);
+export const billingEventState = pgEnum("billing_event_state", [
+  "processing",
+  "processed",
+  "ignored",
+  "rejected",
+  "failed",
+]);
+export const managedUsageMetric = pgEnum("managed_usage_metric", [
+  "ai_job_start",
+  "email_send",
+  "storage_bytes",
+  "processing_unit",
+]);
+export const managedUsageState = pgEnum("managed_usage_state", [
+  "reserved",
+  "consumed",
+  "released",
+]);
 
 export const commercialSourceKind = pgEnum("commercial_source_kind", [
   "pasted_text",
@@ -413,6 +446,180 @@ export const workspaceSettings = pgTable("workspace_settings", {
   timezone: text("timezone").default("UTC").notNull(),
   ...timestampColumns,
 });
+
+export type EffectiveEntitlements = {
+  softwareCapabilities: string[];
+  activeProjects: number | null;
+  internalUsers: number | null;
+  managedAiCredits: number;
+  managedEmails: number;
+  storageBytes: number;
+  processingUnits: number;
+};
+
+export const workspaceBillingStates = pgTable(
+  "workspace_billing_states",
+  {
+    workspaceId: uuid("workspace_id")
+      .primaryKey()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    provider: text("provider"),
+    providerCustomerId: text("provider_customer_id"),
+    providerSubscriptionId: text("provider_subscription_id"),
+    planKey: text("plan_key").notNull(),
+    pendingPlanKey: text("pending_plan_key"),
+    status: billingSubscriptionStatus("status").default("entry").notNull(),
+    effectiveEntitlements: jsonb("effective_entitlements")
+      .$type<EffectiveEntitlements>()
+      .notNull(),
+    periodStartsAt: timestamp("period_starts_at", { withTimezone: true }),
+    periodEndsAt: timestamp("period_ends_at", { withTimezone: true }),
+    paidThrough: timestamp("paid_through", { withTimezone: true }),
+    graceEndsAt: timestamp("grace_ends_at", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false).notNull(),
+    lastProviderOccurredAt: timestamp("last_provider_occurred_at", {
+      withTimezone: true,
+    }),
+    lastProviderEventId: text("last_provider_event_id"),
+    ...timestampColumns,
+  },
+  (table) => [
+    uniqueIndex("workspace_billing_provider_customer_uidx")
+      .on(table.provider, table.providerCustomerId)
+      .where(sql`${table.providerCustomerId} is not null`),
+    uniqueIndex("workspace_billing_provider_subscription_uidx")
+      .on(table.provider, table.providerSubscriptionId)
+      .where(sql`${table.providerSubscriptionId} is not null`),
+    index("workspace_billing_status_idx").on(table.status, table.updatedAt),
+    check(
+      "workspace_billing_provider_refs_consistency",
+      sql`(${table.provider} is null and ${table.providerCustomerId} is null and ${table.providerSubscriptionId} is null) or ${table.provider} is not null`,
+    ),
+  ],
+);
+
+export const billingCheckoutAttempts = pgTable(
+  "billing_checkout_attempts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    requestedByUserId: uuid("requested_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    planKey: text("plan_key").notNull(),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    status: billingCheckoutStatus("status").default("creating").notNull(),
+    providerTransactionId: text("provider_transaction_id"),
+    checkoutUrl: text("checkout_url"),
+    failureCode: text("failure_code"),
+    ...timestampColumns,
+  },
+  (table) => [
+    uniqueIndex("billing_checkout_workspace_idempotency_uidx").on(
+      table.workspaceId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("billing_checkout_provider_transaction_uidx")
+      .on(table.providerTransactionId)
+      .where(sql`${table.providerTransactionId} is not null`),
+    index("billing_checkout_workspace_status_idx").on(
+      table.workspaceId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "billing_checkout_pending_shape",
+      sql`(${table.status} = 'pending' and ${table.providerTransactionId} is not null and ${table.checkoutUrl} is not null) or ${table.status} <> 'pending'`,
+    ),
+  ],
+);
+
+export const billingProviderEvents = pgTable(
+  "billing_provider_events",
+  {
+    eventId: text("event_id").primaryKey(),
+    provider: text("provider").notNull(),
+    eventType: text("event_type").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "set null",
+    }),
+    providerObjectId: text("provider_object_id"),
+    payloadSha256: text("payload_sha256").notNull(),
+    state: billingEventState("state").default("processing").notNull(),
+    errorCode: text("error_code"),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("billing_provider_events_workspace_occurred_idx").on(
+      table.workspaceId,
+      table.occurredAt,
+      table.eventId,
+    ),
+    index("billing_provider_events_state_received_idx").on(
+      table.state,
+      table.receivedAt,
+    ),
+    check(
+      "billing_provider_events_processed_consistency",
+      sql`(${table.state} = 'processing' and ${table.processedAt} is null) or (${table.state} <> 'processing' and ${table.processedAt} is not null)`,
+    ),
+  ],
+);
+
+export const managedUsageRecords = pgTable(
+  "managed_usage_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    metric: managedUsageMetric("metric").notNull(),
+    state: managedUsageState("state").default("reserved").notNull(),
+    periodStartsAt: timestamp("period_starts_at", {
+      withTimezone: true,
+    }).notNull(),
+    periodEndsAt: timestamp("period_ends_at", { withTimezone: true }).notNull(),
+    unitsReserved: integer("units_reserved").notNull(),
+    unitsConsumed: integer("units_consumed").default(0).notNull(),
+    sourceType: text("source_type").notNull(),
+    sourceId: text("source_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    uniqueIndex("managed_usage_workspace_metric_idempotency_uidx").on(
+      table.workspaceId,
+      table.metric,
+      table.idempotencyKey,
+    ),
+    index("managed_usage_workspace_metric_period_idx").on(
+      table.workspaceId,
+      table.metric,
+      table.periodStartsAt,
+      table.state,
+    ),
+    check("managed_usage_reserved_positive", sql`${table.unitsReserved} > 0`),
+    check(
+      "managed_usage_consumed_range",
+      sql`${table.unitsConsumed} >= 0 and ${table.unitsConsumed} <= ${table.unitsReserved}`,
+    ),
+    check(
+      "managed_usage_period_order",
+      sql`${table.periodStartsAt} < ${table.periodEndsAt}`,
+    ),
+    check(
+      "managed_usage_settlement_consistency",
+      sql`(${table.state} = 'reserved' and ${table.settledAt} is null) or (${table.state} <> 'reserved' and ${table.settledAt} is not null)`,
+    ),
+  ],
+);
 
 export const memberships = pgTable(
   "memberships",
@@ -3310,6 +3517,10 @@ export const aiJobAttempts = pgTable(
     model: text("model").notNull(),
     providerBaseUrl: text("provider_base_url").notNull(),
     executionConfigFingerprint: text("execution_config_fingerprint").notNull(),
+    managedUsageRecordId: uuid("managed_usage_record_id").references(
+      () => managedUsageRecords.id,
+      { onDelete: "restrict" },
+    ),
     providerRequestId: text("provider_request_id"),
     inputTokens: integer("input_tokens"),
     outputTokens: integer("output_tokens"),
@@ -3327,6 +3538,9 @@ export const aiJobAttempts = pgTable(
       table.jobId,
       table.attemptNumber,
     ),
+    uniqueIndex("ai_job_attempts_managed_usage_uidx")
+      .on(table.managedUsageRecordId)
+      .where(sql`${table.managedUsageRecordId} is not null`),
     index("ai_job_attempts_job_started_idx").on(
       table.jobId,
       table.startedAt,
@@ -3559,3 +3773,10 @@ export type WorkItemSubscriptionState =
 export type WorkItemSubscriptionSource =
   (typeof workItemSubscriptionSource.enumValues)[number];
 export type NotificationKind = (typeof notificationKind.enumValues)[number];
+export type BillingSubscriptionStatus =
+  (typeof billingSubscriptionStatus.enumValues)[number];
+export type BillingCheckoutStatus =
+  (typeof billingCheckoutStatus.enumValues)[number];
+export type BillingEventState = (typeof billingEventState.enumValues)[number];
+export type ManagedUsageMetric = (typeof managedUsageMetric.enumValues)[number];
+export type ManagedUsageState = (typeof managedUsageState.enumValues)[number];

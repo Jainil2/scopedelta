@@ -41,7 +41,76 @@ describe("BillingWorkspace", () => {
       screen.getByRole("heading", { level: 2, name: "Self-host core" }),
     ).toBeInTheDocument();
   });
+
+  it.each(["canceled_paid_through", "expired"])(
+    "shows same-plan checkout when the subscription is %s",
+    (status) => {
+      render(
+        <BillingWorkspace
+          workspaceId="workspace"
+          overview={paidOverview(status)}
+          returnedFromCheckout={false}
+        />,
+      );
+
+      expect(
+        screen.getByRole("heading", {
+          level: 3,
+          name: "Paid sandbox test",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Open sandbox checkout" }),
+      ).toBeEnabled();
+    },
+  );
+
+  it.each(["active", "checkout_pending"])(
+    "keeps checkout unavailable when the subscription is %s",
+    (status) => {
+      render(
+        <BillingWorkspace
+          workspaceId="workspace"
+          overview={paidOverview(status, true)}
+          returnedFromCheckout={false}
+        />,
+      );
+
+      expect(
+        screen.queryByRole("button", { name: "Open sandbox checkout" }),
+      ).toBeNull();
+    },
+  );
 });
+
+function paidOverview(status: string, includeAlternative = false) {
+  const result = overview("managed_cloud");
+  const plans = result.plans.map((plan) => ({
+    ...plan,
+    current: plan.key === "paid_test",
+  }));
+  const paidPlan = plans.find((plan) => plan.key === "paid_test")!;
+  return {
+    ...result,
+    portalAvailable: true,
+    subscription: {
+      ...result.subscription,
+      planKey: "paid_test",
+      status,
+    },
+    plans: includeAlternative
+      ? [
+          ...plans,
+          {
+            ...paidPlan,
+            key: "paid_alternative",
+            label: "Alternative paid plan",
+            current: false,
+          },
+        ]
+      : plans,
+  };
+}
 
 function overview(mode: "self_host" | "managed_cloud") {
   const entitlements = {

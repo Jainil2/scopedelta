@@ -129,6 +129,14 @@ export function BillingWorkspace({
   const economics = overview.economics;
   const entitlements = overview.subscription.effectiveEntitlements;
   const currentPlan = overview.plans.find((plan) => plan.current);
+  const terminalSubscription = ["canceled_paid_through", "expired"].includes(
+    overview.subscription.status,
+  );
+  const checkoutAllowedForStatus = [
+    "entry",
+    "canceled_paid_through",
+    "expired",
+  ].includes(overview.subscription.status);
   return (
     <div className="billing-stack">
       {message ? (
@@ -225,8 +233,9 @@ export function BillingWorkspace({
               </ul>
               {overview.mode === "managed_cloud" &&
               overview.canManage &&
+              checkoutAllowedForStatus &&
               plan.checkoutAvailable &&
-              !plan.current ? (
+              (!plan.current || terminalSubscription) ? (
                 <button
                   className="app-primary-button"
                   type="button"

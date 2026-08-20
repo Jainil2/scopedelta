@@ -8,6 +8,7 @@ import {
   commercialHistoryFiltersSchema,
   commercialRequestFiltersSchema,
 } from "@/lib/commercial-validation";
+import { PlatformError } from "@/lib/platform-errors";
 import { parseInput } from "@/lib/platform-validation";
 import { requireSession } from "@/lib/session";
 import {
@@ -169,7 +170,8 @@ async function loadCommercial(
       history,
       exposure,
     };
-  } catch {
-    notFound();
+  } catch (error) {
+    if (error instanceof PlatformError && error.status === 404) notFound();
+    throw error;
   }
 }

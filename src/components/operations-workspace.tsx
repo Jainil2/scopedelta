@@ -392,7 +392,7 @@ export function ProjectExposureSummary({
       </dl>
       <p className="metadata">
         {summary.baseline
-          ? `Effective baseline: ${summary.baseline.label}. `
+          ? `Effective baseline version ${summary.baseline.versionNumber ?? "unversioned"}. `
           : "No effective baseline. "}
         {summary.confirmed.scheduleImpactCount} confirmed and{" "}
         {summary.pending.scheduleImpactCount} pending schedule impacts are

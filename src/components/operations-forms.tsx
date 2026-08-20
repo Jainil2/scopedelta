@@ -21,11 +21,13 @@ export function TimeEntryForm({
   projects,
   initialProjectId,
   initialWorkItemId,
+  defaultWorkDate,
 }: Readonly<{
   workspaceId: string;
   projects: Option[];
   initialProjectId?: string;
   initialWorkItemId?: string;
+  defaultWorkDate: string;
 }>) {
   const router = useRouter();
   const [status, setStatus] = useState("");
@@ -72,7 +74,7 @@ export function TimeEntryForm({
         <input
           name="workDate"
           type="date"
-          defaultValue={new Date().toISOString().slice(0, 10)}
+          defaultValue={defaultWorkDate}
           required
         />
       </label>

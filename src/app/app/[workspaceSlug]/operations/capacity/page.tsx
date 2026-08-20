@@ -31,10 +31,11 @@ export default async function CapacityPage({
     ]),
   );
   const filters = parseInput(capacityFiltersSchema, raw);
+  const projectQuery = raw.projectQuery ?? "";
   const [data, directory, projectResult] = await Promise.all([
     listCapacity(actor, workspace.id, filters),
     listWorkspaceMembers(actor, workspace.id),
-    listProjects(actor, workspace.id, 1, 100),
+    listProjects(actor, workspace.id, 1, 100, projectQuery),
   ]);
   const memberOptions = directory.members.map((member) => ({
     id: member.userId,
@@ -75,8 +76,22 @@ export default async function CapacityPage({
           Person
           <input name="query" defaultValue={filters.query} placeholder="Name" />
         </label>
+        <label>
+          Allocation project
+          <input
+            name="projectQuery"
+            defaultValue={projectQuery}
+            placeholder="Key or name"
+          />
+        </label>
         <button type="submit">Apply</button>
       </form>
+      {projectResult.pageInfo.total > projectResult.items.length ? (
+        <p className="operations-muted">
+          Showing the first 100 project matches. Refine the project search to
+          find another managed project.
+        </p>
+      ) : null}
       {data.canManageAvailability ? (
         <details className="operations-composer">
           <summary>Schedule availability</summary>

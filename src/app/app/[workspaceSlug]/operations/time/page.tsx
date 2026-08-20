@@ -3,6 +3,7 @@ import {
   OperationsHeader,
   TimeLedger,
 } from "@/components/operations-workspace";
+import { dateInTimeZone } from "@/lib/operations";
 import { timeEntryFiltersSchema } from "@/lib/operations-validation";
 import { parseInput } from "@/lib/platform-validation";
 import { requireSession } from "@/lib/session";
@@ -28,9 +29,10 @@ export default async function TimePage({
     ]),
   );
   const filters = parseInput(timeEntryFiltersSchema, raw);
+  const projectQuery = raw.projectQuery ?? "";
   const [data, projectResult] = await Promise.all([
     listTimeEntries(actor, workspace.id, filters),
-    listProjects(actor, workspace.id, 1, 100),
+    listProjects(actor, workspace.id, 1, 100, projectQuery),
   ]);
   const projectOptions = projectResult.items
     .filter((project) => project.lifecycle === "active")
@@ -50,10 +52,28 @@ export default async function TimePage({
       {projectOptions.length ? (
         <details className="operations-composer">
           <summary>Log delivery time</summary>
-          <TimeEntryForm workspaceId={workspace.id} projects={projectOptions} />
+          <TimeEntryForm
+            workspaceId={workspace.id}
+            projects={projectOptions}
+            defaultWorkDate={dateInTimeZone(new Date(), workspace.timezone)}
+          />
         </details>
       ) : null}
+      {projectResult.pageInfo.total > projectResult.items.length ? (
+        <p className="operations-muted">
+          Showing the first 100 project matches. Refine the project search to
+          find another active project.
+        </p>
+      ) : null}
       <form className="operations-filter" method="get">
+        <label>
+          Time-entry project
+          <input
+            name="projectQuery"
+            defaultValue={projectQuery}
+            placeholder="Key or name"
+          />
+        </label>
         <label>
           From
           <input name="from" type="date" defaultValue={filters.from} />

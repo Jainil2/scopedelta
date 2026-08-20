@@ -130,6 +130,7 @@ function accessibleProjectCondition(actor: UserActor, access: WorkspaceAccess) {
 
 function isCommercialAttentionCategory(category: PortfolioAttentionCategory) {
   return (
+    category === "client_request" ||
     category === "commercial_drift" ||
     category === "pending_commercial_decision"
   );
@@ -528,10 +529,18 @@ export async function setWorkspaceAvailability(
         .update(workspaceDeliveryAvailabilityPeriods)
         .set({
           weeklyMinutes: input.weeklyMinutes,
-          createdByUserId: actor.userId,
           updatedAt: new Date(),
         })
         .where(eq(workspaceDeliveryAvailabilityPeriods.id, exact.id));
+      await insertAudit(transaction, actor, workspaceId, {
+        eventType: "operations.workspace_availability.changed.v1",
+        targetType: "workspace_delivery_availability",
+        targetId: exact.id,
+        metadata: {
+          effectiveFrom: input.effectiveFrom,
+          weeklyMinutes: String(input.weeklyMinutes),
+        },
+      });
       return { id: exact.id, ...input };
     }
     const preceding = periods
@@ -608,10 +617,19 @@ export async function setMemberAvailability(
         .update(memberDeliveryAvailabilityPeriods)
         .set({
           weeklyMinutes: input.weeklyMinutes,
-          createdByUserId: actor.userId,
           updatedAt: new Date(),
         })
         .where(eq(memberDeliveryAvailabilityPeriods.id, exact.id));
+      await insertAudit(transaction, actor, workspaceId, {
+        eventType: "operations.member_availability.changed.v1",
+        targetType: "member_delivery_availability",
+        targetId: exact.id,
+        metadata: {
+          memberUserId,
+          effectiveFrom: input.effectiveFrom,
+          weeklyMinutes: String(input.weeklyMinutes),
+        },
+      });
       return { id: exact.id, memberUserId, ...input };
     }
     const preceding = periods
@@ -950,6 +968,7 @@ export async function listCapacity(
   ]);
   const memberIds = memberRows.map((member) => member.id);
   if (!memberIds.length) {
+    const total = totalRows[0]?.total ?? 0;
     return {
       startWeek,
       weeks,
@@ -957,8 +976,8 @@ export async function listCapacity(
       page: {
         number: filters.page,
         size: filters.pageSize,
-        total: 0,
-        pages: 1,
+        total,
+        pages: Math.max(1, Math.ceil(total / filters.pageSize)),
       },
       canManageAvailability: access.role !== "member",
     };
@@ -1567,7 +1586,7 @@ async function commercialExposureForProjects(projectIds: string[]) {
       id: string;
       label: string;
       version_number: number | null;
-      effective_at: Date | null;
+      effective_at: Date | string | null;
     }>(sql`
       select project_id, id, label, version_number, effective_at
       from commercial_baseline_versions
@@ -1651,7 +1670,9 @@ async function commercialExposureForProjects(projectIds: string[]) {
       versionId: baseline.id,
       label: baseline.label,
       versionNumber: baseline.version_number,
-      effectiveAt: baseline.effective_at?.toISOString() ?? null,
+      effectiveAt: baseline.effective_at
+        ? new Date(baseline.effective_at).toISOString()
+        : null,
     };
   }
   for (const impact of impactRows.rows) {

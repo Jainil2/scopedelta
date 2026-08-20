@@ -1,15 +1,19 @@
 import { randomUUID } from "node:crypto";
 
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { getDb, getPool } from "@/db";
 import {
+  auditEvents,
   clientAcceptanceTargets,
   clientCommercialPacketActions,
   clientCommercialPackets,
   clientProjectParticipants,
   clientProjectItems,
+  commercialBaselines,
+  commercialBaselineVersions,
+  commercialEvidenceSources,
   commercialRequests,
   commercialDecisions,
   commercialImpactAssessments,
@@ -42,6 +46,7 @@ import {
   listPortfolio,
   listTimeEntries,
   setMemberAvailability,
+  setWorkspaceAvailability,
   updateTimeEntry,
 } from "@/server/operations";
 import { createWorkspace } from "@/server/workspaces";
@@ -162,6 +167,69 @@ describe("portfolio operations domain boundary", () => {
           roleLabel: null,
         }),
       ]),
+    );
+
+    const admin = await createUser("admin@example.test", "Admin");
+    await db.insert(memberships).values({
+      id: randomUUID(),
+      workspaceId: fixture.workspace.id,
+      userId: admin.userId,
+      role: "admin",
+    });
+    const workspacePeriod = await setWorkspaceAvailability(
+      fixture.owner,
+      fixture.workspace.id,
+      { effectiveFrom: currentWeek, weeklyMinutes: 1_800 },
+    );
+    await setWorkspaceAvailability(admin, fixture.workspace.id, {
+      effectiveFrom: currentWeek,
+      weeklyMinutes: 1_900,
+    });
+    const memberPeriod = periods.find(
+      (period) => period.effectiveFrom === currentWeek,
+    )!;
+    await setMemberAvailability(
+      admin,
+      fixture.workspace.id,
+      fixture.member.userId,
+      { effectiveFrom: currentWeek, weeklyMinutes: 2_100 },
+    );
+    await expect(
+      db
+        .select()
+        .from(workspaceDeliveryAvailabilityPeriods)
+        .where(eq(workspaceDeliveryAvailabilityPeriods.id, workspacePeriod.id)),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        createdByUserId: fixture.owner.userId,
+        weeklyMinutes: 1_900,
+      }),
+    ]);
+    await expect(
+      db
+        .select()
+        .from(memberDeliveryAvailabilityPeriods)
+        .where(eq(memberDeliveryAvailabilityPeriods.id, memberPeriod.id)),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        createdByUserId: fixture.owner.userId,
+        weeklyMinutes: 2_100,
+      }),
+    ]);
+    const updateAudits = await db
+      .select()
+      .from(auditEvents)
+      .where(
+        and(
+          eq(auditEvents.actorId, admin.userId),
+          sql`${auditEvents.targetId} in (${workspacePeriod.id}::uuid, ${memberPeriod.id}::uuid)`,
+        ),
+      );
+    expect(updateAudits.map((event) => event.eventType).sort()).toEqual(
+      [
+        "operations.member_availability.changed.v1",
+        "operations.workspace_availability.changed.v1",
+      ].sort(),
     );
   });
 
@@ -451,9 +519,11 @@ describe("portfolio operations domain boundary", () => {
     const memberCategories = memberProject.signals.map(
       (signal) => signal.category,
     );
+    expect(memberCategories).not.toContain("client_request");
     expect(memberCategories).not.toContain("commercial_drift");
     expect(memberCategories).not.toContain("pending_commercial_decision");
     for (const attention of [
+      "client_request",
       "commercial_drift",
       "pending_commercial_decision",
     ] as const) {
@@ -496,6 +566,59 @@ describe("portfolio operations domain boundary", () => {
     });
     expect(exposure).not.toHaveProperty("margin");
     expect(exposure).not.toHaveProperty("revenue");
+  });
+
+  it("reads exposure after a commercial baseline becomes effective", async () => {
+    const fixture = await createFixture();
+    const sourceId = randomUUID();
+    const baselineId = randomUUID();
+    const versionId = randomUUID();
+    const effectiveAt = new Date("2026-08-20T09:00:00.000Z");
+    await db.insert(commercialEvidenceSources).values({
+      id: sourceId,
+      projectId: fixture.ledProject.id,
+      idempotencyKey: randomUUID(),
+      kind: "pasted_text",
+      name: "Effective baseline source",
+      mediaType: "text/plain",
+      byteSize: 8,
+      contentSha256: "0".repeat(64),
+      originalContent: Buffer.from("baseline"),
+      extractedText: "baseline",
+      parseState: "ready",
+      createdByUserId: fixture.owner.userId,
+    });
+    await db.insert(commercialBaselines).values({
+      id: baselineId,
+      projectId: fixture.ledProject.id,
+      createdByUserId: fixture.owner.userId,
+    });
+    await db.insert(commercialBaselineVersions).values({
+      id: versionId,
+      projectId: fixture.ledProject.id,
+      baselineId,
+      sourceId,
+      versionNumber: 1,
+      label: "Version 1",
+      state: "effective",
+      effectiveAt,
+      effectiveByUserId: fixture.owner.userId,
+      createdByUserId: fixture.owner.userId,
+    });
+
+    const exposure = await getProjectCommercialExposure(
+      fixture.lead,
+      fixture.workspace.id,
+      fixture.ledProject.id,
+    );
+    expect(exposure.baseline).toEqual({
+      versionId,
+      label: "Version 1",
+      versionNumber: 1,
+      effectiveAt: effectiveAt.toISOString(),
+    });
+    expect(exposure.confirmed.money).toEqual([]);
+    expect(exposure.pending.money).toEqual([]);
   });
 
   it("uses safe not-found denial across workspaces", async () => {
@@ -888,10 +1011,16 @@ describe("portfolio operations domain boundary", () => {
       join project_rows on project_rows.position = ((value - 1) % 80) + 1;
     `);
 
-    const [portfolio, capacity, time] = await Promise.all([
+    const [portfolio, capacity, emptyCapacity, time] = await Promise.all([
       listPortfolio(owner, workspace.id, portfolioFilters),
       listCapacity(owner, workspace.id, {
         page: 1,
+        pageSize: 100,
+        startWeek: currentWeek,
+        weeks: 4,
+      }),
+      listCapacity(owner, workspace.id, {
+        page: 4,
         pageSize: 100,
         startWeek: currentWeek,
         weeks: 4,
@@ -905,6 +1034,13 @@ describe("portfolio operations domain boundary", () => {
     ).toBe(true);
     expect(capacity.page).toMatchObject({ total: 220, size: 100 });
     expect(capacity.members).toHaveLength(100);
+    expect(emptyCapacity.members).toEqual([]);
+    expect(emptyCapacity.page).toEqual({
+      number: 4,
+      size: 100,
+      total: 220,
+      pages: 3,
+    });
     expect(time.page).toMatchObject({ total: 5_000, size: 25 });
     expect(time.items).toHaveLength(25);
     expect(JSON.stringify(portfolio).length).toBeLessThan(250_000);

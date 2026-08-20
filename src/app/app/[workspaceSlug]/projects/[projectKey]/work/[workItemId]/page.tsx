@@ -5,6 +5,7 @@ import { WorkCommercialPanel } from "@/components/commercial-workspace";
 import { WorkEngineeringPanel } from "@/components/engineering-workspace";
 import { TimeEntryForm } from "@/components/operations-forms";
 import { paginationSchema } from "@/lib/delivery-validation";
+import { dateInTimeZone } from "@/lib/operations";
 import { parseInput } from "@/lib/platform-validation";
 import { requireSession } from "@/lib/session";
 import {
@@ -89,6 +90,10 @@ export default async function WorkCollaborationPage({
               ]}
               initialProjectId={data.project.id}
               initialWorkItemId={data.workItem.id}
+              defaultWorkDate={dateInTimeZone(
+                new Date(),
+                data.workspace.timezone,
+              )}
             />
           </details>
         ) : null

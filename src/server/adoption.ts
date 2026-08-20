@@ -64,6 +64,9 @@ type Executor = Database | Transaction;
 
 const MAX_IMPORT_RESULT_ROWS = 100;
 const MAX_EXPORT_RECORDS = 5_000;
+const PROJECT_EXPORT_METADATA_RECORDS = 2;
+const PROJECT_EXPORT_PAYLOAD_RECORDS =
+  MAX_EXPORT_RECORDS - PROJECT_EXPORT_METADATA_RECORDS;
 const IMPORT_LEASE_MS = 5 * 60 * 1_000;
 
 export async function listProjectTemplates(
@@ -1620,6 +1623,57 @@ export async function exportDeliveryCore(
   ]);
   if (filters.projectId && !projectRows[0]) throw notFound();
   const projectIds = projectRows.map((project) => project.id);
+  const workConditions = [inArray(workItems.projectId, projectIds)];
+  if (!filters.includeArchived) {
+    workConditions.push(isNull(workItems.archivedAt));
+  }
+  let totalRecordPages = 1;
+  let milestoneWindow = { offset: 0, limit: MAX_EXPORT_RECORDS + 1 };
+  let cycleWindow = { offset: 0, limit: MAX_EXPORT_RECORDS + 1 };
+  let workWindow = { offset: 0, limit: MAX_EXPORT_RECORDS + 1 };
+  if (filters.projectId) {
+    const [milestoneTotals, cycleTotals, workTotals] = await Promise.all([
+      getDb()
+        .select({ total: count() })
+        .from(milestones)
+        .where(eq(milestones.projectId, filters.projectId)),
+      getDb()
+        .select({ total: count() })
+        .from(cycles)
+        .where(eq(cycles.projectId, filters.projectId)),
+      getDb()
+        .select({ total: count() })
+        .from(workItems)
+        .where(and(...workConditions)),
+    ]);
+    const milestoneCount = milestoneTotals[0]?.total ?? 0;
+    const cycleCount = cycleTotals[0]?.total ?? 0;
+    const workCount = workTotals[0]?.total ?? 0;
+    const payloadCount = milestoneCount + cycleCount + workCount;
+    totalRecordPages = Math.max(
+      1,
+      Math.ceil(payloadCount / PROJECT_EXPORT_PAYLOAD_RECORDS),
+    );
+    if (filters.page > totalRecordPages) {
+      throw new PlatformError(
+        "export_page_not_found",
+        404,
+        `Project export page ${filters.page} does not exist. This project has ${totalRecordPages} export page${totalRecordPages === 1 ? "" : "s"}.`,
+      );
+    }
+    const payloadOffset = (filters.page - 1) * PROJECT_EXPORT_PAYLOAD_RECORDS;
+    milestoneWindow = exportSegmentWindow(0, milestoneCount, payloadOffset);
+    cycleWindow = exportSegmentWindow(
+      milestoneCount,
+      cycleCount,
+      payloadOffset,
+    );
+    workWindow = exportSegmentWindow(
+      milestoneCount + cycleCount,
+      workCount,
+      payloadOffset,
+    );
+  }
   const [milestoneRows, cycleRows, workRows] = projectIds.length
     ? await Promise.all([
         getDb()
@@ -1631,13 +1685,15 @@ export async function exportDeliveryCore(
             asc(milestones.sortOrder),
             asc(milestones.id),
           )
-          .limit(MAX_EXPORT_RECORDS + 1),
+          .limit(milestoneWindow.limit)
+          .offset(milestoneWindow.offset),
         getDb()
           .select()
           .from(cycles)
           .where(inArray(cycles.projectId, projectIds))
           .orderBy(asc(cycles.projectId), asc(cycles.sequence), asc(cycles.id))
-          .limit(MAX_EXPORT_RECORDS + 1),
+          .limit(cycleWindow.limit)
+          .offset(cycleWindow.offset),
         getDb()
           .select({
             id: workItems.id,
@@ -1659,20 +1715,14 @@ export async function exportDeliveryCore(
           })
           .from(workItems)
           .leftJoin(users, eq(users.id, workItems.assigneeUserId))
-          .where(
-            and(
-              inArray(workItems.projectId, projectIds),
-              ...(filters.includeArchived
-                ? []
-                : [isNull(workItems.archivedAt)]),
-            ),
-          )
+          .where(and(...workConditions))
           .orderBy(
             asc(workItems.projectId),
             asc(workItems.number),
             asc(workItems.id),
           )
-          .limit(MAX_EXPORT_RECORDS + 1),
+          .limit(workWindow.limit)
+          .offset(workWindow.offset),
       ])
     : [[], [], []];
   const clientCount = new Set(projectRows.map((project) => project.clientId))
@@ -1683,11 +1733,18 @@ export async function exportDeliveryCore(
     milestoneRows.length +
     cycleRows.length +
     workRows.length;
-  if (recordCount > MAX_EXPORT_RECORDS) {
+  if (!filters.projectId && recordCount > MAX_EXPORT_RECORDS) {
     throw new PlatformError(
       "export_batch_too_large",
       413,
       `This export exceeds ${MAX_EXPORT_RECORDS} records. Export a single project or a smaller project page.`,
+    );
+  }
+  if (recordCount > MAX_EXPORT_RECORDS) {
+    throw new PlatformError(
+      "export_batch_too_large",
+      500,
+      "The project export page exceeded its bounded record limit.",
     );
   }
   const workIds = workRows.map((work) => work.id);
@@ -1743,7 +1800,26 @@ export async function exportDeliveryCore(
   const projectById = new Map(
     projectRows.map((project) => [project.id, project]),
   );
-  const workById = new Map(workRows.map((work) => [work.id, work]));
+  const includedWorkIds = new Set(workIds);
+  const missingParentIds = [
+    ...new Set(
+      workRows
+        .map((work) => work.parentId)
+        .filter(
+          (parentId): parentId is string =>
+            parentId !== null && !includedWorkIds.has(parentId),
+        ),
+    ),
+  ];
+  const parentRows = missingParentIds.length
+    ? await getDb()
+        .select({ id: workItems.id, number: workItems.number })
+        .from(workItems)
+        .where(inArray(workItems.id, missingParentIds))
+    : [];
+  const workById = new Map(
+    [...workRows, ...parentRows].map((work) => [work.id, work]),
+  );
   const header = exportHeader();
   const records: unknown[][] = [];
   for (const project of projectRows) {
@@ -1813,6 +1889,7 @@ export async function exportDeliveryCore(
       metadata: {
         exportScope: "core_delivery_not_legal_audit",
         page: String(filters.page),
+        totalPages: String(totalRecordPages),
         recordCount: String(records.length),
       },
     });
@@ -1820,13 +1897,34 @@ export async function exportDeliveryCore(
   const total = projectTotals[0]?.total ?? 0;
   return {
     csv,
-    fileName: `scopedelta-delivery-core-${new Date().toISOString().slice(0, 10)}-p${filters.page}.csv`,
+    fileName: filters.projectId
+      ? `scopedelta-delivery-core-${projectRows[0].key}-${new Date().toISOString().slice(0, 10)}-part-${filters.page}-of-${totalRecordPages}.csv`
+      : `scopedelta-delivery-core-${new Date().toISOString().slice(0, 10)}-p${filters.page}.csv`,
     recordCount: records.length,
     page: filters.page,
-    hasNextPage: !filters.projectId && filters.page * filters.pageSize < total,
+    totalPages: filters.projectId
+      ? totalRecordPages
+      : Math.max(1, Math.ceil(total / filters.pageSize)),
+    hasNextPage: filters.projectId
+      ? filters.page < totalRecordPages
+      : filters.page * filters.pageSize < total,
     scopeNotice:
       "Core delivery portability export; not a complete legal, commercial, engineering, QA, or audit archive.",
   };
+}
+
+function exportSegmentWindow(
+  segmentStart: number,
+  segmentCount: number,
+  payloadOffset: number,
+) {
+  const pageEnd = payloadOffset + PROJECT_EXPORT_PAYLOAD_RECORDS;
+  const segmentEnd = segmentStart + segmentCount;
+  const overlapStart = Math.max(segmentStart, payloadOffset);
+  const overlapEnd = Math.min(segmentEnd, pageEnd);
+  return overlapEnd > overlapStart
+    ? { offset: overlapStart - segmentStart, limit: overlapEnd - overlapStart }
+    : { offset: 0, limit: 0 };
 }
 
 function exportHeader() {

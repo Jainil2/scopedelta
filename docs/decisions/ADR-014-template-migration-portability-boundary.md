@@ -36,6 +36,8 @@ Authoritative migration provenance uses:
 
 Titles are never authoritative deduplication keys. The source project key keeps identical Jira issue keys in different source projects distinct. A repeated source object is skipped and reported; a changed fingerprint is never used to overwrite the existing delivery object silently.
 
+When a source row has no issue/object key, the fallback identity contains the exact CSV file fingerprint and row number. An exact-file retry remains idempotent, while a distinct batch under the same source namespace cannot collide solely because it reuses row numbers.
+
 ### Imported people remain unresolved until explicitly mapped
 
 Assignee/reporter text creates a bounded source-identity record, not a user or workspace membership. An owner/admin may explicitly map that identity to an existing workspace member during confirmation. Only then may the importer add that existing member to the imported project and assign compatible work. Import never creates a privileged workspace membership or sends an invitation.
@@ -50,13 +52,13 @@ Confirmation claims a renewable five-minute session lease, creates/reuses destin
 
 ### CSV is inert content with explicit limits
 
-CSV parsing is local and bounded to 5 MB, 5,000 data rows, 64 columns, and 10,000 characters per field. It supports quoted delimiters/newlines and rejects malformed quoted input. Imported markup/scripts are stored only as escaped text and are never executed. Formula-like input is reported and remains inert. No attachment URL is fetched.
+CSV parsing is local and bounded to 5 MB, 5,000 data rows, 64 columns, and 10,000 characters per field. It supports quoted delimiters/newlines and rejects malformed quoted input. A data row wider than the header is rejected rather than silently truncating trailing cells. Imported markup/scripts are stored only as escaped text and are never executed. Formula-like input is reported and remains inert. No attachment URL is fetched.
 
 Audit metadata records structured codes/counts only; it does not copy row bodies or customer descriptions into ordinary logs.
 
 ### Export is a defined core-delivery artifact
 
-Owner/admin export produces a formula-neutralized UTF-8 CSV for up to 25 projects and 5,000 records per batch (or one selected project). It includes client/project identity, milestones, cycles, work/subtasks, statuses, priorities, assignments, estimates/dates, acceptance criteria, labels, and migration references.
+Owner/admin export produces a formula-neutralized UTF-8 CSV for up to 25 projects and 5,000 records per response. A selected project above that limit is deterministically paged across milestones, cycles, and work items; every part repeats client/project identity and reports current/total page metadata so all records can be reconstructed. It includes client/project identity, milestones, cycles, work/subtasks, statuses, priorities, assignments, estimates/dates, acceptance criteria, labels, and migration references.
 
 The response and every row identify the scope as `core_delivery_not_legal_audit`. This is not represented as a complete legal, commercial, engineering, QA, retention, or audit archive. Those broader lifecycle/export guarantees remain Layer 8.
 

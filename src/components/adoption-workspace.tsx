@@ -978,8 +978,11 @@ function ExportLedger({
   projects,
 }: Readonly<{ workspaceId: string; projects: Project[] }>) {
   const [projectId, setProjectId] = useState("");
+  const [projectPage, setProjectPage] = useState(1);
   const href = `/api/v1/workspaces/${workspaceId}/exports/delivery-core${
-    projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""
+    projectId
+      ? `?projectId=${encodeURIComponent(projectId)}&page=${projectPage}`
+      : ""
   }`;
   return (
     <section className="adoption-section" id="export">
@@ -997,7 +1000,10 @@ function ExportLedger({
           <span>Export scope</span>
           <select
             value={projectId}
-            onChange={(event) => setProjectId(event.target.value)}
+            onChange={(event) => {
+              setProjectId(event.target.value);
+              setProjectPage(1);
+            }}
           >
             <option value="">First 25 non-archived projects</option>
             {projects.map((project) => (
@@ -1007,6 +1013,20 @@ function ExportLedger({
             ))}
           </select>
         </label>
+        {projectId ? (
+          <label>
+            <span>Project export part</span>
+            <input
+              min={1}
+              step={1}
+              type="number"
+              value={projectPage}
+              onChange={(event) =>
+                setProjectPage(Math.max(1, Number(event.target.value) || 1))
+              }
+            />
+          </label>
+        ) : null}
         <a className="app-primary-button" href={href}>
           Download CSV
         </a>
@@ -1016,7 +1036,9 @@ function ExportLedger({
         <p>
           This is a bounded core-delivery export, not a complete legal,
           commercial, engineering, QA, retention, or audit archive. Larger
-          workspaces export one project or one 25-project page at a time.
+          workspaces export one project or one 25-project page at a time. A
+          project above the per-file limit downloads as deterministic parts;
+          each filename states the current and total part count.
         </p>
       </div>
     </section>

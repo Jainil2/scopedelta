@@ -257,6 +257,15 @@ export function parseBoundedCsv(csvText: string): ParsedCsv {
     const header = value.replace(/^\uFEFF/, "").trim();
     return header || `Unnamed column ${index + 1}`;
   });
+  const oversizedRowIndex = records
+    .slice(1)
+    .findIndex((values) => values.length > headers.length);
+  if (oversizedRowIndex >= 0) {
+    throw new CsvBoundaryError(
+      "csv_row_too_many_fields",
+      `CSV row ${oversizedRowIndex + 2} has more fields than the header. Fix the row before previewing it.`,
+    );
+  }
   return {
     headers,
     rows: records.slice(1).map((values, index) => ({
@@ -297,6 +306,7 @@ export function buildCsvPreview(input: {
   options: ImportPreviewOptions;
 }): CsvPreview {
   const parsed = parseBoundedCsv(input.csvText);
+  const batchFingerprint = fingerprint(input.csvText);
   const suggested = suggestCsvMapping(parsed.headers, input.sourceKind);
   const mapping: CsvMapping = {
     columns: { ...suggested.columns, ...(input.mapping?.columns ?? {}) },
@@ -331,6 +341,7 @@ export function buildCsvPreview(input: {
       mapping,
       input.options,
       unsupportedColumns,
+      batchFingerprint,
     ),
   );
   applyHierarchyValidation(rows);
@@ -349,6 +360,7 @@ function normalizePreviewRow(
   mapping: CsvMapping,
   options: ImportPreviewOptions,
   unsupportedColumns: string[],
+  batchFingerprint: string,
 ): PreviewRow {
   const messages: PreviewMessage[] = [];
   const sourceProjectKey = (
@@ -390,13 +402,14 @@ function normalizePreviewRow(
     row.values,
     mapping.columns.issueKey,
   ).trim();
-  const sourceObjectKey = rawIssueKey || `row-${row.rowNumber}`;
+  const sourceObjectKey =
+    rawIssueKey || `csv-${batchFingerprint}-row-${row.rowNumber}`;
   if (!rawIssueKey) {
     messages.push({
       code: "source_key_inferred",
       field: "issueKey",
       message:
-        "No source key was mapped; the durable CSV row number will identify this item.",
+        "No source key was mapped; the exact file fingerprint and CSV row number will identify this item.",
     });
   }
   const title = mappedValue(headers, row.values, mapping.columns.title).trim();

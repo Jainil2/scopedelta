@@ -259,6 +259,75 @@ describe("template and migration adoption boundary", () => {
     expect(replay).toMatchObject({ createdWorkItems: 0, skippedRows: 1 });
   });
 
+  it("deduplicates exact no-key file retries without colliding across batches", async () => {
+    const fixture = await createFixture();
+    const firstCsv =
+      "Project,Project name,Title\nNOKEY,No-key project,First batch item";
+    const secondCsv =
+      "Project,Project name,Title\nNOKEY,No-key project,Second batch item";
+
+    const firstPreview = await createImportPreview(
+      fixture.owner,
+      fixture.workspace.id,
+      genericNoKeyPreviewInput(firstCsv),
+    );
+    const first = await confirmImport(
+      fixture.owner,
+      fixture.workspace.id,
+      firstPreview.id,
+      { duplicateStrategy: "skip_existing", identityMappings: {} },
+    );
+    expect(first).toMatchObject({ createdWorkItems: 1, skippedRows: 0 });
+
+    const retryPreview = await createImportPreview(
+      fixture.admin,
+      fixture.workspace.id,
+      genericNoKeyPreviewInput(firstCsv),
+    );
+    expect(retryPreview.rows[0].sourceObjectKey).toBe(
+      firstPreview.rows[0].sourceObjectKey,
+    );
+    const retry = await confirmImport(
+      fixture.admin,
+      fixture.workspace.id,
+      retryPreview.id,
+      { duplicateStrategy: "skip_existing", identityMappings: {} },
+    );
+    expect(retry).toMatchObject({ createdWorkItems: 0, skippedRows: 1 });
+
+    const secondPreview = await createImportPreview(
+      fixture.owner,
+      fixture.workspace.id,
+      genericNoKeyPreviewInput(secondCsv),
+    );
+    expect(secondPreview.rows[0].sourceObjectKey).not.toBe(
+      firstPreview.rows[0].sourceObjectKey,
+    );
+    const second = await confirmImport(
+      fixture.owner,
+      fixture.workspace.id,
+      secondPreview.id,
+      { duplicateStrategy: "skip_existing", identityMappings: {} },
+    );
+    expect(second).toMatchObject({ createdWorkItems: 1, skippedRows: 0 });
+
+    const importedProject = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(
+        and(
+          eq(projects.workspaceId, fixture.workspace.id),
+          eq(projects.key, "NOKEY"),
+        ),
+      );
+    expect(
+      await db
+        .select({ total: count() })
+        .from(workItems)
+        .where(eq(workItems.projectId, importedProject[0].id)),
+    ).toEqual([{ total: 2 }]);
+  });
+
   it("maps only existing members explicitly and keeps blocked rows recoverable", async () => {
     const fixture = await createFixture();
     const preview = await createImportPreview(
@@ -454,6 +523,100 @@ describe("template and migration adoption boundary", () => {
       getImportSession(fixture.owner, otherWorkspace.id, preview.id),
     ).rejects.toMatchObject({ code: "not_found" });
   });
+
+  it("pages every record from a project above the export response cap", async () => {
+    const fixture = await createFixture();
+    const preview = await createImportPreview(
+      fixture.owner,
+      fixture.workspace.id,
+      jiraPreviewInput(
+        "Project key,Project name,Issue key,Summary,Status\nLARGE,Large export,LARGE-1,Imported first item,Open",
+      ),
+    );
+    await confirmImport(fixture.owner, fixture.workspace.id, preview.id, {
+      duplicateStrategy: "skip_existing",
+      identityMappings: {},
+    });
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(
+        and(
+          eq(projects.workspaceId, fixture.workspace.id),
+          eq(projects.key, "LARGE"),
+        ),
+      );
+    for (let offset = 0; offset < 5_000; offset += 500) {
+      await db.insert(workItems).values(
+        Array.from({ length: 500 }, (_, index) => {
+          const number = offset + index + 2;
+          return {
+            id: randomUUID(),
+            projectId: project[0].id,
+            number,
+            title: `Bulk export ${number}`,
+            status: "backlog" as const,
+            priority: "none" as const,
+            purpose: "unclassified" as const,
+            sortOrder: number - 1,
+          };
+        }),
+      );
+    }
+    await db
+      .update(projects)
+      .set({ nextWorkItemNumber: 5_002 })
+      .where(eq(projects.id, project[0].id));
+
+    const first = await exportDeliveryCore(
+      fixture.owner,
+      fixture.workspace.id,
+      {
+        projectId: project[0].id,
+        page: 1,
+        pageSize: 25,
+        includeArchived: false,
+      },
+    );
+    const second = await exportDeliveryCore(
+      fixture.owner,
+      fixture.workspace.id,
+      {
+        projectId: project[0].id,
+        page: 2,
+        pageSize: 25,
+        includeArchived: false,
+      },
+    );
+
+    expect(first).toMatchObject({
+      recordCount: 5_000,
+      page: 1,
+      totalPages: 2,
+      hasNextPage: true,
+    });
+    expect(first.fileName).toContain("part-1-of-2");
+    expect(first.csv).toContain("LARGE-4998");
+    expect(first.csv).not.toContain("LARGE-4999");
+    expect(second).toMatchObject({
+      recordCount: 5,
+      page: 2,
+      totalPages: 2,
+      hasNextPage: false,
+    });
+    expect(second.fileName).toContain("part-2-of-2");
+    expect(second.csv).toContain("LARGE-4999");
+    expect(second.csv).toContain("LARGE-5001");
+    expect(second.csv).not.toContain("LARGE-4998");
+    await expect(
+      exportDeliveryCore(fixture.owner, fixture.workspace.id, {
+        projectId: project[0].id,
+        page: 3,
+        pageSize: 25,
+        includeArchived: false,
+      }),
+    ).rejects.toMatchObject({ code: "export_page_not_found" });
+  });
 });
 
 function templateDefinition(acceptanceCriteria: string) {
@@ -504,6 +667,31 @@ function jiraPreviewInput(csvText: string) {
     fileName: "jira.csv",
     csvText,
     mapping: undefined,
+    options: {
+      clientId: fixtureState.clientId,
+      defaultLeadUserId: fixtureState.leadUserId,
+      defaultProjectKey: null,
+      defaultProjectName: null,
+    },
+  };
+}
+
+function genericNoKeyPreviewInput(csvText: string) {
+  return {
+    sourceKind: "generic_csv" as const,
+    sourceNamespace: "generic-agency",
+    sourceName: "Generic active work",
+    fileName: "generic.csv",
+    csvText,
+    mapping: {
+      columns: {
+        projectKey: "Project",
+        projectName: "Project name",
+        title: "Title",
+      },
+      statusValues: {},
+      priorityValues: {},
+    },
     options: {
       clientId: fixtureState.clientId,
       defaultLeadUserId: fixtureState.leadUserId,

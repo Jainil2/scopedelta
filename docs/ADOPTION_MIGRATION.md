@@ -63,7 +63,7 @@ Unsupported populated columns are named in the report. Up to 20 bounded non-empt
 
 ## Hierarchy and identity
 
-The source identity is scoped by workspace, source kind, namespace, source project key, and source object key. Identical issue keys in different source projects are valid. Missing keys in generic CSV use a durable row identity within that file/session and are explicitly warned.
+The source identity is scoped by workspace, source kind, namespace, source project key, and source object key. Identical issue keys in different source projects are valid. Missing keys use the exact file fingerprint plus row number as a durable fallback and are explicitly warned. Retrying the exact file therefore deduplicates, while a different batch in the same stable namespace does not collide merely because it uses the same row numbers.
 
 ScopeDelta supports one parent/subtask level. Parent rows may appear after children. Missing parents, duplicate keys inside one project, circular/self parents, and deeper hierarchies block only the affected rows and remain inspectable.
 
@@ -78,10 +78,11 @@ Open **Adoption → Export** or call:
 Optional query parameters:
 
 - `projectId` — export one accessible workspace project;
-- `page` and `pageSize` (maximum 25 projects);
+- without `projectId`, `page` and `pageSize` select a maximum of 25 projects;
+- with `projectId`, `page` selects a deterministic record part of at most 5,000 rows;
 - `includeArchived=true` — include archived projects/work.
 
-The CSV is UTF-8 and contains typed `client`, `project`, `milestone`, `cycle`, and `work_item` records. Text beginning with `=`, `+`, `-`, or `@` is prefixed with an apostrophe so spreadsheet applications do not execute it as a formula. The response is private/no-store and includes page/has-more headers.
+The CSV is UTF-8 and contains typed `client`, `project`, `milestone`, `cycle`, and `work_item` records. Text beginning with `=`, `+`, `-`, or `@` is prefixed with an apostrophe so spreadsheet applications do not execute it as a formula. The response is private/no-store and includes current-page, total-pages, and has-more headers. Single-project filenames include `part-N-of-M`; increment `page` until all deterministic parts are downloaded. Each part repeats the client/project identity rows so the set can be reconstructed independently.
 
 Every row states `core_delivery_not_legal_audit`. This export is enough to reconstruct core delivery structure and source references, but it is intentionally not a full commercial document, client-action, engineering/QA evidence, legal, retention, or audit archive.
 

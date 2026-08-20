@@ -169,6 +169,47 @@ describe("bounded migration parsing", () => {
       '"\'=HYPERLINK(""https://bad"")","\'+cmd","normal"',
     );
   });
+
+  it("rejects ragged rows that contain more fields than the header", () => {
+    expect(() =>
+      parseBoundedCsv("Project,Title\nOPS,Safe,unexpected trailing value"),
+    ).toThrowError(
+      expect.objectContaining({ code: "csv_row_too_many_fields" }),
+    );
+  });
+
+  it("scopes inferred row identities to the exact source file", () => {
+    const input = {
+      sourceKind: "generic_csv" as const,
+      mapping: {
+        columns: {
+          projectKey: "Project",
+          projectName: "Project name",
+          title: "Title",
+        },
+        statusValues: {},
+        priorityValues: {},
+      },
+      options: {
+        clientId: "client",
+        defaultLeadUserId: "lead",
+        defaultProjectKey: null,
+        defaultProjectName: null,
+      },
+    };
+    const firstCsv = "Project,Project name,Title\nOPS,Operations,First batch";
+    const secondCsv = "Project,Project name,Title\nOPS,Operations,Second batch";
+    const first = buildCsvPreview({ ...input, csvText: firstCsv });
+    const retry = buildCsvPreview({ ...input, csvText: firstCsv });
+    const second = buildCsvPreview({ ...input, csvText: secondCsv });
+
+    expect(retry.rows[0].normalized.sourceObjectKey).toBe(
+      first.rows[0].normalized.sourceObjectKey,
+    );
+    expect(second.rows[0].normalized.sourceObjectKey).not.toBe(
+      first.rows[0].normalized.sourceObjectKey,
+    );
+  });
 });
 
 describe("project template snapshots", () => {

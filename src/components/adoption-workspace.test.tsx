@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -41,6 +41,38 @@ describe("adoption workspace", () => {
     expect(
       screen.getByRole("button", { name: "Create dry-run preview" }),
     ).toBeInTheDocument();
+  });
+
+  it("builds deterministic selected-project export part links", () => {
+    const projectId = "fbfd3c92-d242-46c4-ab53-03bbbf84786b";
+    render(
+      <AdoptionWorkspace
+        workspaceId="7f960d3a-53a6-44b2-9ffe-adcf7f1ac898"
+        workspaceSlug="agency"
+        templates={[]}
+        imports={[]}
+        clients={[]}
+        projects={[
+          {
+            id: projectId,
+            key: "LARGE",
+            name: "Large export",
+            lifecycle: "active",
+          },
+        ]}
+        members={[member]}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Export scope"), {
+      target: { value: projectId },
+    });
+    const part = screen.getByLabelText("Project export part");
+    fireEvent.change(part, { target: { value: "2" } });
+    expect(screen.getByRole("link", { name: "Download CSV" })).toHaveAttribute(
+      "href",
+      `/api/v1/workspaces/7f960d3a-53a6-44b2-9ffe-adcf7f1ac898/exports/delivery-core?projectId=${projectId}&page=2`,
+    );
   });
 
   it("shows unresolved identities and row-level warning evidence before confirmation", () => {

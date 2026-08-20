@@ -23,6 +23,7 @@ export async function GET(request: Request, { params }: Context) {
         "X-Content-Type-Options": "nosniff",
         "X-ScopeDelta-Export-Scope": "core-delivery-not-legal-audit",
         "X-ScopeDelta-Export-Page": String(result.page),
+        "X-ScopeDelta-Export-Total-Pages": String(result.totalPages),
         "X-ScopeDelta-Export-Has-More": String(result.hasNextPage),
       },
     });

@@ -128,6 +128,13 @@ function accessibleProjectCondition(actor: UserActor, access: WorkspaceAccess) {
   );
 }
 
+function isCommercialAttentionCategory(category: PortfolioAttentionCategory) {
+  return (
+    category === "commercial_drift" ||
+    category === "pending_commercial_decision"
+  );
+}
+
 function attentionExists(category: PortfolioAttentionCategory) {
   switch (category) {
     case "overdue_milestone":
@@ -306,7 +313,15 @@ export async function listPortfolio(
       )!,
     );
   }
-  if (filters.attention) conditions.push(attentionExists(filters.attention));
+  if (filters.attention) {
+    conditions.push(attentionExists(filters.attention));
+    if (
+      access.role === "member" &&
+      isCommercialAttentionCategory(filters.attention)
+    ) {
+      conditions.push(eq(projects.leadUserId, actor.userId));
+    }
+  }
   const where = and(...conditions);
   const [rows, totals] = await Promise.all([
     getDb()
@@ -366,16 +381,25 @@ export async function listPortfolio(
     signalsByProject.set(signal.project_id, values);
   }
   return {
-    items: rows.map((row) => ({
-      ...row,
-      canViewCommercial:
-        access.role !== "member" || row.leadUserId === actor.userId,
-      signals: (signalsByProject.get(row.id) ?? []).map((signal) => ({
-        category: signal.category,
-        count: Number(signal.total),
-        href: attentionHref(access.slug, row.key, signal.category),
-      })),
-    })),
+    items: rows.map((row) => {
+      const canViewCommercial =
+        access.role !== "member" || row.leadUserId === actor.userId;
+      return {
+        ...row,
+        canViewCommercial,
+        signals: (signalsByProject.get(row.id) ?? [])
+          .filter(
+            (signal) =>
+              canViewCommercial ||
+              !isCommercialAttentionCategory(signal.category),
+          )
+          .map((signal) => ({
+            category: signal.category,
+            count: Number(signal.total),
+            href: attentionHref(access.slug, row.key, signal.category),
+          })),
+      };
+    }),
     page: {
       number: filters.page,
       size: filters.pageSize,
@@ -1497,8 +1521,14 @@ async function commercialExposureForProjects(projectIds: string[]) {
       case
         when impact.confidence = 'confirmed'
           and decision.id is not null
-          and decision.disposition in ('covered', 'absorbed', 'swap', 'paid_change')
-          and (packet.requirement is distinct from 'approval' or action.action = 'approved')
+          and (
+            decision.disposition in ('covered', 'absorbed')
+            or (
+              decision.disposition in ('swap', 'paid_change')
+              and packet.requirement = 'approval'
+              and action.action = 'approved'
+            )
+          )
         then 'confirmed'
         else 'pending'
       end bucket
@@ -1507,7 +1537,11 @@ async function commercialExposureForProjects(projectIds: string[]) {
     left join commercial_decisions decision
       on decision.id = impact.decision_id and decision.superseded_at is null
     left join client_commercial_packets packet
-      on packet.request_id = request.id and packet.superseded_at is null
+      on packet.request_id = request.id
+      and packet.decision_id = decision.id
+      and packet.superseded_at is null
+      and (packet.impact_assessment_id is null
+        or packet.impact_assessment_id = impact.id)
     left join lateral (
       select packet_action.action
       from client_commercial_packet_actions packet_action
@@ -1560,6 +1594,7 @@ async function commercialExposureForProjects(projectIds: string[]) {
       where bucket = 'confirmed'
         or request_state in ('open', 'needs_clarification')
         or packet_requirement = 'approval'
+        or disposition in ('swap', 'paid_change')
       group by project_id, bucket, currency_code
     `),
     getDb()

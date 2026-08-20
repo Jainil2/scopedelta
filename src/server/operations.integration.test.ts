@@ -6,6 +6,9 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { getDb, getPool } from "@/db";
 import {
   clientAcceptanceTargets,
+  clientCommercialPacketActions,
+  clientCommercialPackets,
+  clientProjectParticipants,
   clientProjectItems,
   commercialRequests,
   commercialDecisions,
@@ -433,6 +436,48 @@ describe("portfolio operations domain boundary", () => {
         }),
       ]),
     );
+    const memberPortfolio = await listPortfolio(
+      fixture.member,
+      fixture.workspace.id,
+      portfolioFilters,
+    );
+    const memberProject = memberPortfolio.items.find(
+      (item) => item.id === fixture.ledProject.id,
+    )!;
+    expect(memberProject.canViewCommercial).toBe(false);
+    expect(memberProject.signals.map((signal) => signal.category)).toEqual(
+      expect.arrayContaining(["blocked_work", "overdue_milestone"]),
+    );
+    const memberCategories = memberProject.signals.map(
+      (signal) => signal.category,
+    );
+    expect(memberCategories).not.toContain("commercial_drift");
+    expect(memberCategories).not.toContain("pending_commercial_decision");
+    for (const attention of [
+      "commercial_drift",
+      "pending_commercial_decision",
+    ] as const) {
+      const filtered = await listPortfolio(
+        fixture.member,
+        fixture.workspace.id,
+        { ...portfolioFilters, attention },
+      );
+      expect(filtered.items).toEqual([]);
+      expect(filtered.page.total).toBe(0);
+    }
+    const ordinaryFiltered = await listPortfolio(
+      fixture.member,
+      fixture.workspace.id,
+      { ...portfolioFilters, attention: "blocked_work" },
+    );
+    expect(ordinaryFiltered.items).toEqual([
+      expect.objectContaining({
+        id: fixture.ledProject.id,
+        signals: expect.arrayContaining([
+          expect.objectContaining({ category: "blocked_work" }),
+        ]),
+      }),
+    ]);
     const exposure = await getProjectCommercialExposure(
       fixture.lead,
       fixture.workspace.id,
@@ -472,49 +517,93 @@ describe("portfolio operations domain boundary", () => {
     ).rejects.toMatchObject({ code: "not_found", status: 404 });
   });
 
-  it("separates confirmed and pending exposure across currencies without margin", async () => {
+  it("requires exact client-approved packets for paid-change exposure", async () => {
     const fixture = await createFixture();
-    const confirmedRequestId = randomUUID();
-    const pendingRequestId = randomUUID();
-    await db.insert(commercialRequests).values([
-      {
-        id: confirmedRequestId,
+    const requestIds = {
+      noPacket: randomUUID(),
+      unapproved: randomUUID(),
+      approved: randomUUID(),
+      stalePacket: randomUUID(),
+      unresolved: randomUUID(),
+    };
+    await db.insert(commercialRequests).values(
+      Object.entries(requestIds).map(([kind, id]) => ({
+        id,
         projectId: fixture.ledProject.id,
         idempotencyKey: randomUUID(),
-        state: "resolved",
-        title: "Authorized change",
-        requestText: "Deliver the authorized change.",
+        state:
+          kind === "unresolved" ? ("open" as const) : ("resolved" as const),
+        title: {
+          noPacket: "No client packet",
+          unapproved: "Awaiting client approval",
+          approved: "Approved exact packet",
+          stalePacket: "Stale packet approval",
+          unresolved: "Unresolved estimate",
+        }[kind]!,
+        requestText: `Commercial exposure fixture: ${kind}.`,
         receivedAt: new Date(),
+        createdByUserId: fixture.owner.userId,
+      })),
+    );
+
+    const decisionIds = {
+      noPacket: randomUUID(),
+      unapproved: randomUUID(),
+      approved: randomUUID(),
+      stale: randomUUID(),
+      current: randomUUID(),
+    };
+    const now = new Date();
+    const earlier = new Date(now.getTime() - 1_000);
+    await db.insert(commercialDecisions).values([
+      ...(["noPacket", "unapproved", "approved"] as const).map((kind) => ({
+        id: decisionIds[kind],
+        projectId: fixture.ledProject.id,
+        requestId: requestIds[kind],
+        idempotencyKey: randomUUID(),
+        disposition:
+          kind === "unapproved" ? ("swap" as const) : ("paid_change" as const),
+        rationale: `Current ${kind} decision.`,
+        confirmedAt: now,
+        createdByUserId: fixture.owner.userId,
+      })),
+      {
+        id: decisionIds.stale,
+        projectId: fixture.ledProject.id,
+        requestId: requestIds.stalePacket,
+        idempotencyKey: randomUUID(),
+        disposition: "paid_change" as const,
+        rationale: "Superseded decision attached to the packet.",
+        confirmedAt: earlier,
+        supersededAt: now,
         createdByUserId: fixture.owner.userId,
       },
       {
-        id: pendingRequestId,
+        id: decisionIds.current,
         projectId: fixture.ledProject.id,
+        requestId: requestIds.stalePacket,
         idempotencyKey: randomUUID(),
-        state: "open",
-        title: "Unresolved estimate",
-        requestText: "Estimate before authorization.",
-        receivedAt: new Date(),
+        disposition: "paid_change" as const,
+        rationale: "Current decision not attached to the stale packet.",
+        supersedesDecisionId: decisionIds.stale,
+        confirmedAt: now,
         createdByUserId: fixture.owner.userId,
       },
     ]);
-    const decisionId = randomUUID();
-    await db.insert(commercialDecisions).values({
-      id: decisionId,
-      projectId: fixture.ledProject.id,
-      requestId: confirmedRequestId,
-      idempotencyKey: randomUUID(),
-      disposition: "paid_change",
-      rationale: "Authorized by the current decision.",
-      confirmedAt: new Date(),
-      createdByUserId: fixture.owner.userId,
-    });
+
+    const impactIds = {
+      noPacket: randomUUID(),
+      unapproved: randomUUID(),
+      approved: randomUUID(),
+      stale: randomUUID(),
+      current: randomUUID(),
+    };
     await db.insert(commercialImpactAssessments).values([
       {
-        id: randomUUID(),
+        id: impactIds.noPacket,
         projectId: fixture.ledProject.id,
-        requestId: confirmedRequestId,
-        decisionId,
+        requestId: requestIds.noPacket,
+        decisionId: decisionIds.noPacket,
         idempotencyKey: randomUUID(),
         confidence: "confirmed",
         effortMinutes: 120,
@@ -524,16 +613,149 @@ describe("portfolio operations domain boundary", () => {
         createdByUserId: fixture.owner.userId,
       },
       {
+        id: impactIds.unapproved,
+        projectId: fixture.ledProject.id,
+        requestId: requestIds.unapproved,
+        decisionId: decisionIds.unapproved,
+        idempotencyKey: randomUUID(),
+        confidence: "confirmed",
+        effortMinutes: 60,
+        scheduleDeltaDays: 1,
+        monetaryAmount: "200.00",
+        currencyCode: "EUR",
+        createdByUserId: fixture.owner.userId,
+      },
+      {
+        id: impactIds.approved,
+        projectId: fixture.ledProject.id,
+        requestId: requestIds.approved,
+        decisionId: decisionIds.approved,
+        idempotencyKey: randomUUID(),
+        confidence: "confirmed",
+        effortMinutes: 180,
+        scheduleDeltaDays: 3,
+        monetaryAmount: "300.00",
+        currencyCode: "GBP",
+        createdByUserId: fixture.owner.userId,
+      },
+      {
+        id: impactIds.stale,
+        projectId: fixture.ledProject.id,
+        requestId: requestIds.stalePacket,
+        decisionId: decisionIds.stale,
+        idempotencyKey: randomUUID(),
+        confidence: "confirmed",
+        effortMinutes: 15,
+        monetaryAmount: "50.00",
+        currencyCode: "JPY",
+        createdByUserId: fixture.owner.userId,
+      },
+      {
+        id: impactIds.current,
+        projectId: fixture.ledProject.id,
+        requestId: requestIds.stalePacket,
+        decisionId: decisionIds.current,
+        idempotencyKey: randomUUID(),
+        confidence: "confirmed",
+        effortMinutes: 90,
+        scheduleDeltaDays: 4,
+        monetaryAmount: "400.00",
+        currencyCode: "JPY",
+        supersedesImpactAssessmentId: impactIds.stale,
+        createdByUserId: fixture.owner.userId,
+      },
+      {
         id: randomUUID(),
         projectId: fixture.ledProject.id,
-        requestId: pendingRequestId,
+        requestId: requestIds.unresolved,
         idempotencyKey: randomUUID(),
         confidence: "estimate",
         effortMinutes: 45,
         targetDate: addIsoDays(new Date().toISOString().slice(0, 10), 14),
         monetaryAmount: "75.50",
-        currencyCode: "EUR",
+        currencyCode: "CAD",
         createdByUserId: fixture.owner.userId,
+      },
+    ]);
+
+    const packetIds = {
+      unapproved: randomUUID(),
+      approved: randomUUID(),
+      stale: randomUUID(),
+    };
+    await db.insert(clientCommercialPackets).values([
+      {
+        id: packetIds.unapproved,
+        projectId: fixture.ledProject.id,
+        requestId: requestIds.unapproved,
+        decisionId: decisionIds.unapproved,
+        impactAssessmentId: impactIds.unapproved,
+        idempotencyKey: randomUUID(),
+        versionNumber: 1,
+        requirement: "approval",
+        title: "Awaiting approval",
+        requestSummary: "Approval has not been supplied.",
+        treatmentSummary: "Keep this exposure pending.",
+        publishedByUserId: fixture.owner.userId,
+      },
+      {
+        id: packetIds.approved,
+        projectId: fixture.ledProject.id,
+        requestId: requestIds.approved,
+        decisionId: decisionIds.approved,
+        impactAssessmentId: impactIds.approved,
+        idempotencyKey: randomUUID(),
+        versionNumber: 1,
+        requirement: "approval",
+        title: "Approved exact packet",
+        requestSummary: "Approval applies to this decision and impact.",
+        treatmentSummary: "Include this exposure as confirmed.",
+        publishedByUserId: fixture.owner.userId,
+      },
+      {
+        id: packetIds.stale,
+        projectId: fixture.ledProject.id,
+        requestId: requestIds.stalePacket,
+        decisionId: decisionIds.stale,
+        impactAssessmentId: impactIds.stale,
+        idempotencyKey: randomUUID(),
+        versionNumber: 1,
+        requirement: "approval",
+        title: "Approved stale packet",
+        requestSummary: "Approval applies only to superseded evidence.",
+        treatmentSummary: "Do not authorize the current impact.",
+        publishedByUserId: fixture.owner.userId,
+      },
+    ]);
+    const client = await createUser(
+      "commercial-client@example.test",
+      "Commercial Client",
+    );
+    const participantId = randomUUID();
+    await db.insert(clientProjectParticipants).values({
+      id: participantId,
+      projectId: fixture.ledProject.id,
+      userId: client.userId,
+      invitedEmail: client.email,
+      role: "approver",
+      createdByUserId: fixture.owner.userId,
+    });
+    await db.insert(clientCommercialPacketActions).values([
+      {
+        id: randomUUID(),
+        projectId: fixture.ledProject.id,
+        packetId: packetIds.approved,
+        participantId,
+        idempotencyKey: randomUUID(),
+        action: "approved",
+      },
+      {
+        id: randomUUID(),
+        projectId: fixture.ledProject.id,
+        packetId: packetIds.stale,
+        participantId,
+        idempotencyKey: randomUUID(),
+        action: "approved",
       },
     ]);
 
@@ -543,25 +765,37 @@ describe("portfolio operations domain boundary", () => {
       fixture.ledProject.id,
     );
     expect(exposure.confirmed).toMatchObject({
-      money: [{ currencyCode: "USD", amount: "100.00" }],
-      effortMinutes: 120,
+      money: [{ currencyCode: "GBP", amount: "300.00" }],
+      effortMinutes: 180,
       scheduleImpactCount: 1,
     });
     expect(exposure.confirmed.scheduleImpacts).toEqual([
       expect.objectContaining({
-        requestTitle: "Authorized change",
-        scheduleDeltaDays: 2,
+        requestTitle: "Approved exact packet",
+        scheduleDeltaDays: 3,
       }),
     ]);
     expect(exposure.pending).toMatchObject({
-      money: [{ currencyCode: "EUR", amount: "75.50" }],
-      effortMinutes: 45,
-      scheduleImpactCount: 1,
+      effortMinutes: 315,
+      scheduleImpactCount: 4,
       requestCount: 1,
     });
-    expect(exposure.pending.scheduleImpacts).toEqual([
-      expect.objectContaining({ requestTitle: "Unresolved estimate" }),
-    ]);
+    expect(exposure.pending.money).toEqual(
+      expect.arrayContaining([
+        { currencyCode: "USD", amount: "100.00" },
+        { currencyCode: "EUR", amount: "200.00" },
+        { currencyCode: "JPY", amount: "400.00" },
+        { currencyCode: "CAD", amount: "75.50" },
+      ]),
+    );
+    expect(exposure.pending.scheduleImpacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ requestTitle: "No client packet" }),
+        expect.objectContaining({ requestTitle: "Awaiting client approval" }),
+        expect.objectContaining({ requestTitle: "Stale packet approval" }),
+        expect.objectContaining({ requestTitle: "Unresolved estimate" }),
+      ]),
+    );
     expect(JSON.stringify(exposure)).not.toMatch(/margin|profit|revenue|cost/i);
   });
 

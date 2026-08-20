@@ -330,6 +330,19 @@ Exact source-license/public-package boundary, public prices/allowances, live bil
 
 ## Layer 7 — Portfolio, Operations & Self-Service Scale
 
+### Status
+
+SC-011A / #46 is implemented as the first coherent Layer-7 slice. Portfolio attention, effective weekly availability, explicit allocations, delivery-time actuals, and conservative commercial exposure are Local/LAN. Layer 7 is therefore partially delivered; templates, imports/exports, onboarding/help, and telemetry remain SC-011B/C scope.
+
+### SC-011A delivered boundary
+
+- fixed-page active portfolio with evidence-linked attention categories and no health score;
+- workspace/member effective availability plus overlapping weekly allocation forecasts;
+- permission-aware over-allocation, including “Other committed work” masking;
+- owner-only time-entry mutation with manager aggregates and soft deletion;
+- confirmed-versus-pending, currency-grouped commercial exposure and separate billable/non-billable actual minutes;
+- no estimate conversion, baseline-value invention, net schedule arithmetic, margin, profit, cost, revenue, or exchange-rate logic.
+
 ### Outcome
 Larger 50–500-person organizations can operate many concurrent projects with low administrative burden.
 
@@ -402,8 +415,8 @@ Current sequence:
 4. SC-007 / #11 — Layer 3 client collaboration/negotiation/acceptance — **DONE** as one consolidated task/primary PR.
 5. SC-008 / #12 — Layer 4 engineering/QA evidence — **DONE** through PR #41.
 6. SC-009 / #17 — Layer 5 AI-native delivery intelligence — **DONE** through PR #43.
-7. SC-010 / #13 — Layer 6 subscription/cloud economics/source distribution — **IMPLEMENTED / IN REVIEW**.
-8. SC-011 / #14 — Layer 7 portfolio/operations/self-service scale.
+7. SC-010 / #13 — Layer 6 subscription/cloud economics/source distribution — **DONE** through merge `38168f4`.
+8. SC-011 / #14 — Layer 7 portfolio/operations/self-service scale — **PARTIALLY DELIVERED** through SC-011A / #46.
 9. SC-012 / #15 — Layer 8 enterprise/GA hardening.
 
 Superseded planning issues #36/#37/#38 are closed and should not be implemented separately.

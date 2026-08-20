@@ -17,7 +17,7 @@ The Layer-3 review reclassifies the core client portal/request/approval capabili
 
 Layer 3 therefore introduces **no mandatory paid external service dependency**. Layer 4 preserves that local core for QA, defects, traceability and readiness; the implemented GitHub evidence connection is an explicitly selected external provider dependency. GitLab remains deferred and classified Hybrid because a future adapter could target self-hosted or hosted GitLab.
 
-Layer 5 is complete through SC-009 / PR #43. Layer 6 preserves the distinction between software capability and ScopeDelta-managed resources: self-host core operation is Local/LAN and does not call cloud billing, while hosted checkout/portal/lifecycle inherently use an external payment service. Active-project/internal-user rules and managed usage accounting remain provider-neutral local domain behavior. External client participants remain separate from internal-user capacity.
+Layer 5 is complete through SC-009 / PR #43. Layer 6 preserves the distinction between software capability and ScopeDelta-managed resources: self-host core operation is Local/LAN and does not call cloud billing, while hosted checkout/portal/lifecycle inherently use an external payment service. Active-project/internal-user rules and managed usage accounting remain provider-neutral local domain behavior. External client participants remain separate from internal-user capacity. Layer 7 is partially delivered through SC-011A / #46: its portfolio, weekly availability/allocation, delivery actual, and conservative exposure behavior is Local/LAN and has no mandatory AI or external-provider dependency.
 
 ### Runtime meaning
 
@@ -220,9 +220,9 @@ Layer-6 runtime rules:
 
 | Capability | Runtime class |
 |---|---|
-| Portfolio/project health | Local/LAN |
-| Capacity/workload | Local/LAN |
-| Budget/margin visibility | Local/LAN |
+| Portfolio attention with evidence drill-down | Local/LAN | SC-011A; categorical signals, no health score |
+| Capacity/workload + delivery actuals | Local/LAN | SC-011A; effective availability, allocation, and owner-authored actuals stay distinct; estimates remain point/count context |
+| Conservative commercial exposure | Local/LAN | SC-011A; currency-grouped confirmed/pending impact and actual effort, no margin |
 | Project/workflow templates | Local/LAN |
 | CSV import/export | Local/LAN |
 | Jira migration/import | Hybrid/optional external |

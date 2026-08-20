@@ -163,6 +163,7 @@ export function CommercialWorkspace({
   history,
   decisionOptions,
   changeControl,
+  exposurePanel,
 }: Readonly<{
   workspaceId: string;
   workspaceSlug: string;
@@ -173,6 +174,7 @@ export function CommercialWorkspace({
   history: CommercialHistory;
   decisionOptions: DecisionOption[];
   changeControl?: ReactNode;
+  exposurePanel?: ReactNode;
 }>) {
   const router = useRouter();
   const overview = initialOverview;
@@ -793,6 +795,7 @@ export function CommercialWorkspace({
           onSelectionChange={setSelection}
         />
       </div>
+      {exposurePanel}
       {changeControl}
     </main>
   );
@@ -1005,6 +1008,15 @@ function EvidenceInspector({
   sourceTextRef: RefObject<HTMLTextAreaElement | null>;
   onSelectionChange: (selection: { start: number; end: number }) => void;
 }>) {
+  function captureSelection() {
+    const element = sourceTextRef.current;
+    if (!element) return;
+    onSelectionChange({
+      start: element.selectionStart,
+      end: element.selectionEnd,
+    });
+  }
+
   let content = (
     <p className="empty-copy">
       Inspect a source to select evidence for a scope item.
@@ -1022,12 +1034,9 @@ function EvidenceInspector({
           className="source-text-inspector"
           readOnly
           value={source.extractedText}
-          onSelect={(event) =>
-            onSelectionChange({
-              start: event.currentTarget.selectionStart,
-              end: event.currentTarget.selectionEnd,
-            })
-          }
+          onSelect={captureSelection}
+          onKeyUp={captureSelection}
+          onMouseUp={captureSelection}
         />
         <div className="evidence-offsets">
           <span>Start {selection.start}</span>

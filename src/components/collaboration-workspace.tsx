@@ -617,6 +617,7 @@ export function WorkCollaborationWorkspace({
   initialWatching,
   commercialPanel,
   engineeringPanel,
+  operationsPanel,
 }: Readonly<{
   actorUserId: string;
   workspaceId: string;
@@ -631,6 +632,7 @@ export function WorkCollaborationWorkspace({
   initialWatching: boolean;
   commercialPanel?: ReactNode;
   engineeringPanel?: ReactNode;
+  operationsPanel?: ReactNode;
 }>) {
   const router = useRouter();
   const [comments, setComments] = useState(initialComments);
@@ -761,6 +763,7 @@ export function WorkCollaborationWorkspace({
       </header>
       {commercialPanel}
       {engineeringPanel}
+      {operationsPanel}
       <div className="work-collaboration-grid">
         <div className="discussion-thread">
           <div className="section-heading">

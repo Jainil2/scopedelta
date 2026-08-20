@@ -7,6 +7,7 @@ import {
   auditEvents,
   memberships,
   users,
+  workspaceDeliveryAvailabilityPeriods,
   workspaceInvitations,
   workspaceSettings,
   workspaces,
@@ -89,6 +90,13 @@ export async function createWorkspace(
       workspaceId,
       userId: actor.userId,
       role: "owner",
+    });
+    await transaction.insert(workspaceDeliveryAvailabilityPeriods).values({
+      id: randomUUID(),
+      workspaceId,
+      weeklyMinutes: 2_400,
+      effectiveFrom: "1970-01-05",
+      createdByUserId: actor.userId,
     });
     await transaction.insert(auditEvents).values([
       {

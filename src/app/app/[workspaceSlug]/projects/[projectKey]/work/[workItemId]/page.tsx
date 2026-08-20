@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { WorkCollaborationWorkspace } from "@/components/collaboration-workspace";
 import { WorkCommercialPanel } from "@/components/commercial-workspace";
 import { WorkEngineeringPanel } from "@/components/engineering-workspace";
+import { TimeEntryForm } from "@/components/operations-forms";
 import { paginationSchema } from "@/lib/delivery-validation";
+import { dateInTimeZone } from "@/lib/operations";
 import { parseInput } from "@/lib/platform-validation";
 import { requireSession } from "@/lib/session";
 import {
@@ -72,6 +74,29 @@ export default async function WorkCollaborationPage({
           trace={data.engineeringTrace}
           aiHref={`/app/${workspaceSlug}/projects/${data.project.key}/ai?kind=work_context_qa_pack&workItemId=${data.workItem.id}`}
         />
+      }
+      operationsPanel={
+        data.project.lifecycle === "active" ? (
+          <details className="operations-composer work-time-composer">
+            <summary>Log time against this work item</summary>
+            <TimeEntryForm
+              workspaceId={data.workspace.id}
+              projects={[
+                {
+                  id: data.project.id,
+                  key: data.project.key,
+                  name: data.project.name,
+                },
+              ]}
+              initialProjectId={data.project.id}
+              initialWorkItemId={data.workItem.id}
+              defaultWorkDate={dateInTimeZone(
+                new Date(),
+                data.workspace.timezone,
+              )}
+            />
+          </details>
+        ) : null
       }
     />
   );

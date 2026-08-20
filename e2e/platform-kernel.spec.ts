@@ -397,6 +397,218 @@ test("client project, milestone, and backlog work through the production UI", as
   ).toBeAttached();
 });
 
+test("owner operates portfolio capacity and work-item time from the UI", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const email = `operations-${suffix}@example.test`;
+  const password = "test-password-123";
+  const today = new Date().toISOString().slice(0, 10);
+  const monday = isoMonday(today);
+  const yesterday = isoDateOffset(today, -1);
+
+  await signUpAndVerifyLocally(page, email, password, "/onboarding");
+  await page.getByLabel(/Workspace name/).fill("Operations Studio");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await page.getByText("New client").click();
+  await page.getByLabel("Client name").fill("Northwind");
+  await page.getByRole("button", { name: "Create client" }).click();
+  await expect(page.getByRole("status")).toHaveText("Client created.");
+
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
+  await page.getByText("New project").click();
+  await page.getByLabel("Project key").fill("OPS");
+  await page.getByLabel("Project name").fill("Operations rollout");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page.getByRole("status")).toHaveText("Project created.");
+  await page.getByRole("link", { name: /Operations rollout/ }).click();
+
+  await page.getByText("New milestone").click();
+  const milestoneForm = page.locator("form").filter({
+    has: page.getByRole("button", { name: "Create milestone" }),
+  });
+  await milestoneForm.getByLabel("Name").fill("Overdue client review");
+  await milestoneForm.getByLabel("Target date").fill(yesterday);
+  await milestoneForm.getByRole("button", { name: "Create milestone" }).click();
+  await expect(page.getByRole("status")).toHaveText("Milestone created.");
+
+  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByText("New work item").click();
+  const workForm = page.locator("form.work-form").filter({
+    has: page.getByRole("button", { name: "Create work item" }),
+  });
+  await workForm.getByLabel("Title").fill("Prepare operations handoff");
+  await workForm.getByLabel("Status").selectOption("ready");
+  await workForm.getByLabel("Assignee").selectOption({ index: 1 });
+  await workForm.getByRole("button", { name: "Create work item" }).click();
+  await expect(page.getByRole("status")).toHaveText("Work item created.");
+
+  await page.getByRole("link", { name: "Operations", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Portfolio" })).toBeVisible();
+  const overdue = page.getByRole("link", { name: /Overdue target/ });
+  await expect(overdue).toBeVisible();
+  await expect(overdue).toHaveAttribute("href", /projects\/OPS#milestones$/);
+
+  await page.getByRole("link", { name: "Capacity", exact: true }).click();
+  await page.getByText("Schedule availability").click();
+  const availabilityForm = page.locator("form.operations-mutation.compact");
+  await availabilityForm.getByLabel("Minutes / week").fill("1200");
+  await availabilityForm.getByLabel("Effective Monday").fill(monday);
+  await availabilityForm
+    .getByRole("button", { name: "Set availability" })
+    .click();
+  await expect(availabilityForm.getByRole("status")).toContainText(
+    "Availability scheduled",
+  );
+
+  await page.getByText("Add planned allocation").click();
+  const allocationForm = page.locator("form.operations-mutation").filter({
+    has: page.getByRole("button", { name: "Add allocation" }),
+  });
+  await allocationForm.getByLabel("Start Monday").fill(monday);
+  await allocationForm.getByLabel("End Monday").fill(monday);
+  await allocationForm.getByLabel("Minutes / week").fill("1800");
+  await allocationForm.getByRole("button", { name: "Add allocation" }).click();
+  await expect(allocationForm.getByRole("status")).toContainText(
+    "Allocation added",
+  );
+  await expect(
+    page.locator("details.capacity-week.is-over").first(),
+  ).toContainText("10h");
+
+  await page.getByRole("link", { name: "My work", exact: true }).click();
+  await page.getByRole("link", { name: /Prepare operations handoff/ }).click();
+  await page.getByText("Log time against this work item").click();
+  const quickTime = page.locator("form.operations-mutation").filter({
+    has: page.getByRole("button", { name: "Log time" }),
+  });
+  await quickTime.getByLabel("Work date").fill(today);
+  await quickTime.getByLabel("Actual minutes").fill("30");
+  await quickTime.getByLabel("Note").fill("Handoff review");
+  await quickTime.getByRole("button", { name: "Log time" }).click();
+  await expect(quickTime.getByRole("status")).toContainText("Logged");
+
+  await page.getByRole("link", { name: "Operations", exact: true }).click();
+  await page.getByRole("link", { name: "Time", exact: true }).click();
+  await expect(page.getByText("Handoff review")).toBeVisible();
+  await expect(page.getByText("30m").first()).toBeVisible();
+
+  await page.goto(
+    new URL(page.url()).pathname.replace(
+      /\/operations\/time$/,
+      "/projects/OPS/commercial",
+    ),
+  );
+  await expect(
+    page.getByRole("heading", { name: "Current authoritative position" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("No baseline money or margin inferred"),
+  ).toBeVisible();
+});
+
+test("project lead sees unrelated capacity as other committed work", async ({
+  page,
+  browser,
+}) => {
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const ownerEmail = `capacity-owner-${suffix}@example.test`;
+  const leadEmail = `capacity-lead-${suffix}@example.test`;
+  const workerEmail = `capacity-worker-${suffix}@example.test`;
+  const password = "test-password-123";
+  const monday = isoMonday(new Date().toISOString().slice(0, 10));
+
+  await signUpAndVerifyLocally(page, ownerEmail, password, "/onboarding");
+  await page.getByLabel(/Workspace name/).fill("Masked Capacity Studio");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+  await page.waitForURL(/\/app\//);
+  const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
+
+  const leadContext = await browser.newContext();
+  const leadPage = await leadContext.newPage();
+  await signUpAndVerifyLocally(leadPage, leadEmail, password, "/onboarding");
+
+  await withTestDatabase(async (pool) => {
+    const workspace = await pool.query<{ id: string }>(
+      "select id from workspaces where slug = $1",
+      [workspaceSlug],
+    );
+    const owner = await pool.query<{ id: string }>(
+      "select id from users where email = $1",
+      [ownerEmail],
+    );
+    const lead = await pool.query<{ id: string }>(
+      "select id from users where email = $1",
+      [leadEmail],
+    );
+    const workerId = randomUUID();
+    const clientId = randomUUID();
+    const ledProjectId = randomUUID();
+    const privateProjectId = randomUUID();
+    const workspaceId = workspace.rows[0]!.id;
+    const ownerId = owner.rows[0]!.id;
+    const leadId = lead.rows[0]!.id;
+    await pool.query(
+      "insert into users (id, email, name, email_verified) values ($1, $2, 'Capacity Worker', true)",
+      [workerId, workerEmail],
+    );
+    await pool.query(
+      `insert into memberships (id, workspace_id, user_id, role) values
+       (gen_random_uuid(), $1, $2, 'member'),
+       (gen_random_uuid(), $1, $3, 'member')`,
+      [workspaceId, leadId, workerId],
+    );
+    await pool.query(
+      "insert into clients (id, workspace_id, name) values ($1, $2, 'Capacity Client')",
+      [clientId, workspaceId],
+    );
+    await pool.query(
+      `insert into projects (id, workspace_id, client_id, key, name, lead_user_id) values
+       ($1, $3, $4, 'VISIBLE', 'Visible delivery', $5),
+       ($2, $3, $4, 'PRIVATE', 'Confidential account', $6)`,
+      [ledProjectId, privateProjectId, workspaceId, clientId, leadId, ownerId],
+    );
+    await pool.query(
+      `insert into project_memberships (project_id, workspace_id, user_id, added_by_user_id) values
+       ($1, $2, $3, $4), ($1, $2, $5, $4)`,
+      [ledProjectId, workspaceId, leadId, ownerId, workerId],
+    );
+    await pool.query(
+      `insert into project_allocations (
+         id, workspace_id, project_id, member_user_id, start_week, end_week,
+         planned_minutes_per_week, role_label, created_by_user_id, updated_by_user_id
+       ) values
+       (gen_random_uuid(), $1, $2, $3, $4, $4, 1200, 'Delivery', $5, $5),
+       (gen_random_uuid(), $1, $6, $3, $4, $4, 1500, 'Confidential role', $5, $5)`,
+      [workspaceId, ledProjectId, workerId, monday, ownerId, privateProjectId],
+    );
+  });
+
+  await leadPage.goto(
+    `/app/${workspaceSlug}/operations/capacity?startWeek=${monday}&weeks=1`,
+  );
+  await expect(
+    leadPage.getByRole("heading", { name: "Capacity", exact: true }),
+  ).toBeVisible();
+  await leadPage
+    .locator("article.capacity-person")
+    .filter({ hasText: "Capacity Worker" })
+    .locator("summary")
+    .click();
+  await expect(
+    leadPage.getByText("Visible delivery", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    leadPage.getByText("Other committed work", { exact: true }),
+  ).toBeVisible();
+  await expect(leadPage.getByText("Confidential account")).toHaveCount(0);
+  await expect(leadPage.getByText("Confidential role")).toHaveCount(0);
+  await leadContext.close();
+});
+
 test("commercial baseline, decision authorization and contradictions stay traceable", async ({
   page,
   request,
@@ -1081,6 +1293,73 @@ test("client collaboration keeps one commercial truth across internal and extern
     clientPage.getByText("Private milestone implementation detail"),
   ).toHaveCount(0);
 
+  const operationsIds = await withTestDatabase(async (pool) => {
+    const result = await pool.query<{
+      workspace_id: string;
+      project_id: string;
+    }>(
+      `select workspaces.id workspace_id, projects.id project_id
+       from workspaces
+       inner join projects on projects.workspace_id = workspaces.id
+       where workspaces.slug = $1 and projects.key = 'PORTAL'`,
+      [workspaceSlug],
+    );
+    return result.rows[0]!;
+  });
+  const externalStatuses = await clientPage.evaluate(
+    async ({ workspaceId, projectId, monday, today }) => {
+      const json = { "content-type": "application/json" };
+      const calls: Array<Promise<Response>> = [
+        fetch(`/api/v1/workspaces/${workspaceId}/portfolio`),
+        fetch(`/api/v1/workspaces/${workspaceId}/capacity`),
+        fetch(`/api/v1/workspaces/${workspaceId}/allocations`),
+        fetch(`/api/v1/workspaces/${workspaceId}/time-entries`),
+        fetch(`/api/v1/workspaces/${workspaceId}/commercial-exposure`),
+        fetch(`/api/v1/workspaces/${workspaceId}/capacity/availability`, {
+          method: "POST",
+          headers: json,
+          body: JSON.stringify({ weeklyMinutes: 2400, effectiveFrom: monday }),
+        }),
+        fetch(`/api/v1/workspaces/${workspaceId}/allocations`, {
+          method: "POST",
+          headers: json,
+          body: JSON.stringify({
+            memberUserId: crypto.randomUUID(),
+            projectId,
+            startWeek: monday,
+            endWeek: monday,
+            plannedMinutesPerWeek: 60,
+          }),
+        }),
+        fetch(`/api/v1/workspaces/${workspaceId}/time-entries`, {
+          method: "POST",
+          headers: json,
+          body: JSON.stringify({
+            projectId,
+            workItemId: null,
+            workDate: today,
+            durationMinutes: 15,
+            classification: "billable",
+            note: null,
+          }),
+        }),
+        fetch(
+          `/api/v1/workspaces/${workspaceId}/projects/${projectId}/commercial-exposure`,
+        ),
+      ];
+      return Promise.all(calls).then((responses) =>
+        responses.map((response) => response.status),
+      );
+    },
+    {
+      workspaceId: operationsIds.workspace_id,
+      projectId: operationsIds.project_id,
+      monday: isoMonday(new Date().toISOString().slice(0, 10)),
+      today: new Date().toISOString().slice(0, 10),
+    },
+  );
+  expect(externalStatuses).toEqual(Array(9).fill(404));
+
   await clientPage.getByLabel("Short title").fill("Add enterprise SSO");
   await clientPage
     .getByLabel("What would you like to change?")
@@ -1677,6 +1956,26 @@ async function signUpAndVerify(
   await page.waitForURL(`**${callbackURL}`);
 }
 
+async function signUpAndVerifyLocally(
+  page: Page,
+  email: string,
+  password: string,
+  callbackURL: string,
+) {
+  await page.goto(`/sign-up?callbackURL=${encodeURIComponent(callbackURL)}`);
+  await fillSignUp(page, email, password);
+  await expect(page.getByRole("status")).toContainText(
+    /same message is shown/i,
+  );
+  await withTestDatabase(async (pool) => {
+    await pool.query(
+      "update users set email_verified = true where email = $1",
+      [email],
+    );
+  });
+  await signIn(page, email, password, new RegExp(`${callbackURL}$`));
+}
+
 async function fillSignUp(page: Page, email: string, password: string) {
   const name = email.startsWith("owner-")
     ? "Owner Test"
@@ -2076,4 +2375,16 @@ async function removeDevIndicator(page: Page) {
   await page
     .locator("nextjs-portal")
     .evaluateAll((elements) => elements.forEach((element) => element.remove()));
+}
+
+function isoDateOffset(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function isoMonday(value: string) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  return date.toISOString().slice(0, 10);
 }

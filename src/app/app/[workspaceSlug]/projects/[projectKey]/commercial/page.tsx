@@ -2,11 +2,13 @@ import { notFound } from "next/navigation";
 
 import { CommercialChangeControl } from "@/components/commercial-change-control";
 import { CommercialWorkspace } from "@/components/commercial-workspace";
+import { ProjectExposureSummary } from "@/components/operations-workspace";
 import {
   commercialDriftFiltersSchema,
   commercialHistoryFiltersSchema,
   commercialRequestFiltersSchema,
 } from "@/lib/commercial-validation";
+import { PlatformError } from "@/lib/platform-errors";
 import { parseInput } from "@/lib/platform-validation";
 import { requireSession } from "@/lib/session";
 import {
@@ -16,6 +18,7 @@ import {
 import { listCommercialRequests } from "@/server/commercial-change-control";
 import { listCommercialHistory } from "@/server/commercial-amendments";
 import { getProjectByKey } from "@/server/delivery";
+import { getProjectCommercialExposure } from "@/server/operations";
 import { getWorkspaceBySlug } from "@/server/workspaces";
 
 export default async function CommercialPage({
@@ -73,6 +76,7 @@ export default async function CommercialPage({
           ledger={data.requests}
         />
       }
+      exposurePanel={<ProjectExposureSummary summary={data.exposure} />}
     />
   );
 }
@@ -119,6 +123,7 @@ async function loadCommercial(
       support,
       requests,
       history,
+      exposure,
     ] = await Promise.all([
       listCommercialOverview(actor, workspace.id, project.id),
       listCommercialDrift(actor, workspace.id, project.id, filters),
@@ -149,6 +154,7 @@ async function loadCommercial(
       }),
       listCommercialRequests(actor, workspace.id, project.id, requestFilters),
       listCommercialHistory(actor, workspace.id, project.id, historyFilters),
+      getProjectCommercialExposure(actor, workspace.id, project.id),
     ]);
     return {
       workspace,
@@ -162,8 +168,10 @@ async function loadCommercial(
       support,
       requests,
       history,
+      exposure,
     };
-  } catch {
-    notFound();
+  } catch (error) {
+    if (error instanceof PlatformError && error.status === 404) notFound();
+    throw error;
   }
 }

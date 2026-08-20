@@ -1757,6 +1757,363 @@ h2 {
   }
 }
 
+/* Operations keeps planning facts dense and legible, with one signal accent. */
+.operations-page {
+  gap: 1.15rem;
+}
+
+.operations-header {
+  align-items: flex-end;
+}
+
+.operations-boundary {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.operations-tabs {
+  display: flex;
+  gap: 1.4rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.operations-tabs a {
+  padding: 0.75rem 0 0.65rem;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.operations-tabs a[aria-current="page"] {
+  margin-bottom: -1px;
+  border-bottom: 2px solid var(--accent-dark);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.operations-filter,
+.operations-mutation {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(9rem, 1fr)) auto;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 0.85rem 0;
+}
+
+.operations-filter label,
+.operations-mutation label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.operations-filter input,
+.operations-filter select,
+.operations-mutation input,
+.operations-mutation select {
+  width: 100%;
+}
+
+.operations-mutation {
+  grid-template-columns: repeat(3, minmax(10rem, 1fr));
+  padding: 1rem 0 0.25rem;
+}
+
+.operations-mutation.compact {
+  grid-template-columns: repeat(3, minmax(10rem, 1fr)) auto;
+}
+
+.operations-note {
+  grid-column: span 2;
+}
+
+.operations-mutation output {
+  align-self: center;
+  color: var(--accent-dark);
+  font-size: 0.78rem;
+}
+
+.operations-composer {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 0.85rem 0;
+}
+
+.operations-composer > summary {
+  width: fit-content;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.operations-ledger,
+.capacity-ledger,
+.exposure-ledger {
+  border-top: 1px solid var(--line-strong);
+}
+
+.operations-row {
+  display: grid;
+  gap: 1.25rem;
+  align-items: start;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.portfolio-row {
+  grid-template-columns: minmax(16rem, 1.2fr) minmax(10rem, 0.7fr) minmax(
+      18rem,
+      1.4fr
+    );
+}
+
+.time-row {
+  grid-template-columns: minmax(8rem, 0.45fr) minmax(18rem, 1.7fr) minmax(
+      8rem,
+      0.45fr
+    );
+}
+
+.operations-row-head {
+  padding: 0.6rem 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.operations-row > div,
+.operations-row > div > a,
+.capacity-person header > div,
+.exposure-project summary > span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.operations-row small,
+.capacity-person small,
+.capacity-person p,
+.exposure-project small {
+  color: var(--muted);
+}
+
+.attention-list {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 0.4rem !important;
+}
+
+.attention-link,
+.operations-clear {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  width: fit-content;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.72rem;
+  text-decoration: none;
+}
+
+.attention-link span {
+  color: var(--accent-dark);
+  font-weight: 900;
+}
+
+.operations-clear {
+  border-color: var(--accent);
+  color: var(--accent-dark);
+}
+
+.capacity-person {
+  padding: 1.2rem 0;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.capacity-person > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+  margin-bottom: 0.65rem;
+}
+
+.capacity-person h2,
+.capacity-person p {
+  margin: 0;
+}
+
+.estimate-context {
+  font-size: 0.76rem;
+}
+
+.capacity-weeks {
+  display: grid;
+}
+
+.capacity-week {
+  border-top: 1px solid var(--line);
+}
+
+.capacity-week > summary,
+.exposure-project > summary {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(4, minmax(6rem, 0.65fr));
+  gap: 1rem;
+  align-items: center;
+  padding: 0.7rem;
+  cursor: pointer;
+}
+
+.capacity-week > summary > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.capacity-week.is-over > summary {
+  box-shadow: inset 3px 0 var(--accent-dark);
+  background: var(--accent-soft);
+}
+
+.capacity-detail,
+.exposure-detail {
+  padding: 0.25rem 0.75rem 0.75rem 2.25rem;
+}
+
+.capacity-detail p,
+.exposure-detail p {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 44rem;
+  margin: 0;
+  padding: 0.35rem 0;
+  border-bottom: 1px dotted var(--line);
+}
+
+.operations-totals {
+  display: flex;
+  gap: 2.5rem;
+  margin: 0;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.operations-totals div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.operations-totals dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.operations-totals dd {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.6rem;
+}
+
+.exposure-project {
+  border-bottom: 1px solid var(--line);
+}
+
+.exposure-project > summary {
+  grid-template-columns: 1.4fr repeat(3, minmax(9rem, 0.7fr));
+}
+
+.operations-empty {
+  max-width: 46rem;
+  padding: 3.5rem 0;
+}
+
+.operations-empty h2 {
+  margin-bottom: 0.35rem;
+  font-family: var(--serif);
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 500;
+}
+
+.operations-muted {
+  color: var(--muted);
+}
+
+@media (max-width: 64rem) {
+  .operations-filter,
+  .operations-mutation,
+  .operations-mutation.compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .portfolio-row,
+  .time-row {
+    grid-template-columns: 1fr;
+  }
+
+  .operations-row-head {
+    display: none;
+  }
+
+  .operations-row [data-label]::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .capacity-week > summary,
+  .exposure-project > summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 40rem) {
+  .operations-header,
+  .capacity-person > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .operations-tabs {
+    overflow-x: auto;
+  }
+
+  .operations-filter,
+  .operations-mutation,
+  .operations-mutation.compact,
+  .capacity-week > summary,
+  .exposure-project > summary {
+    grid-template-columns: 1fr;
+  }
+
+  .operations-note {
+    grid-column: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .operations-composer,
+  .capacity-week,
+  .exposure-project,
+  .attention-link {
+    scroll-behavior: auto;
+    transition: none;
+  }
+}
+
 .ai-delivery-page {
   gap: 1.4rem;
 }

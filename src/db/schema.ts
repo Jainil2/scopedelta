@@ -180,6 +180,11 @@ export const workPurpose = pgEnum("work_purpose", [
   "internal",
 ]);
 
+export const deliveryTimeClassification = pgEnum(
+  "delivery_time_classification",
+  ["billable", "non_billable"],
+);
+
 export const aiJobKind = pgEnum("ai_job_kind", [
   "scope_change_analysis",
   "delivery_risk_brief",
@@ -818,6 +823,100 @@ export const projectMemberships = pgTable(
   ],
 );
 
+export const workspaceDeliveryAvailabilityPeriods = pgTable(
+  "workspace_delivery_availability_periods",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    weeklyMinutes: integer("weekly_minutes").notNull(),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("workspace_delivery_availability_id_workspace_unique").on(
+      table.id,
+      table.workspaceId,
+    ),
+    uniqueIndex("workspace_delivery_availability_start_uidx").on(
+      table.workspaceId,
+      table.effectiveFrom,
+    ),
+    index("workspace_delivery_availability_range_idx").on(
+      table.workspaceId,
+      table.effectiveFrom,
+      table.effectiveTo,
+    ),
+    check(
+      "workspace_delivery_availability_minutes_range",
+      sql`${table.weeklyMinutes} between 0 and 10080`,
+    ),
+    check(
+      "workspace_delivery_availability_date_order",
+      sql`${table.effectiveTo} is null or ${table.effectiveFrom} <= ${table.effectiveTo}`,
+    ),
+    check(
+      "workspace_delivery_availability_iso_weeks",
+      sql`extract(isodow from ${table.effectiveFrom}) = 1 and (${table.effectiveTo} is null or extract(isodow from ${table.effectiveTo}) = 7)`,
+    ),
+  ],
+);
+
+export const memberDeliveryAvailabilityPeriods = pgTable(
+  "member_delivery_availability_periods",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    weeklyMinutes: integer("weekly_minutes").notNull(),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestampColumns,
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.workspaceId, table.userId],
+      foreignColumns: [memberships.workspaceId, memberships.userId],
+      name: "member_delivery_availability_workspace_member_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("member_delivery_availability_start_uidx").on(
+      table.workspaceId,
+      table.userId,
+      table.effectiveFrom,
+    ),
+    index("member_delivery_availability_range_idx").on(
+      table.workspaceId,
+      table.userId,
+      table.effectiveFrom,
+      table.effectiveTo,
+    ),
+    check(
+      "member_delivery_availability_minutes_range",
+      sql`${table.weeklyMinutes} between 0 and 10080`,
+    ),
+    check(
+      "member_delivery_availability_date_order",
+      sql`${table.effectiveTo} is null or ${table.effectiveFrom} <= ${table.effectiveTo}`,
+    ),
+    check(
+      "member_delivery_availability_iso_weeks",
+      sql`extract(isodow from ${table.effectiveFrom}) = 1 and (${table.effectiveTo} is null or extract(isodow from ${table.effectiveTo}) = 7)`,
+    ),
+  ],
+);
+
 export const milestones = pgTable(
   "milestones",
   {
@@ -969,6 +1068,177 @@ export const workItems = pgTable(
     check(
       "work_items_estimate_range",
       sql`${table.estimatePoints} is null or ${table.estimatePoints} between 1 and 100`,
+    ),
+  ],
+);
+
+export const projectAllocations = pgTable(
+  "project_allocations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    memberUserId: uuid("member_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    startWeek: date("start_week").notNull(),
+    endWeek: date("end_week").notNull(),
+    plannedMinutesPerWeek: integer("planned_minutes_per_week").notNull(),
+    roleLabel: text("role_label"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    updatedByUserId: uuid("updated_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedByUserId: uuid("deleted_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("project_allocations_id_workspace_unique").on(
+      table.id,
+      table.workspaceId,
+    ),
+    foreignKey({
+      columns: [table.projectId, table.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: "project_allocations_project_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.workspaceId, table.memberUserId],
+      foreignColumns: [memberships.workspaceId, memberships.userId],
+      name: "project_allocations_workspace_member_fk",
+    }).onDelete("restrict"),
+    index("project_allocations_member_weeks_idx").on(
+      table.workspaceId,
+      table.memberUserId,
+      table.startWeek,
+      table.endWeek,
+      table.id,
+    ),
+    index("project_allocations_project_weeks_idx").on(
+      table.projectId,
+      table.startWeek,
+      table.endWeek,
+      table.id,
+    ),
+    index("project_allocations_workspace_updated_idx").on(
+      table.workspaceId,
+      table.updatedAt,
+      table.id,
+    ),
+    check(
+      "project_allocations_date_order",
+      sql`${table.startWeek} <= ${table.endWeek}`,
+    ),
+    check(
+      "project_allocations_iso_mondays",
+      sql`extract(isodow from ${table.startWeek}) = 1 and extract(isodow from ${table.endWeek}) = 1`,
+    ),
+    check(
+      "project_allocations_minutes_range",
+      sql`${table.plannedMinutesPerWeek} between 1 and 10080`,
+    ),
+    check(
+      "project_allocations_role_label_length",
+      sql`${table.roleLabel} is null or char_length(btrim(${table.roleLabel})) between 1 and 80`,
+    ),
+    check(
+      "project_allocations_delete_consistency",
+      sql`(${table.deletedAt} is null and ${table.deletedByUserId} is null) or (${table.deletedAt} is not null and ${table.deletedByUserId} is not null)`,
+    ),
+  ],
+);
+
+export const deliveryTimeEntries = pgTable(
+  "delivery_time_entries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    memberUserId: uuid("member_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    workItemId: uuid("work_item_id"),
+    workDate: date("work_date").notNull(),
+    durationMinutes: integer("duration_minutes").notNull(),
+    classification: deliveryTimeClassification("classification").notNull(),
+    note: text("note"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    updatedByUserId: uuid("updated_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedByUserId: uuid("deleted_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("delivery_time_entries_id_workspace_unique").on(
+      table.id,
+      table.workspaceId,
+    ),
+    foreignKey({
+      columns: [table.projectId, table.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: "delivery_time_entries_project_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.workspaceId, table.memberUserId],
+      foreignColumns: [memberships.workspaceId, memberships.userId],
+      name: "delivery_time_entries_workspace_member_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.workItemId, table.projectId],
+      foreignColumns: [workItems.id, workItems.projectId],
+      name: "delivery_time_entries_work_project_fk",
+    }).onDelete("restrict"),
+    index("delivery_time_entries_member_date_idx").on(
+      table.workspaceId,
+      table.memberUserId,
+      table.workDate,
+      table.id,
+    ),
+    index("delivery_time_entries_project_member_date_idx").on(
+      table.projectId,
+      table.memberUserId,
+      table.workDate,
+      table.id,
+    ),
+    index("delivery_time_entries_work_date_idx").on(
+      table.workItemId,
+      table.workDate,
+      table.id,
+    ),
+    check(
+      "delivery_time_entries_duration_range",
+      sql`${table.durationMinutes} between 1 and 1440`,
+    ),
+    check(
+      "delivery_time_entries_note_length",
+      sql`${table.note} is null or char_length(${table.note}) <= 500`,
+    ),
+    check(
+      "delivery_time_entries_owner_consistency",
+      sql`${table.memberUserId} = ${table.createdByUserId}`,
+    ),
+    check(
+      "delivery_time_entries_delete_consistency",
+      sql`(${table.deletedAt} is null and ${table.deletedByUserId} is null) or (${table.deletedAt} is not null and ${table.deletedByUserId} is not null)`,
     ),
   ],
 );

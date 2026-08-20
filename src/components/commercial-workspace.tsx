@@ -163,6 +163,7 @@ export function CommercialWorkspace({
   history,
   decisionOptions,
   changeControl,
+  exposurePanel,
 }: Readonly<{
   workspaceId: string;
   workspaceSlug: string;
@@ -173,6 +174,7 @@ export function CommercialWorkspace({
   history: CommercialHistory;
   decisionOptions: DecisionOption[];
   changeControl?: ReactNode;
+  exposurePanel?: ReactNode;
 }>) {
   const router = useRouter();
   const overview = initialOverview;
@@ -793,6 +795,7 @@ export function CommercialWorkspace({
           onSelectionChange={setSelection}
         />
       </div>
+      {exposurePanel}
       {changeControl}
     </main>
   );

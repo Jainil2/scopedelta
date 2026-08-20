@@ -301,7 +301,18 @@ SC-010 implements:
 
 External client participants remain separate and non-billable by default. Browser checkout return never activates paid access. Final public plans/prices/allowances, live payments, and public source distribution remain founder/legal gates.
 
-### Layer 7 — Portfolio, Operations & Self-Service Scale
+### Layer 7 — Portfolio, Operations & Self-Service Scale — PARTIALLY DELIVERED
+
+SC-011A / #46 adds the Local/LAN operating core:
+
+- an attention-first, filterable portfolio with evidence-linked overdue, request, commercial, dependency, implementation, defect, decision, acceptance, and provider-evidence signals—without a health score;
+- effective-dated workspace/member weekly availability, explicit overlapping project allocations, and over-allocation derived from planned minutes above available minutes;
+- owner-authored billable/non-billable delivery actuals, including work-item quick logging and soft-deletion audit evidence;
+- permission-aware capacity projection that masks unrelated commitments from project leads;
+- conservative project/workspace commercial exposure grouped by currency, with confirmed and pending impact separated and actual effort shown independently;
+- no estimate-to-hours conversion and no fabricated baseline money, revenue, cost, profit, margin, or currency conversion.
+
+ADR-013 records the operations and financial boundary. SC-011B/C remain future Layer-7 work.
 
 - multi-project/portfolio health;
 - capacity/workload;

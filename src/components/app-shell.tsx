@@ -59,6 +59,7 @@ export function AppShell({
           <Link href={`/app/${current.slug}/clients`}>Clients</Link>
           <Link href={`/app/${current.slug}/projects`}>Projects</Link>
           <Link href={`/app/${current.slug}/my-work`}>My work</Link>
+          <Link href={`/app/${current.slug}/operations`}>Operations</Link>
           <Link href={`/app/${current.slug}/inbox`}>Inbox</Link>
           <Link href={`/app/${current.slug}/settings`}>Settings</Link>
           <Link href={`/app/${current.slug}/settings/members`}>Members</Link>

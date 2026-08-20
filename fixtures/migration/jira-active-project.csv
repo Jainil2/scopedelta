@@ -1,0 +1,3 @@
+Project key,Project name,Issue key,Summary,Description,Issue Type,Status,Priority,Assignee,Reporter,Parent,Labels,Created,Updated,Due date,Story Points,Issue URL,Custom contract note
+WEB,Website refresh,WEB-2,Responsive child,"Stack the responsive layout without exposing internal notes",Sub-task,Open,High,"Missing User <missing@example.test>",reporter@example.test,WEB-1,frontend;client,20/Aug/26,2026-08-20T09:30:00Z,2026-09-05,3,https://jira.example.test/browse/WEB-2,"Keep the legacy redirect behavior"
+WEB,Website refresh,WEB-1,Delivery shell,"Create the delivery shell",Story,In Progress,Medium,,,,platform,19/Aug/26,2026-08-20T08:00:00Z,2026-09-01,5,https://jira.example.test/browse/WEB-1,

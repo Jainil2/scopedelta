@@ -63,6 +63,11 @@ export function AppShell({
           <Link href={`/app/${current.slug}/inbox`}>Inbox</Link>
           <Link href={`/app/${current.slug}/settings`}>Settings</Link>
           <Link href={`/app/${current.slug}/settings/members`}>Members</Link>
+          {current.role !== "member" ? (
+            <Link href={`/app/${current.slug}/settings/adoption`}>
+              Adoption
+            </Link>
+          ) : null}
           {current.role === "owner" ? (
             <Link href={`/app/${current.slug}/settings/billing`}>Billing</Link>
           ) : null}

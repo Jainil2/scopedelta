@@ -173,6 +173,30 @@ export const workItemPriority = pgEnum("work_item_priority", [
   "urgent",
 ]);
 
+export const migrationSourceKind = pgEnum("migration_source_kind", [
+  "generic_csv",
+  "jira_csv",
+]);
+export const migrationImportState = pgEnum("migration_import_state", [
+  "preview_ready",
+  "committing",
+  "completed",
+  "completed_with_errors",
+  "failed",
+]);
+export const migrationRowOutcome = pgEnum("migration_row_outcome", [
+  "valid",
+  "warning",
+  "blocked",
+  "created",
+  "skipped",
+  "failed",
+]);
+export const migrationObjectKind = pgEnum("migration_object_kind", [
+  "project",
+  "work_item",
+]);
+
 export const workPurpose = pgEnum("work_purpose", [
   "unclassified",
   "client_delivery",
@@ -1068,6 +1092,384 @@ export const workItems = pgTable(
     check(
       "work_items_estimate_range",
       sql`${table.estimatePoints} is null or ${table.estimatePoints} between 1 and 100`,
+    ),
+  ],
+);
+
+export type ProjectTemplateDefinition = {
+  projectSummary: string | null;
+  milestones: Array<{
+    ref: string;
+    name: string;
+    description: string | null;
+    targetOffsetDays: number | null;
+  }>;
+  cycles: Array<{
+    ref: string;
+    name: string;
+    goal: string | null;
+    startOffsetDays: number;
+    durationDays: number;
+  }>;
+  workItems: Array<{
+    ref: string;
+    parentRef: string | null;
+    milestoneRef: string | null;
+    cycleRef: string | null;
+    title: string;
+    description: string | null;
+    acceptanceCriteria: string | null;
+    status: (typeof workItemStatus.enumValues)[number];
+    priority: (typeof workItemPriority.enumValues)[number];
+    purpose: (typeof workPurpose.enumValues)[number];
+    estimatePoints: number | null;
+    targetOffsetDays: number | null;
+    labels: string[];
+  }>;
+};
+
+export const projectTemplates = pgTable(
+  "project_templates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    version: integer("version").default(1).notNull(),
+    definition: jsonb("definition")
+      .$type<ProjectTemplateDefinition>()
+      .notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    updatedByUserId: uuid("updated_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("project_templates_id_workspace_unique").on(
+      table.id,
+      table.workspaceId,
+    ),
+    uniqueIndex("project_templates_workspace_name_active_uidx")
+      .on(table.workspaceId, sql`lower(${table.name})`)
+      .where(sql`${table.archivedAt} is null`),
+    index("project_templates_workspace_archived_name_idx").on(
+      table.workspaceId,
+      table.archivedAt,
+      table.name,
+    ),
+    check(
+      "project_templates_name_length",
+      sql`char_length(btrim(${table.name})) between 2 and 120`,
+    ),
+    check(
+      "project_templates_description_length",
+      sql`${table.description} is null or char_length(${table.description}) <= 2000`,
+    ),
+    check("project_templates_version_positive", sql`${table.version} > 0`),
+  ],
+);
+
+export const projectTemplateApplications = pgTable(
+  "project_template_applications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    templateId: uuid("template_id").notNull(),
+    templateVersion: integer("template_version").notNull(),
+    projectId: uuid("project_id").notNull(),
+    snapshot: jsonb("snapshot").$type<ProjectTemplateDefinition>().notNull(),
+    appliedByUserId: uuid("applied_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    appliedAt: timestamp("applied_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.templateId, table.workspaceId],
+      foreignColumns: [projectTemplates.id, projectTemplates.workspaceId],
+      name: "project_template_applications_template_workspace_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.projectId, table.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: "project_template_applications_project_workspace_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("project_template_applications_project_uidx").on(
+      table.projectId,
+    ),
+    index("project_template_applications_template_version_idx").on(
+      table.templateId,
+      table.templateVersion,
+      table.appliedAt,
+    ),
+    check(
+      "project_template_applications_version_positive",
+      sql`${table.templateVersion} > 0`,
+    ),
+  ],
+);
+
+export const migrationImportSessions = pgTable(
+  "migration_import_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sourceKind: migrationSourceKind("source_kind").notNull(),
+    sourceNamespace: text("source_namespace").notNull(),
+    sourceName: text("source_name").notNull(),
+    fileName: text("file_name").notNull(),
+    fileSha256: text("file_sha256").notNull(),
+    state: migrationImportState("state").default("preview_ready").notNull(),
+    mapping: jsonb("mapping").$type<Record<string, unknown>>().notNull(),
+    options: jsonb("options").$type<Record<string, unknown>>().notNull(),
+    unsupportedColumns: jsonb("unsupported_columns")
+      .$type<string[]>()
+      .notNull(),
+    totalRows: integer("total_rows").notNull(),
+    validRows: integer("valid_rows").notNull(),
+    warningRows: integer("warning_rows").notNull(),
+    blockedRows: integer("blocked_rows").notNull(),
+    createdProjects: integer("created_projects").default(0).notNull(),
+    createdWorkItems: integer("created_work_items").default(0).notNull(),
+    skippedRows: integer("skipped_rows").default(0).notNull(),
+    failedRows: integer("failed_rows").default(0).notNull(),
+    committedAnything: boolean("committed_anything").default(false).notNull(),
+    processingLeaseUntil: timestamp("processing_lease_until", {
+      withTimezone: true,
+    }),
+    lastErrorCode: text("last_error_code"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    confirmedByUserId: uuid("confirmed_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    unique("migration_import_sessions_id_workspace_unique").on(
+      table.id,
+      table.workspaceId,
+    ),
+    index("migration_import_sessions_workspace_created_idx").on(
+      table.workspaceId,
+      table.createdAt,
+      table.id,
+    ),
+    index("migration_import_sessions_workspace_state_idx").on(
+      table.workspaceId,
+      table.state,
+      table.updatedAt,
+    ),
+    check(
+      "migration_import_sessions_namespace_length",
+      sql`char_length(btrim(${table.sourceNamespace})) between 1 and 160`,
+    ),
+    check(
+      "migration_import_sessions_filename_length",
+      sql`char_length(btrim(${table.fileName})) between 1 and 240`,
+    ),
+    check(
+      "migration_import_sessions_row_counts",
+      sql`${table.totalRows} >= 0 and ${table.validRows} >= 0 and ${table.warningRows} >= 0 and ${table.blockedRows} >= 0 and ${table.createdProjects} >= 0 and ${table.createdWorkItems} >= 0 and ${table.skippedRows} >= 0 and ${table.failedRows} >= 0`,
+    ),
+  ],
+);
+
+export const migrationSourceIdentities = pgTable(
+  "migration_source_identities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sourceKind: migrationSourceKind("source_kind").notNull(),
+    sourceNamespace: text("source_namespace").notNull(),
+    identityKey: text("identity_key").notNull(),
+    displayName: text("display_name"),
+    email: text("email"),
+    mappedUserId: uuid("mapped_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    firstSessionId: uuid("first_session_id").notNull(),
+    lastSessionId: uuid("last_session_id").notNull(),
+    ...timestampColumns,
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.firstSessionId, table.workspaceId],
+      foreignColumns: [
+        migrationImportSessions.id,
+        migrationImportSessions.workspaceId,
+      ],
+      name: "migration_source_identities_first_session_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.lastSessionId, table.workspaceId],
+      foreignColumns: [
+        migrationImportSessions.id,
+        migrationImportSessions.workspaceId,
+      ],
+      name: "migration_source_identities_last_session_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.workspaceId, table.mappedUserId],
+      foreignColumns: [memberships.workspaceId, memberships.userId],
+      name: "migration_source_identities_workspace_member_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("migration_source_identities_identity_uidx").on(
+      table.workspaceId,
+      table.sourceKind,
+      table.sourceNamespace,
+      table.identityKey,
+    ),
+    index("migration_source_identities_workspace_mapping_idx").on(
+      table.workspaceId,
+      table.mappedUserId,
+      table.updatedAt,
+    ),
+  ],
+);
+
+export const migrationImportRows = pgTable(
+  "migration_import_rows",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id").notNull(),
+    rowNumber: integer("row_number").notNull(),
+    objectKind: migrationObjectKind("object_kind")
+      .default("work_item")
+      .notNull(),
+    sourceProjectKey: text("source_project_key").notNull(),
+    sourceObjectKey: text("source_object_key").notNull(),
+    sourceFingerprint: text("source_fingerprint").notNull(),
+    outcome: migrationRowOutcome("outcome").notNull(),
+    normalizedData: jsonb("normalized_data")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    messages: jsonb("messages")
+      .$type<Array<{ code: string; message: string; field?: string }>>()
+      .notNull(),
+    targetProjectId: uuid("target_project_id"),
+    targetWorkItemId: uuid("target_work_item_id"),
+    committedAt: timestamp("committed_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.sessionId, table.workspaceId],
+      foreignColumns: [
+        migrationImportSessions.id,
+        migrationImportSessions.workspaceId,
+      ],
+      name: "migration_import_rows_session_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.targetProjectId, table.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: "migration_import_rows_project_workspace_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.targetWorkItemId, table.targetProjectId],
+      foreignColumns: [workItems.id, workItems.projectId],
+      name: "migration_import_rows_work_project_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("migration_import_rows_session_row_uidx").on(
+      table.sessionId,
+      table.rowNumber,
+    ),
+    index("migration_import_rows_session_outcome_idx").on(
+      table.sessionId,
+      table.outcome,
+      table.rowNumber,
+    ),
+    index("migration_import_rows_source_identity_idx").on(
+      table.workspaceId,
+      table.sourceProjectKey,
+      table.sourceObjectKey,
+    ),
+    check("migration_import_rows_number_positive", sql`${table.rowNumber} > 1`),
+  ],
+);
+
+export const migrationSourceObjects = pgTable(
+  "migration_source_objects",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sourceKind: migrationSourceKind("source_kind").notNull(),
+    sourceNamespace: text("source_namespace").notNull(),
+    objectKind: migrationObjectKind("object_kind").notNull(),
+    sourceProjectKey: text("source_project_key").notNull(),
+    sourceObjectKey: text("source_object_key").notNull(),
+    sourceUrl: text("source_url"),
+    sourceFingerprint: text("source_fingerprint").notNull(),
+    sourceMetadata: jsonb("source_metadata")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    targetProjectId: uuid("target_project_id").notNull(),
+    targetWorkItemId: uuid("target_work_item_id"),
+    firstSessionId: uuid("first_session_id").notNull(),
+    lastSessionId: uuid("last_session_id").notNull(),
+    ...timestampColumns,
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.targetProjectId, table.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: "migration_source_objects_project_workspace_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.targetWorkItemId, table.targetProjectId],
+      foreignColumns: [workItems.id, workItems.projectId],
+      name: "migration_source_objects_work_project_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.firstSessionId, table.workspaceId],
+      foreignColumns: [
+        migrationImportSessions.id,
+        migrationImportSessions.workspaceId,
+      ],
+      name: "migration_source_objects_first_session_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.lastSessionId, table.workspaceId],
+      foreignColumns: [
+        migrationImportSessions.id,
+        migrationImportSessions.workspaceId,
+      ],
+      name: "migration_source_objects_last_session_workspace_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("migration_source_objects_identity_uidx").on(
+      table.workspaceId,
+      table.sourceKind,
+      table.sourceNamespace,
+      table.objectKind,
+      table.sourceProjectKey,
+      table.sourceObjectKey,
+    ),
+    index("migration_source_objects_target_project_idx").on(
+      table.targetProjectId,
+      table.targetWorkItemId,
     ),
   ],
 );
@@ -3976,6 +4378,14 @@ export type CycleLifecycle = (typeof cycleLifecycle.enumValues)[number];
 export type WorkItemStatus = (typeof workItemStatus.enumValues)[number];
 export type WorkItemPriority = (typeof workItemPriority.enumValues)[number];
 export type WorkPurpose = (typeof workPurpose.enumValues)[number];
+export type MigrationSourceKind =
+  (typeof migrationSourceKind.enumValues)[number];
+export type MigrationImportState =
+  (typeof migrationImportState.enumValues)[number];
+export type MigrationRowOutcome =
+  (typeof migrationRowOutcome.enumValues)[number];
+export type MigrationObjectKind =
+  (typeof migrationObjectKind.enumValues)[number];
 export type AiJobKind = (typeof aiJobKind.enumValues)[number];
 export type AiJobStatus = (typeof aiJobStatus.enumValues)[number];
 export type AiAttemptStatus = (typeof aiAttemptStatus.enumValues)[number];

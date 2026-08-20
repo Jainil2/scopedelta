@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 
 import {
@@ -147,6 +148,17 @@ test("verified signup, workspace persistence, invitation, and role management", 
       fullPage: true,
     });
     await page.setViewportSize({ width: 390, height: 844 });
+    const overflow = await page.locator("body *").evaluateAll((elements) =>
+      elements
+        .filter((element) => element.getBoundingClientRect().right > 390.5)
+        .map((element) => ({
+          element: element.tagName,
+          className: element.className,
+          right: Math.round(element.getBoundingClientRect().right),
+        }))
+        .slice(0, 20),
+    );
+    expect(overflow).toEqual([]);
     await page.screenshot({
       path: "docs/screenshots/sc-004-shell-mobile.png",
       fullPage: true,
@@ -607,6 +619,137 @@ test("project lead sees unrelated capacity as other committed work", async ({
   await expect(leadPage.getByText("Confidential account")).toHaveCount(0);
   await expect(leadPage.getByText("Confidential role")).toHaveCount(0);
   await leadContext.close();
+});
+
+test("admin applies a template, previews Jira CSV, imports safely, and exports core delivery", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const ownerEmail = `adoption-owner-${suffix}@example.test`;
+  const outsiderEmail = `adoption-outsider-${suffix}@example.test`;
+  const password = "test-password-123";
+
+  await signUpAndVerifyLocally(page, ownerEmail, password, "/onboarding");
+  await page.getByLabel(/Workspace name/).fill("Adoption Studio");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+  const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
+
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await page.getByText("New client").click();
+  await page.getByLabel("Client name").fill("Migration Client");
+  await page.getByRole("button", { name: "Create client" }).click();
+  await expect(page.getByRole("status")).toHaveText("Client created.");
+
+  await page.getByRole("link", { name: "Adoption", exact: true }).click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Standards, migration, and portability",
+    }),
+  ).toBeVisible();
+  await page.getByText("New project template").click();
+  const templateForm = page.locator("form.adoption-form").filter({
+    has: page.getByRole("button", { name: "Create template" }),
+  });
+  await templateForm.getByLabel("Template name").fill("Delivery launch");
+  await templateForm
+    .getByLabel("Default project context")
+    .fill("A copied delivery launch standard.");
+  await templateForm
+    .getByLabel(/Milestones/)
+    .fill("release | Release ready | 30");
+  await templateForm.getByLabel(/Cycles/).fill("cycle-1 | Cycle 1 | 0 | 14");
+  await templateForm
+    .getByLabel(/Work items/)
+    .fill(
+      "launch | | Prepare delivery launch | Launch evidence is accepted | release | cycle-1 | delivery",
+    );
+  await templateForm.getByRole("button", { name: "Create template" }).click();
+  await expect(page.getByText(/Template created/)).toBeVisible();
+
+  const template = page.locator("details.adoption-template").filter({
+    hasText: "Delivery launch",
+  });
+  await template.locator(":scope > summary").click();
+  const applyForm = template.locator("form.adoption-form").filter({
+    has: page.getByRole("button", { name: "Apply v1" }),
+  });
+  await applyForm.getByLabel("Project key").fill("TPL");
+  await applyForm.getByLabel("Project name").fill("Template project");
+  await applyForm.getByLabel("Start date").fill("2026-09-07");
+  await applyForm.getByRole("button", { name: "Apply v1" }).click();
+  await page.waitForURL(/\/projects\/TPL$/);
+  await expect(page.getByText("Release ready", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Backlog" }).click();
+  await expect(
+    page.getByRole("button", { name: /TPL-1 Prepare delivery launch/ }),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "Adoption", exact: true }).click();
+  const importForm = page.locator("form.adoption-form").filter({
+    has: page.getByRole("button", { name: "Create dry-run preview" }),
+  });
+  await importForm.getByLabel("Source namespace").fill("jira-browser");
+  await importForm.getByLabel("Source label").fill("Jira browser fixture");
+  await importForm
+    .getByLabel("CSV file")
+    .setInputFiles("fixtures/migration/jira-active-project.csv");
+  await importForm
+    .getByRole("button", { name: "Create dry-run preview" })
+    .click();
+  await expect(page.getByText(/Preview saved/)).toBeVisible();
+  await expect(page.getByText("Custom contract note")).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: "Keep unresolved" }).first(),
+  ).toBeAttached();
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-011b-adoption-desktop.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-011b-adoption-mobile.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  }
+  await page
+    .getByRole("button", {
+      name: "Confirm import and skip existing source objects",
+    })
+    .click();
+  await expect(page.getByText("Import completed.")).toBeVisible();
+  await expect(page.getByText("completed", { exact: true })).toBeVisible();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("link", { name: "Download CSV" }).click(),
+  ]);
+  const downloadPath = await download.path();
+  expect(downloadPath).toBeTruthy();
+  const csv = await readFile(downloadPath!, "utf8");
+  expect(csv).toContain("core_delivery_not_legal_audit");
+  expect(csv).toContain("WEB-1");
+  expect(csv).toContain("jira-browser");
+
+  const outsiderContext = await browser.newContext();
+  const outsiderPage = await outsiderContext.newPage();
+  await signUpAndVerifyLocally(
+    outsiderPage,
+    outsiderEmail,
+    password,
+    "/onboarding",
+  );
+  const denied = await outsiderPage.goto(
+    `/app/${workspaceSlug}/settings/adoption`,
+  );
+  expect(denied?.status()).toBe(404);
+  await expect(outsiderPage.getByText(/could not be found/i)).toBeVisible();
+  await outsiderContext.close();
 });
 
 test("commercial baseline, decision authorization and contradictions stay traceable", async ({

@@ -2,13 +2,13 @@
 
 ## Status
 
-Planning baseline, updated 2026-08-16 after the Layer-6 cloud economics and distribution research checkpoint and SC-010 implementation. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
+Planning baseline, updated 2026-08-20 for the SC-011B template, migration, and portability implementation. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
 
 ## Current capability count
 
 - **Total planned capability units: 98**
-- **Local/LAN: 63**
-- **Hybrid/optional external: 23**
+- **Local/LAN: 64**
+- **Hybrid/optional external: 22**
 - **External API/service: 4**
 - **Managed-cloud only: 4**
 - **Desktop client: 4**
@@ -17,7 +17,7 @@ The Layer-3 review reclassifies the core client portal/request/approval capabili
 
 Layer 3 therefore introduces **no mandatory paid external service dependency**. Layer 4 preserves that local core for QA, defects, traceability and readiness; the implemented GitHub evidence connection is an explicitly selected external provider dependency. GitLab remains deferred and classified Hybrid because a future adapter could target self-hosted or hosted GitLab.
 
-Layer 5 is complete through SC-009 / PR #43. Layer 6 preserves the distinction between software capability and ScopeDelta-managed resources: self-host core operation is Local/LAN and does not call cloud billing, while hosted checkout/portal/lifecycle inherently use an external payment service. Active-project/internal-user rules and managed usage accounting remain provider-neutral local domain behavior. External client participants remain separate from internal-user capacity. Layer 7 is partially delivered through SC-011A / #46: its portfolio, weekly availability/allocation, delivery actual, and conservative exposure behavior is Local/LAN and has no mandatory AI or external-provider dependency.
+Layer 5 is complete through SC-009 / PR #43. Layer 6 preserves the distinction between software capability and ScopeDelta-managed resources: self-host core operation is Local/LAN and does not call cloud billing, while hosted checkout/portal/lifecycle inherently use an external payment service. Active-project/internal-user rules and managed usage accounting remain provider-neutral local domain behavior. External client participants remain separate from internal-user capacity. Layer 7 is partially delivered through SC-011A and the SC-011B review candidate: portfolio operations, templates, generic/Jira CSV migration, and bounded core export are Local/LAN with no mandatory AI or external-provider dependency. The Jira CSV preset is therefore reclassified from Hybrid to Local/LAN; a future direct Jira API/OAuth adapter would be provider-dependent but remains deferred.
 
 ### Runtime meaning
 
@@ -218,14 +218,14 @@ Layer-6 runtime rules:
 
 ## Layer 7 — Portfolio & Self-Service Scale
 
-| Capability | Runtime class |
-|---|---|
+| Capability | Runtime class | Delivered slice |
+|---|---|---|
 | Portfolio attention with evidence drill-down | Local/LAN | SC-011A; categorical signals, no health score |
 | Capacity/workload + delivery actuals | Local/LAN | SC-011A; effective availability, allocation, and owner-authored actuals stay distinct; estimates remain point/count context |
 | Conservative commercial exposure | Local/LAN | SC-011A; currency-grouped confirmed/pending impact and actual effort, no margin |
-| Project/workflow templates | Local/LAN |
-| CSV import/export | Local/LAN |
-| Jira migration/import | Hybrid/optional external |
+| Project/workflow templates | Local/LAN | SC-011B; versioned definitions and copied application snapshots, no workflow builder |
+| CSV import/export | Local/LAN | SC-011B; durable preview/confirm plus formula-neutralized bounded core delivery export |
+| Jira migration/import | Local/LAN | SC-011B Jira CSV preset; direct API/OAuth deferred |
 | Admin/member management | Local/LAN |
 | Guided onboarding/help | Local/LAN |
 | Privacy-safe product telemetry | Hybrid/optional external |

@@ -312,13 +312,20 @@ SC-011A / #46 adds the Local/LAN operating core:
 - conservative project/workspace commercial exposure grouped by currency, with confirmed and pending impact separated and actual effort shown independently;
 - no estimate-to-hours conversion and no fabricated baseline money, revenue, cost, profit, margin, or currency conversion.
 
-ADR-013 records the operations and financial boundary. SC-011B/C remain future Layer-7 work.
+ADR-013 records the operations and financial boundary.
 
-- multi-project/portfolio health;
-- capacity/workload;
-- trustworthy project commercial/margin visibility where inputs support it;
-- templates/organization standards;
-- migration/import/export;
+SC-011B / #47 adds the Local/LAN adoption and portability boundary:
+
+- workspace-level versioned project templates that instantiate atomic project snapshots, including bounded milestone, cycle, work/subtask, acceptance-criteria, point-estimate, purpose, date-offset, and label conventions;
+- durable generic/Jira CSV preview sessions with explicit column/value mapping, bounded parsing, row-level warnings/errors, unsupported-field preservation, and no delivery mutation before confirmation;
+- source-namespace/project/object idempotency that never title-deduplicates or silently overwrites existing work;
+- unresolved assignee/reporter identities that grant no membership, with explicit admin mapping only to existing workspace members;
+- one-level hierarchy preservation, bounded 100-row commit batches, concurrent source locking, partial-result evidence, and safe retry/resume;
+- a formula-neutralized, bounded core-delivery CSV export explicitly labeled as incomplete for legal/commercial/engineering/QA/audit purposes;
+- no direct Jira API/OAuth, attachments, custom-workflow recreation, remote parser, AI, or mandatory external provider.
+
+ADR-014 records the template, migration, and portability boundary. SC-011C remains future Layer-7 work.
+
 - self-service onboarding/admin/help/recovery;
 - privacy-safe activation/reliability telemetry.
 

@@ -120,6 +120,20 @@
       "when": 1787206800181,
       "tag": "0016_sticky_speedball",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1787222214835,
+      "tag": "0017_cloudy_blacklash",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787286901005,
+      "tag": "0018_tiny_fenris",
+      "breakpoints": true
     }
   ]
 }

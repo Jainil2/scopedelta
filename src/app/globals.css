@@ -1757,6 +1757,312 @@ h2 {
   }
 }
 
+.adoption-page {
+  display: grid;
+  gap: 2rem;
+}
+
+.adoption-header {
+  max-width: 76rem;
+}
+
+.adoption-header p:last-child,
+.adoption-section > header p,
+.adoption-muted {
+  color: var(--ink-soft);
+}
+
+.adoption-section,
+.adoption-import-result {
+  display: grid;
+  gap: 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.adoption-section > header {
+  max-width: 58rem;
+}
+
+.adoption-section h2,
+.adoption-section h3,
+.adoption-template h3,
+.adoption-import-result h3 {
+  margin: 0;
+}
+
+.adoption-composer,
+.adoption-template,
+.adoption-callout,
+.adoption-identities,
+.adoption-import-result {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 94%, var(--accent) 6%);
+}
+
+.adoption-composer > summary,
+.adoption-template > summary {
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.adoption-template > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.adoption-template > summary span:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.adoption-template > summary small,
+.adoption-template > summary span:last-child {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.adoption-template-detail,
+.adoption-composer[open] > .adoption-form {
+  padding: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.adoption-template-detail {
+  display: grid;
+  gap: 1rem;
+}
+
+.adoption-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.adoption-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.adoption-form label,
+.adoption-identities label,
+.adoption-export label,
+.adoption-mapping {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.adoption-form label > span,
+.adoption-identities label > span,
+.adoption-export label > span {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.adoption-span,
+.adoption-form > button,
+.adoption-form > output {
+  grid-column: 1 / -1;
+}
+
+.adoption-mapping {
+  padding: 0.8rem;
+  border: 1px dashed var(--line-strong);
+}
+
+.adoption-mapping[open] {
+  gap: 0.8rem;
+}
+
+.adoption-ledger {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.adoption-ledger-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+}
+
+.adoption-ledger-row > div {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.adoption-ledger-row > div:first-child {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.adoption-ledger-row span,
+.adoption-ledger-row small {
+  color: var(--ink-soft);
+}
+
+.adoption-result-summary {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.adoption-result-summary > div {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.85rem;
+  border-right: 1px solid var(--line);
+}
+
+.adoption-result-summary > div:last-child {
+  border-right: 0;
+}
+
+.adoption-result-summary span {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.adoption-callout,
+.adoption-identities {
+  padding: 0.85rem 1rem;
+}
+
+.adoption-callout p,
+.adoption-identities p {
+  margin: 0.3rem 0;
+}
+
+.adoption-identities {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.adoption-identities label {
+  grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1fr);
+  align-items: center;
+}
+
+.adoption-row-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.adoption-row {
+  display: grid;
+  grid-template-columns:
+    4rem minmax(10rem, 1fr) minmax(12rem, 1.4fr)
+    8rem minmax(12rem, 1.4fr);
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.adoption-row:last-child {
+  border-bottom: 0;
+}
+
+.adoption-row-head {
+  color: var(--ink-soft);
+  background: var(--paper-deep);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.adoption-row details summary {
+  cursor: pointer;
+}
+
+.adoption-row details ul {
+  margin: 0.6rem 0 0;
+  padding-left: 1rem;
+}
+
+.adoption-export {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.adoption-export label {
+  min-width: min(30rem, 100%);
+}
+
+@media (max-width: 64rem) {
+  .adoption-result-summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .adoption-result-summary > div:nth-child(4) {
+    border-right: 0;
+  }
+
+  .adoption-row-head {
+    display: none;
+  }
+
+  .adoption-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .adoption-row > *::before {
+    display: block;
+    margin-bottom: 0.2rem;
+    color: var(--ink-soft);
+    content: attr(data-label);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+}
+
+@media (max-width: 44rem) {
+  .adoption-grid,
+  .adoption-ledger-row,
+  .adoption-row,
+  .adoption-identities label {
+    grid-template-columns: 1fr;
+  }
+
+  .adoption-template > summary,
+  .adoption-ledger-row > div,
+  .adoption-export {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .adoption-result-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .adoption-result-summary > div:nth-child(even) {
+    border-right: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adoption-template,
+  .adoption-ledger-row,
+  .adoption-row {
+    transition: none;
+  }
+}
+
 /* Operations keeps planning facts dense and legible, with one signal accent. */
 .operations-page {
   gap: 1.15rem;

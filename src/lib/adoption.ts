@@ -7,6 +7,7 @@ import type {
 } from "@/db/schema";
 
 export const MAX_CSV_BYTES = 5 * 1024 * 1024;
+export const MAX_IMPORT_PREVIEW_BODY_BYTES = MAX_CSV_BYTES * 2 + 1024 * 1024;
 export const MAX_CSV_ROWS = 5_000;
 export const MAX_CSV_COLUMNS = 64;
 export const MAX_CSV_FIELD_LENGTH = 10_000;
@@ -178,6 +179,7 @@ export function parseBoundedCsv(csvText: string): ParsedCsv {
   let record: string[] = [];
   let field = "";
   let quoted = false;
+  let closedQuote = false;
 
   const pushField = () => {
     if (field.length > MAX_CSV_FIELD_LENGTH) {
@@ -215,8 +217,28 @@ export function parseBoundedCsv(csvText: string): ParsedCsv {
         index += 1;
       } else if (character === '"') {
         quoted = false;
+        closedQuote = true;
       } else {
         field += character;
+      }
+      continue;
+    }
+    if (closedQuote) {
+      if (character === ",") {
+        pushField();
+        closedQuote = false;
+      } else if (character === "\n") {
+        pushRecord();
+        closedQuote = false;
+      } else if (character === "\r") {
+        if (csvText[index + 1] === "\n") index += 1;
+        pushRecord();
+        closedQuote = false;
+      } else {
+        throw new CsvBoundaryError(
+          "csv_malformed_quote",
+          "A closing quote must be followed by a delimiter or line ending.",
+        );
       }
       continue;
     }
@@ -722,14 +744,17 @@ function parseEstimate(value: string, messages: PreviewMessage[]) {
 }
 
 function parseLabels(value: string, messages: PreviewMessage[]) {
-  const labels = [
-    ...new Set(
-      value
-        .split(/[;,]/)
-        .map((label) => label.trim())
-        .filter(Boolean),
-    ),
-  ];
+  const seen = new Set<string>();
+  const labels = value
+    .split(/[;,]/)
+    .map((label) => label.trim())
+    .filter((label) => {
+      if (!label) return false;
+      const key = normalize(label);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   if (labels.some((label) => label.length > 40) || labels.length > 20) {
     messages.push({
       code: "labels_bounded",

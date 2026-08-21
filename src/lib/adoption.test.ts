@@ -6,6 +6,8 @@ import {
   buildCsvPreview,
   CsvBoundaryError,
   csvRecord,
+  MAX_CSV_BYTES,
+  MAX_IMPORT_PREVIEW_BODY_BYTES,
   parseBoundedCsv,
   suggestCsvMapping,
 } from "@/lib/adoption";
@@ -168,6 +170,35 @@ describe("bounded migration parsing", () => {
     expect(csvRecord(['=HYPERLINK("https://bad")', "+cmd", "normal"])).toBe(
       '"\'=HYPERLINK(""https://bad"")","\'+cmd","normal"',
     );
+  });
+
+  it("rejects characters after a closing CSV quote", () => {
+    expect(() =>
+      parseBoundedCsv('Project,Title\nOPS,"Safe"unexpected'),
+    ).toThrowError(expect.objectContaining({ code: "csv_malformed_quote" }));
+  });
+
+  it("deduplicates labels using the persistence case boundary", () => {
+    const preview = buildCsvPreview({
+      csvText:
+        'Project key,Project name,Issue key,Summary,Status,Labels\nOPS,Operations,OPS-1,Safe labels,Open,"Bug,bug,BUG"',
+      sourceKind: "jira_csv",
+      options: {
+        clientId: "client",
+        defaultLeadUserId: "lead",
+        defaultProjectKey: null,
+        defaultProjectName: null,
+      },
+    });
+
+    expect(preview.rows[0].normalized.labels).toEqual(["Bug"]);
+  });
+
+  it("sizes the JSON request envelope for a maximally quoted 5 MB CSV", () => {
+    const csvText = '"'.repeat(MAX_CSV_BYTES);
+    const bodyBytes = Buffer.byteLength(JSON.stringify({ csvText }), "utf8");
+
+    expect(MAX_IMPORT_PREVIEW_BODY_BYTES).toBeGreaterThan(bodyBytes);
   });
 
   it("rejects ragged rows that contain more fields than the header", () => {

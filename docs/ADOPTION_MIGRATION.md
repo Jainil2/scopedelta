@@ -63,11 +63,11 @@ Unsupported populated columns are named in the report. Up to 20 bounded non-empt
 
 ## Hierarchy and identity
 
-The source identity is scoped by workspace, source kind, namespace, source project key, and source object key. Identical issue keys in different source projects are valid. Missing keys use the exact file fingerprint plus row number as a durable fallback and are explicitly warned. Retrying the exact file therefore deduplicates, while a different batch in the same stable namespace does not collide merely because it uses the same row numbers.
+The source identity is scoped by workspace, source kind, namespace, source project key, and source object key. Source project and object keys compare case-insensitively while retaining their imported display form. Identical issue keys in different source projects are valid. Missing keys use the exact file fingerprint plus row number as a durable fallback and are explicitly warned. Retrying the exact file therefore deduplicates, while a different batch in the same stable namespace does not collide merely because it uses the same row numbers.
 
 ScopeDelta supports one parent/subtask level. Parent rows may appear after children. Missing parents, duplicate keys inside one project, circular/self parents, and deeper hierarchies block only the affected rows and remain inspectable.
 
-Assignees/reporters are unresolved source identities by default. Import never creates accounts, workspace membership, invitations, or privileges. An explicit admin mapping may use an existing workspace member and add that member only to the imported project.
+Assignees/reporters are unresolved source identities by default, and each preview retains its own association to every identity it observed. Import never creates accounts, workspace membership, invitations, or privileges. An explicit admin mapping may use an existing workspace member and add that member only to the imported project.
 
 ## Core delivery CSV export
 

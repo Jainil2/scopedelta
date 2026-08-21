@@ -8,6 +8,7 @@ import { getDb, getPool } from "@/db";
 import {
   memberships,
   migrationImportRows,
+  migrationImportSessionIdentities,
   migrationSourceIdentities,
   migrationSourceObjects,
   projectTemplateApplications,
@@ -15,6 +16,7 @@ import {
   projectTemplates,
   users,
   workItems,
+  type ProjectTemplateDefinition,
 } from "@/db/schema";
 import {
   applyProjectTemplate,
@@ -151,6 +153,35 @@ describe("template and migration adoption boundary", () => {
         targetDate: null,
       }),
     ).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("requires a start date for milestone and work-item offsets without cycles", async () => {
+    const fixture = await createFixture();
+    const definition = templateDefinition("Accepted");
+    definition.cycles = [];
+    definition.workItems[0].cycleRef = null;
+    const template = await createProjectTemplate(
+      fixture.owner,
+      fixture.workspace.id,
+      {
+        name: "Offset-only template",
+        description: null,
+        definition,
+      },
+    );
+
+    await expect(
+      applyProjectTemplate(fixture.owner, fixture.workspace.id, {
+        templateId: template.id,
+        clientId: fixture.client.id,
+        key: "OFFSET",
+        name: "Offset project",
+        summary: null,
+        leadUserId: fixture.member.userId,
+        startDate: null,
+        targetDate: null,
+      }),
+    ).rejects.toMatchObject({ code: "template_date_start_required" });
   });
 
   it("previews without delivery mutation, imports parent-after-child safely, and retries idempotently", async () => {
@@ -326,6 +357,98 @@ describe("template and migration adoption boundary", () => {
         .from(workItems)
         .where(eq(workItems.projectId, importedProject[0].id)),
     ).toEqual([{ total: 2 }]);
+  });
+
+  it("treats case-only source-key and label changes as the same identities", async () => {
+    const fixture = await createFixture();
+    const firstPreview = await createImportPreview(
+      fixture.owner,
+      fixture.workspace.id,
+      jiraPreviewInput(
+        'Project key,Project name,Issue key,Summary,Status,Labels\nCASE,Case project,CASE-1,Original,Open,"Bug,bug"',
+      ),
+    );
+    const first = await confirmImport(
+      fixture.owner,
+      fixture.workspace.id,
+      firstPreview.id,
+      { duplicateStrategy: "skip_existing", identityMappings: {} },
+    );
+    expect(first).toMatchObject({ createdWorkItems: 1, failedRows: 0 });
+
+    const replayPreview = await createImportPreview(
+      fixture.admin,
+      fixture.workspace.id,
+      jiraPreviewInput(
+        "Project key,Project name,Issue key,Summary,Status,Labels\nCASE,Case project,case-1,Changed,Open,BUG",
+      ),
+    );
+    expect(replayPreview.rows[0].messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "source_already_imported" }),
+      ]),
+    );
+    const replay = await confirmImport(
+      fixture.admin,
+      fixture.workspace.id,
+      replayPreview.id,
+      { duplicateStrategy: "skip_existing", identityMappings: {} },
+    );
+    expect(replay).toMatchObject({ createdWorkItems: 0, skippedRows: 1 });
+    expect(
+      await db
+        .select({ total: count() })
+        .from(workItems)
+        .innerJoin(projects, eq(projects.id, workItems.projectId))
+        .where(eq(projects.key, "CASE")),
+    ).toEqual([{ total: 1 }]);
+  });
+
+  it("associates a recurring source identity with every preview session", async () => {
+    const fixture = await createFixture();
+    const input = jiraPreviewInput(
+      "Project key,Project name,Issue key,Summary,Status,Assignee\nEVID,Evidence,EVID-1,Identity evidence,Open,member@example.test",
+    );
+    const first = await createImportPreview(
+      fixture.owner,
+      fixture.workspace.id,
+      input,
+    );
+    const middle = await createImportPreview(
+      fixture.admin,
+      fixture.workspace.id,
+      input,
+    );
+    const last = await createImportPreview(
+      fixture.owner,
+      fixture.workspace.id,
+      input,
+    );
+
+    const middleResult = await getImportSession(
+      fixture.owner,
+      fixture.workspace.id,
+      middle.id,
+    );
+    expect(middleResult.identities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          identityKey: "email:member@example.test",
+        }),
+      ]),
+    );
+    expect(
+      await db
+        .select({ total: count() })
+        .from(migrationImportSessionIdentities)
+        .where(
+          eq(
+            migrationImportSessionIdentities.identityId,
+            middleResult.identities[0].id,
+          ),
+        ),
+    ).toEqual([{ total: 3 }]);
+    expect(new Set([first.id, middle.id, last.id]).size).toBe(3);
   });
 
   it("maps only existing members explicitly and keeps blocked rows recoverable", async () => {
@@ -619,7 +742,9 @@ describe("template and migration adoption boundary", () => {
   });
 });
 
-function templateDefinition(acceptanceCriteria: string) {
+function templateDefinition(
+  acceptanceCriteria: string,
+): ProjectTemplateDefinition {
   return {
     projectSummary: "Template context",
     milestones: [

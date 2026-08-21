@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   AdoptionWorkspace,
@@ -18,6 +18,10 @@ const member = {
 };
 
 describe("adoption workspace", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("renders explicit template, import, and portability empty states", () => {
     render(
       <AdoptionWorkspace
@@ -141,5 +145,86 @@ describe("adoption workspace", () => {
         name: "Confirm import and skip existing source objects",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("preserves non-ledger template fields when saving an edited version", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <AdoptionWorkspace
+        workspaceId="7f960d3a-53a6-44b2-9ffe-adcf7f1ac898"
+        workspaceSlug="agency"
+        templates={[
+          {
+            id: "4ad5f9af-f4ad-430e-92ea-5202af5ea0e8",
+            name: "API template",
+            description: "Created through the API",
+            version: 1,
+            definition: {
+              projectSummary: "Keep this context",
+              milestones: [
+                {
+                  ref: "release",
+                  name: "Release",
+                  description: "Preserve milestone evidence",
+                  targetOffsetDays: 30,
+                },
+              ],
+              cycles: [
+                {
+                  ref: "cycle-1",
+                  name: "Cycle 1",
+                  goal: "Preserve the cycle goal",
+                  startOffsetDays: 0,
+                  durationDays: 14,
+                },
+              ],
+              workItems: [
+                {
+                  ref: "delivery",
+                  parentRef: null,
+                  milestoneRef: "release",
+                  cycleRef: "cycle-1",
+                  title: "Delivery skeleton",
+                  description: "Preserve detailed guidance",
+                  acceptanceCriteria: "Accepted",
+                  status: "in_progress",
+                  priority: "high",
+                  purpose: "delivery_support",
+                  estimatePoints: 8,
+                  targetOffsetDays: 21,
+                  labels: ["delivery"],
+                },
+              ],
+            },
+          },
+        ]}
+        imports={[]}
+        clients={[]}
+        projects={[]}
+        members={[member]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save new version" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    const payload = JSON.parse(String(request.body));
+    expect(payload.definition.milestones[0].description).toBe(
+      "Preserve milestone evidence",
+    );
+    expect(payload.definition.cycles[0].goal).toBe("Preserve the cycle goal");
+    expect(payload.definition.workItems[0]).toMatchObject({
+      description: "Preserve detailed guidance",
+      status: "in_progress",
+      priority: "high",
+      purpose: "delivery_support",
+      estimatePoints: 8,
+      targetOffsetDays: 21,
+    });
   });
 });

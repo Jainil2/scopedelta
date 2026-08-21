@@ -1310,6 +1310,10 @@ export const migrationSourceIdentities = pgTable(
     ...timestampColumns,
   },
   (table) => [
+    unique("migration_source_identities_id_workspace_unique").on(
+      table.id,
+      table.workspaceId,
+    ),
     foreignKey({
       columns: [table.firstSessionId, table.workspaceId],
       foreignColumns: [
@@ -1341,6 +1345,47 @@ export const migrationSourceIdentities = pgTable(
       table.workspaceId,
       table.mappedUserId,
       table.updatedAt,
+    ),
+  ],
+);
+
+export const migrationImportSessionIdentities = pgTable(
+  "migration_import_session_identities",
+  {
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id").notNull(),
+    identityId: uuid("identity_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.sessionId, table.identityId],
+      name: "migration_import_session_identities_pk",
+    }),
+    foreignKey({
+      columns: [table.sessionId, table.workspaceId],
+      foreignColumns: [
+        migrationImportSessions.id,
+        migrationImportSessions.workspaceId,
+      ],
+      name: "migration_import_session_identities_session_workspace_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.identityId, table.workspaceId],
+      foreignColumns: [
+        migrationSourceIdentities.id,
+        migrationSourceIdentities.workspaceId,
+      ],
+      name: "migration_import_session_identities_identity_workspace_fk",
+    }).onDelete("cascade"),
+    index("migration_import_session_identities_workspace_session_idx").on(
+      table.workspaceId,
+      table.sessionId,
+      table.identityId,
     ),
   ],
 );

@@ -9,7 +9,6 @@ import {
   inArray,
   isNull,
   ne,
-  or,
   sql,
 } from "drizzle-orm";
 
@@ -20,6 +19,7 @@ import {
   cycles,
   memberships,
   migrationImportRows,
+  migrationImportSessionIdentities,
   migrationImportSessions,
   migrationSourceIdentities,
   migrationSourceObjects,
@@ -271,12 +271,17 @@ export async function applyProjectTemplate(
       if (!template[0]) throw notFound();
       await assertActiveClient(transaction, workspaceId, input.clientId);
       await assertWorkspaceMember(transaction, workspaceId, input.leadUserId);
-      if (template[0].definition.cycles.length && !input.startDate) {
+      const definition = template[0].definition;
+      const needsStartDate =
+        definition.cycles.length > 0 ||
+        definition.milestones.some((item) => item.targetOffsetDays != null) ||
+        definition.workItems.some((item) => item.targetOffsetDays != null);
+      if (needsStartDate && !input.startDate) {
         throw new PlatformError(
-          "template_cycle_start_required",
+          "template_date_start_required",
           409,
-          "Choose a project start date to apply template cycle dates.",
-          { startDate: ["Required when the template contains cycles."] },
+          "Choose a project start date to apply template date offsets.",
+          { startDate: ["Required when the template contains date offsets."] },
         );
       }
       await createTemplateProject(transaction, actor, workspaceId, projectId, {
@@ -677,7 +682,7 @@ async function upsertPreviewIdentities(
     }
   }
   if (!identities.size) return;
-  await transaction
+  const persistedIdentities = await transaction
     .insert(migrationSourceIdentities)
     .values(
       [...identities.values()].map((identity) => ({
@@ -700,7 +705,18 @@ async function upsertPreviewIdentities(
         migrationSourceIdentities.identityKey,
       ],
       set: { lastSessionId: sessionId, updatedAt: new Date() },
-    });
+    })
+    .returning({ id: migrationSourceIdentities.id });
+  await transaction
+    .insert(migrationImportSessionIdentities)
+    .values(
+      persistedIdentities.map((identity) => ({
+        workspaceId,
+        sessionId,
+        identityId: identity.id,
+      })),
+    )
+    .onConflictDoNothing();
 }
 
 export async function listImportSessions(
@@ -806,19 +822,18 @@ export async function getImportSession(
         email: migrationSourceIdentities.email,
         mappedUserId: migrationSourceIdentities.mappedUserId,
       })
-      .from(migrationSourceIdentities)
+      .from(migrationImportSessionIdentities)
+      .innerJoin(
+        migrationSourceIdentities,
+        eq(
+          migrationSourceIdentities.id,
+          migrationImportSessionIdentities.identityId,
+        ),
+      )
       .where(
         and(
-          eq(migrationSourceIdentities.workspaceId, workspaceId),
-          eq(migrationSourceIdentities.sourceKind, sessionRows[0].sourceKind),
-          eq(
-            migrationSourceIdentities.sourceNamespace,
-            sessionRows[0].sourceNamespace,
-          ),
-          or(
-            eq(migrationSourceIdentities.firstSessionId, sessionId),
-            eq(migrationSourceIdentities.lastSessionId, sessionId),
-          ),
+          eq(migrationImportSessionIdentities.workspaceId, workspaceId),
+          eq(migrationImportSessionIdentities.sessionId, sessionId),
         ),
       )
       .orderBy(asc(migrationSourceIdentities.identityKey))
@@ -1098,8 +1113,8 @@ async function ensureImportedProject(input: {
             input.session.sourceNamespace,
           ),
           eq(migrationSourceObjects.objectKind, "project"),
-          eq(migrationSourceObjects.sourceProjectKey, input.sourceProjectKey),
-          eq(migrationSourceObjects.sourceObjectKey, input.sourceProjectKey),
+          sql`lower(${migrationSourceObjects.sourceProjectKey}) = ${normalizeKey(input.sourceProjectKey)}`,
+          sql`lower(${migrationSourceObjects.sourceObjectKey}) = ${normalizeKey(input.sourceProjectKey)}`,
         ),
       )
       .limit(1);
@@ -1312,8 +1327,8 @@ async function commitImportBatch(input: {
               input.session.sourceNamespace,
             ),
             eq(migrationSourceObjects.objectKind, "work_item"),
-            eq(migrationSourceObjects.sourceProjectKey, row.sourceProjectKey),
-            eq(migrationSourceObjects.sourceObjectKey, row.sourceObjectKey),
+            sql`lower(${migrationSourceObjects.sourceProjectKey}) = ${normalizeKey(row.sourceProjectKey)}`,
+            sql`lower(${migrationSourceObjects.sourceObjectKey}) = ${normalizeKey(row.sourceObjectKey)}`,
           ),
         )
         .limit(1);
@@ -1345,11 +1360,8 @@ async function commitImportBatch(input: {
                 input.session.sourceNamespace,
               ),
               eq(migrationSourceObjects.objectKind, "work_item"),
-              eq(migrationSourceObjects.sourceProjectKey, row.sourceProjectKey),
-              eq(
-                migrationSourceObjects.sourceObjectKey,
-                normalized.parentSourceObjectKey,
-              ),
+              sql`lower(${migrationSourceObjects.sourceProjectKey}) = ${normalizeKey(row.sourceProjectKey)}`,
+              sql`lower(${migrationSourceObjects.sourceObjectKey}) = ${normalizeKey(normalized.parentSourceObjectKey)}`,
             ),
           )
           .limit(1);
@@ -2235,8 +2247,8 @@ function sourceObjectLockKey(
     sourceKind,
     sourceNamespace,
     objectKind,
-    sourceProjectKey,
-    sourceObjectKey,
+    normalizeKey(sourceProjectKey),
+    normalizeKey(sourceObjectKey),
   ]);
 }
 

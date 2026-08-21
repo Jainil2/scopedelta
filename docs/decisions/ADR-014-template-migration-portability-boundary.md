@@ -36,11 +36,13 @@ Authoritative migration provenance uses:
 
 Titles are never authoritative deduplication keys. The source project key keeps identical Jira issue keys in different source projects distinct. A repeated source object is skipped and reported; a changed fingerprint is never used to overwrite the existing delivery object silently.
 
+Source project and object keys are compared case-insensitively while retaining their imported display form, so case-only export changes cannot create duplicate delivery objects.
+
 When a source row has no issue/object key, the fallback identity contains the exact CSV file fingerprint and row number. An exact-file retry remains idempotent, while a distinct batch under the same source namespace cannot collide solely because it reuses row numbers.
 
 ### Imported people remain unresolved until explicitly mapped
 
-Assignee/reporter text creates a bounded source-identity record, not a user or workspace membership. An owner/admin may explicitly map that identity to an existing workspace member during confirmation. Only then may the importer add that existing member to the imported project and assign compatible work. Import never creates a privileged workspace membership or sends an invitation.
+Assignee/reporter text creates a bounded source-identity record, not a user or workspace membership. Every preview session retains its own association to each observed source identity so historical preview evidence does not disappear when the same identity appears again. An owner/admin may explicitly map that identity to an existing workspace member during confirmation. Only then may the importer add that existing member to the imported project and assign compatible work. Import never creates a privileged workspace membership or sends an invitation.
 
 ### Hierarchy is preserved only when meaning is safe
 

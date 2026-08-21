@@ -1,6 +1,6 @@
 {
-  "id": "ed3eb749-ef42-440c-be96-af46fa05a330",
-  "prevId": "80d31fcd-530a-4097-9587-4409d27fdde4",
+  "id": "993c2ead-e613-4917-891b-e7f672bbcbf9",
+  "prevId": "ed3eb749-ef42-440c-be96-af46fa05a330",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -9113,6 +9113,105 @@
       },
       "isRLSEnabled": false
     },
+    "public.migration_import_session_identities": {
+      "name": "migration_import_session_identities",
+      "schema": "",
+      "columns": {
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "identity_id": {
+          "name": "identity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "migration_import_session_identities_workspace_session_idx": {
+          "name": "migration_import_session_identities_workspace_session_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "identity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "migration_import_session_identities_workspace_id_workspaces_id_fk": {
+          "name": "migration_import_session_identities_workspace_id_workspaces_id_fk",
+          "tableFrom": "migration_import_session_identities",
+          "tableTo": "workspaces",
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "migration_import_session_identities_session_workspace_fk": {
+          "name": "migration_import_session_identities_session_workspace_fk",
+          "tableFrom": "migration_import_session_identities",
+          "tableTo": "migration_import_sessions",
+          "columnsFrom": ["session_id", "workspace_id"],
+          "columnsTo": ["id", "workspace_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "migration_import_session_identities_identity_workspace_fk": {
+          "name": "migration_import_session_identities_identity_workspace_fk",
+          "tableFrom": "migration_import_session_identities",
+          "tableTo": "migration_source_identities",
+          "columnsFrom": ["identity_id", "workspace_id"],
+          "columnsTo": ["id", "workspace_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "migration_import_session_identities_pk": {
+          "name": "migration_import_session_identities_pk",
+          "columns": ["session_id", "identity_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.migration_import_sessions": {
       "name": "migration_import_sessions",
       "schema": "",
@@ -9598,7 +9697,13 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "migration_source_identities_id_workspace_unique": {
+          "name": "migration_source_identities_id_workspace_unique",
+          "nullsNotDistinct": false,
+          "columns": ["id", "workspace_id"]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

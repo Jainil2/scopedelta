@@ -406,6 +406,13 @@ function TemplateForm({
       onSubmit={onSubmit}
       action={onAction}
     >
+      {template ? (
+        <input
+          type="hidden"
+          name="originalDefinition"
+          value={JSON.stringify(template.definition)}
+        />
+      ) : null}
       <label>
         <span>Template name</span>
         <input
@@ -1046,25 +1053,44 @@ function ExportLedger({
 }
 
 function templatePayload(data: FormData) {
+  const original = parseOriginalDefinition(data);
+  const originalMilestones = new Map(
+    original?.milestones.map((item) => [item.ref, item]) ?? [],
+  );
+  const originalCycles = new Map(
+    original?.cycles.map((item) => [item.ref, item]) ?? [],
+  );
+  const originalWorkItems = new Map(
+    original?.workItems.map((item) => [item.ref, item]) ?? [],
+  );
   return {
     name: formText(data, "name"),
     description: nullable(formText(data, "description")),
     definition: {
       projectSummary: nullable(formText(data, "projectSummary")),
       milestones: parseLines(formText(data, "milestones")).map((parts) => ({
+        description: null,
+        ...originalMilestones.get(parts[0]),
         ref: parts[0],
         name: parts[1],
-        description: null,
         targetOffsetDays: parts[2] ? Number(parts[2]) : null,
       })),
       cycles: parseLines(formText(data, "cycles")).map((parts) => ({
+        goal: null,
+        ...originalCycles.get(parts[0]),
         ref: parts[0],
         name: parts[1],
-        goal: null,
         startOffsetDays: Number(parts[2] || 0),
         durationDays: Number(parts[3] || 14),
       })),
       workItems: parseLines(formText(data, "workItems")).map((parts) => ({
+        description: null,
+        status: "backlog" as const,
+        priority: "none" as const,
+        purpose: "client_delivery" as const,
+        estimatePoints: null,
+        targetOffsetDays: null,
+        ...originalWorkItems.get(parts[0]),
         ref: parts[0],
         parentRef: nullable(parts[1] || ""),
         title: parts[2],
@@ -1075,15 +1101,19 @@ function templatePayload(data: FormData) {
           .split(",")
           .map((label) => label.trim())
           .filter(Boolean),
-        description: null,
-        status: "backlog",
-        priority: "none",
-        purpose: "client_delivery",
-        estimatePoints: null,
-        targetOffsetDays: null,
       })),
     },
   };
+}
+
+function parseOriginalDefinition(data: FormData) {
+  const value = formText(data, "originalDefinition");
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as ProjectTemplateDefinition;
+  } catch {
+    return null;
+  }
 }
 
 function parseLines(value: string) {

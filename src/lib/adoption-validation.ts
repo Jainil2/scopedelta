@@ -103,6 +103,18 @@ export const projectTemplateDefinitionSchema =
     const cycles = new Set(definition.cycles.map((item) => item.ref));
     const work = new Map(definition.workItems.map((item) => [item.ref, item]));
     definition.workItems.forEach((item, index) => {
+      const labels = new Set<string>();
+      item.labels.forEach((label, labelIndex) => {
+        const normalized = label.toLocaleLowerCase("en-US");
+        if (labels.has(normalized)) {
+          context.addIssue({
+            code: "custom",
+            path: ["workItems", index, "labels", labelIndex],
+            message: "Labels must be unique ignoring case.",
+          });
+        }
+        labels.add(normalized);
+      });
       if (item.milestoneRef && !milestones.has(item.milestoneRef)) {
         context.addIssue({
           code: "custom",

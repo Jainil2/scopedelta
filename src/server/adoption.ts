@@ -398,13 +398,15 @@ async function instantiateTemplateDefinition(
       goal: cycle.goal,
     });
   }
-  const labels = [
-    ...new Set(definition.workItems.flatMap((item) => item.labels)),
-  ];
+  const labels = new Map<string, string>();
+  for (const label of definition.workItems.flatMap((item) => item.labels)) {
+    const key = normalizeKey(label);
+    if (!labels.has(key)) labels.set(key, label);
+  }
   const labelIds = new Map<string, string>();
-  for (const label of labels) {
+  for (const [key, label] of labels) {
     const id = randomUUID();
-    labelIds.set(normalizeKey(label), id);
+    labelIds.set(key, id);
     await transaction.insert(projectLabels).values({
       id,
       projectId,
@@ -442,11 +444,14 @@ async function instantiateTemplateDefinition(
       sortOrder: number - 1,
     });
     if (item.labels.length) {
+      const itemLabelKeys = [
+        ...new Set(item.labels.map((label) => normalizeKey(label))),
+      ];
       await transaction.insert(workItemLabels).values(
-        item.labels.map((label) => ({
+        itemLabelKeys.map((labelKey) => ({
           workItemId,
           projectId,
-          labelId: labelIds.get(normalizeKey(label))!,
+          labelId: labelIds.get(labelKey)!,
         })),
       );
     }

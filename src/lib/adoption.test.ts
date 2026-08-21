@@ -303,5 +303,21 @@ describe("project template snapshots", () => {
     expect(projectTemplateDefinitionSchema.safeParse(invalid).success).toBe(
       false,
     );
+
+    const duplicateLabels = structuredClone(valid);
+    duplicateLabels.workItems[0].labels = ["Bug", "bug"];
+    const duplicateResult =
+      projectTemplateDefinitionSchema.safeParse(duplicateLabels);
+    expect(duplicateResult.success).toBe(false);
+    if (!duplicateResult.success) {
+      expect(duplicateResult.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ["workItems", 0, "labels", 1],
+            message: "Labels must be unique ignoring case.",
+          }),
+        ]),
+      );
+    }
   });
 });

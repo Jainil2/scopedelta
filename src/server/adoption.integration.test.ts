@@ -11,10 +11,12 @@ import {
   migrationImportSessionIdentities,
   migrationSourceIdentities,
   migrationSourceObjects,
+  projectLabels,
   projectTemplateApplications,
   projects,
   projectTemplates,
   users,
+  workItemLabels,
   workItems,
   type ProjectTemplateDefinition,
 } from "@/db/schema";
@@ -182,6 +184,48 @@ describe("template and migration adoption boundary", () => {
         targetDate: null,
       }),
     ).rejects.toMatchObject({ code: "template_date_start_required" });
+  });
+
+  it("applies a bypass-created template with one canonical case-insensitive label", async () => {
+    const fixture = await createFixture();
+    const definition = templateDefinition("Accepted");
+    definition.workItems[0].labels = ["Bug", "bug", "BUG"];
+    const template = await createProjectTemplate(
+      fixture.owner,
+      fixture.workspace.id,
+      {
+        name: "Canonical labels",
+        description: null,
+        definition,
+      },
+    );
+    const project = await applyProjectTemplate(
+      fixture.owner,
+      fixture.workspace.id,
+      {
+        templateId: template.id,
+        clientId: fixture.client.id,
+        key: "LABELS",
+        name: "Canonical labels",
+        summary: null,
+        leadUserId: fixture.member.userId,
+        startDate: "2026-08-24",
+        targetDate: null,
+      },
+    );
+
+    expect(
+      await db
+        .select({ name: projectLabels.name })
+        .from(projectLabels)
+        .where(eq(projectLabels.projectId, project.id)),
+    ).toEqual([{ name: "Bug" }]);
+    expect(
+      await db
+        .select({ total: count() })
+        .from(workItemLabels)
+        .where(eq(workItemLabels.projectId, project.id)),
+    ).toEqual([{ total: 1 }]);
   });
 
   it("previews without delivery mutation, imports parent-after-child safely, and retries idempotently", async () => {

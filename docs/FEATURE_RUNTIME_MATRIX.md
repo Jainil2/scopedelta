@@ -2,13 +2,13 @@
 
 ## Status
 
-Planning baseline, updated 2026-08-25 for the SC-011C self-service, recovery, lifecycle-intent, and signal boundary. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
+Planning baseline, updated 2026-08-25 for the SC-012 general-availability hardening and production-risk-closure boundary. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
 
 ## Current capability count
 
 - **Total planned capability units: 98**
-- **Local/LAN: 64**
-- **Hybrid/optional external: 22**
+- **Local/LAN: 65**
+- **Hybrid/optional external: 21**
 - **External API/service: 4**
 - **Managed-cloud only: 4**
 - **Desktop client: 4**
@@ -17,7 +17,9 @@ The Layer-3 review reclassifies the core client portal/request/approval capabili
 
 Layer 3 therefore introduces **no mandatory paid external service dependency**. Layer 4 preserves that local core for QA, defects, traceability and readiness; the implemented GitHub evidence connection is an explicitly selected external provider dependency. GitLab remains deferred and classified Hybrid because a future adapter could target self-hosted or hosted GitLab.
 
-Layer 5 is complete through SC-009 / PR #43. Layer 6 preserves the distinction between software capability and ScopeDelta-managed resources: self-host core operation is Local/LAN and does not call cloud billing, while hosted checkout/portal/lifecycle inherently use an external payment service. Active-project/internal-user rules and managed usage accounting remain provider-neutral local domain behavior. External client participants remain separate from internal-user capacity. Layer 7 is delivered through SC-011A/B/C: portfolio operations, templates, generic/Jira CSV migration, bounded core export, onboarding/admin/recovery, lifecycle intent, and local signal storage/export are Local/LAN with no mandatory AI or external-provider dependency. Outbound telemetry/alerts and physical deletion remain deferred Layer-8 capabilities.
+Layer 5 is complete through SC-009 / PR #43. Layer 6 preserves the distinction between software capability and ScopeDelta-managed resources: self-host core operation is Local/LAN and does not call cloud billing, while hosted checkout/portal/lifecycle inherently use an external payment service. Active-project/internal-user rules and managed usage accounting remain provider-neutral local domain behavior. External client participants remain separate from internal-user capacity. Layer 7 is delivered through SC-011A/B/C: portfolio operations, templates, generic/Jira CSV migration, bounded core export, onboarding/admin/recovery, lifecycle intent, and local signal storage/export are Local/LAN with no mandatory AI or external-provider dependency.
+
+Layer 8 is refined by the SC-012 research checkpoint as **GA risk closure, not enterprise checkbox parity**. Required work proves and hardens existing product/runtime boundaries, adds bounded operator attention where needed, exercises recovery and representative scale, and produces durable GA evidence. SSO/SAML, SCIM, arbitrary/custom RBAC, managed multi-region/data-residency, certification work, and irreversible physical deletion are not SC-012 implementation requirements. Managed alert delivery may use an external/provider path, but self-host remains operable with deployment-local signals and no ScopeDelta Cloud telemetry phone-home. Physical purge remains founder/legal-gated and out of scope until an approved retention policy exists.
 
 ### Runtime meaning
 
@@ -45,7 +47,7 @@ This avoids fragile peer-to-peer conflict resolution for core project/commercial
 | Layer 5 — AI-Native Delivery Intelligence | 11 |
 | Layer 6 — Cloud Economics & Distribution | 9 |
 | Layer 7 — Portfolio & Self-Service Scale | 9 |
-| Layer 8 — Enterprise / GA Hardening | 8 |
+| Layer 8 — GA Hardening & Production Risk Closure | 8 |
 | Cross-cutting — Desktop Client | 5 |
 
 ## Layer 0 — Platform Kernel
@@ -230,18 +232,28 @@ Layer-6 runtime rules:
 | Guided onboarding/help | Local/LAN | SC-011C; authoritative derived completion plus per-admin dismiss/resume |
 | Privacy-safe product telemetry | Local/LAN | SC-011C local bounded signal storage/operator export; outbound transport/alerts deferred |
 
-## Layer 8 — Enterprise / GA Hardening
+## Layer 8 — GA Hardening & Production Risk Closure
+
+SC-012 is a hardening/proof layer over the product already implemented in Layers 0–7. It does not add enterprise identity/governance breadth without customer evidence.
 
 | Capability | Runtime class |
 |---|---|
-| SSO/OIDC/SAML | Hybrid/optional external |
-| SCIM/directory lifecycle | Hybrid/optional external |
-| Advanced RBAC/policies | Local/LAN |
-| Audit export/retention | Local/LAN |
-| Data export/deletion | Local/LAN |
-| Backups/disaster recovery | Hybrid/optional external |
-| Observability/alerting | Hybrid/optional external |
-| Load/security/GA hardening | Local/LAN |
+| Production-like lifecycle proof across Layers 0–7 | Local/LAN |
+| Tenant/project/client authorization + application security hardening | Local/LAN |
+| Async/provider recovery and reconciliation | Hybrid/optional external |
+| Privacy-safe operator attention/alerting | Hybrid/optional external |
+| Backup/restore/export/non-destructive lifecycle processing | Local/LAN |
+| Managed-resource/abuse containment | Hybrid/optional external |
+| Representative 50–500-person scale verification | Local/LAN |
+| GA operations/readiness evidence package | Local/LAN |
+
+Layer-8 runtime rules:
+
+- Core hardening, authorization, backup/restore verification, open-format export, non-destructive lifecycle processing, scale evidence, and deployment-local operational evidence must work on customer-controlled infrastructure.
+- Provider-backed recovery/containment remains optional by provider: GitHub, billing, hosted AI, and outbound email retain their existing runtime classes rather than becoming mandatory dependencies.
+- Managed cloud may add a bounded external alert-delivery path, but self-host must remain operable with no ScopeDelta Cloud telemetry phone-home.
+- SSO/OIDC/SAML, SCIM/directory provisioning, arbitrary/custom RBAC/policy builders, managed multi-region/data-residency, certification work, and customer-managed encryption keys are deferred enterprise capabilities, not SC-012 prerequisites.
+- Physical purge, legal retention periods, Terms/Privacy/DPA wording, and irreversible deletion policy remain founder/legal gates. SC-012 records and processes lifecycle intent non-destructively and must fail closed on purge until policy approval.
 
 ## Cross-cutting — Desktop Client
 
@@ -261,10 +273,10 @@ The initial plan should minimize mandatory paid external dependencies. The unavo
 - outbound email delivery when ScopeDelta Cloud or a customer chooses an external mail provider, while self-host may use local SMTP/manual link delivery;
 - GitHub.com/GitLab.com integration when the customer uses those hosted systems;
 - hosted AI when the customer chooses managed inference instead of BYO/local AI;
-- optional SSO/directory providers for organizations using external identity systems;
+- future optional SSO/directory providers if customer evidence later justifies enterprise identity integrations; these are outside SC-012;
 - managed observability/backups/storage for ScopeDelta Cloud.
 
-Commercial document parsing, the Commercial Delivery Graph, Layer-3 client project/request/approval/acceptance state, and Layer-4 local QA/defect/readiness state are deliberately **not** added to this unavoidable-external list. They must work on customer-controlled infrastructure.
+Commercial document parsing, the Commercial Delivery Graph, Layer-3 client project/request/approval/acceptance state, Layer-4 local QA/defect/readiness state, and SC-012 core GA hardening/proof are deliberately **not** added to this unavoidable-external list. They must work on customer-controlled infrastructure.
 
 ## Cost principle
 

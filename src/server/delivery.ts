@@ -67,6 +67,7 @@ import {
   assertActiveProjectCapacity,
   deploymentEntitlementPolicy,
 } from "@/server/billing";
+import { recordWorkspaceProductSignal } from "@/server/self-service";
 
 export type Database = ReturnType<typeof getDb>;
 export type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -126,6 +127,19 @@ export async function createClient(
       targetType: "client",
       targetId: id,
       metadata: {},
+    });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "client_created",
+      outcome: "completed",
+      subjectId: id,
+    });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "onboarding_step_completed",
+      outcome: "completed",
+      dimension: "first_client",
+      subjectId: id,
     });
   });
   return getClient(actor, workspaceId, id);
@@ -209,9 +223,15 @@ export async function listProjects(
   page = 1,
   pageSize = 50,
   search = "",
+  lifecycle: "current" | ProjectLifecycle | "all" = "current",
 ) {
   const access = await getWorkspaceAccess(getDb(), actor, workspaceId);
   const conditions = [eq(projects.workspaceId, workspaceId)];
+  if (lifecycle === "current") {
+    conditions.push(inArray(projects.lifecycle, ["active", "completed"]));
+  } else if (lifecycle !== "all") {
+    conditions.push(eq(projects.lifecycle, lifecycle));
+  }
   if (access.role === "member") {
     conditions.push(eq(projectMemberships.userId, actor.userId));
   }
@@ -281,6 +301,11 @@ export async function listProjects(
               )!,
             ]
           : []),
+        ...(lifecycle === "current"
+          ? [inArray(projects.lifecycle, ["active", "completed"])]
+          : lifecycle === "all"
+            ? []
+            : [eq(projects.lifecycle, lifecycle)]),
       ),
     );
   return pageResult(rows, page, pageSize, totalRows[0]?.total ?? 0);
@@ -350,6 +375,19 @@ export async function createProject(
           clientId: normalizedInput.clientId,
           leadUserId: normalizedInput.leadUserId,
         },
+      });
+      await recordWorkspaceProductSignal(transaction, {
+        workspaceId,
+        eventType: "project_created",
+        outcome: "completed",
+        subjectId: id,
+      });
+      await recordWorkspaceProductSignal(transaction, {
+        workspaceId,
+        eventType: "onboarding_step_completed",
+        outcome: "completed",
+        dimension: "first_project",
+        subjectId: id,
       });
     });
   } catch (error) {
@@ -518,6 +556,7 @@ export async function listProjectMembers(
       and(
         eq(memberships.workspaceId, projectMemberships.workspaceId),
         eq(memberships.userId, projectMemberships.userId),
+        eq(memberships.status, "active"),
       ),
     )
     .where(eq(projectMemberships.projectId, projectId))
@@ -1919,6 +1958,7 @@ async function getWorkspaceAccess(
       and(
         eq(memberships.workspaceId, workspaceId),
         eq(memberships.userId, actor.userId),
+        eq(memberships.status, "active"),
       ),
     )
     .limit(1);
@@ -2098,6 +2138,7 @@ async function assertWorkspaceMember(
       and(
         eq(memberships.workspaceId, workspaceId),
         eq(memberships.userId, userId),
+        eq(memberships.status, "active"),
       ),
     )
     .limit(1);

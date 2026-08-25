@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
 
+import { ActionableEmptyState } from "@/components/self-service-workspace";
+
 type Client = {
   id: string;
   name: string;
@@ -268,12 +270,13 @@ export function ClientDirectory({
             </article>
           ))
         ) : (
-          <div className="delivery-empty">
-            <h2>No clients yet</h2>
-            <p>
-              Create the client account that owns your first delivery project.
-            </p>
-          </div>
+          <ActionableEmptyState
+            title="No clients yet"
+            why="Clients establish the tenant-safe account boundary for delivery projects."
+            prerequisite="An owner or admin can create the first client from this page."
+            next="Review the activation path"
+            href={`/app/${workspaceSlug}/settings/getting-started`}
+          />
         )}
       </div>
       <nav className="pagination" aria-label="Client pages">
@@ -312,6 +315,7 @@ export function ProjectDirectory({
   projects,
   projectPageInfo,
   query,
+  lifecycle,
 }: Readonly<{
   workspaceId: string;
   workspaceSlug: string;
@@ -321,6 +325,7 @@ export function ProjectDirectory({
   projects: Project[];
   projectPageInfo: PageInfo;
   query?: string;
+  lifecycle: "current" | "active" | "completed" | "archived" | "all";
 }>) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -425,6 +430,7 @@ export function ProjectDirectory({
                   projectPageInfo.page,
                   clientPageInfo.page - 1,
                   query,
+                  lifecycle,
                 )}
               >
                 Previous clients
@@ -440,6 +446,7 @@ export function ProjectDirectory({
                   projectPageInfo.page,
                   clientPageInfo.page + 1,
                   query,
+                  lifecycle,
                 )}
               >
                 Next clients
@@ -461,6 +468,17 @@ export function ProjectDirectory({
           defaultValue={query || ""}
           maxLength={120}
         />
+        <select
+          name="lifecycle"
+          aria-label="Project lifecycle"
+          defaultValue={lifecycle}
+        >
+          <option value="current">Active and completed</option>
+          <option value="active">Active</option>
+          <option value="completed">Completed</option>
+          <option value="archived">Archived</option>
+          <option value="all">All lifecycle states</option>
+        </select>
         <button type="submit" className="button-secondary">
           Search
         </button>
@@ -494,10 +512,23 @@ export function ProjectDirectory({
             </Link>
           ))
         ) : (
-          <div className="delivery-empty">
-            <h2>No accessible projects</h2>
-            <p>Create a project or ask a project lead to add you.</p>
-          </div>
+          <ActionableEmptyState
+            title="No accessible projects"
+            why="Projects hold delivery, commercial, collaboration, and evidence records."
+            prerequisite={
+              activeClients.length
+                ? "Use a template when one exists, or create a project directly."
+                : "Create an active client before creating a project."
+            }
+            next={
+              activeClients.length ? "Review project setup" : "Create a client"
+            }
+            href={
+              activeClients.length
+                ? `/app/${workspaceSlug}/settings/getting-started`
+                : `/app/${workspaceSlug}/clients`
+            }
+          />
         )}
       </div>
       <nav className="pagination" aria-label="Project pages">
@@ -508,6 +539,7 @@ export function ProjectDirectory({
               projectPageInfo.page - 1,
               clientPageInfo.page,
               query,
+              lifecycle,
             )}
           >
             Previous
@@ -525,6 +557,7 @@ export function ProjectDirectory({
               projectPageInfo.page + 1,
               clientPageInfo.page,
               query,
+              lifecycle,
             )}
           >
             Next
@@ -1657,12 +1690,15 @@ function projectDirectoryHref(
   projectPage: number,
   clientPage: number,
   search?: string,
+  lifecycle:
+    "current" | "active" | "completed" | "archived" | "all" = "current",
 ) {
   const query = new URLSearchParams({
     page: String(projectPage),
     clientPage: String(clientPage),
   });
   if (search) query.set("query", search);
+  if (lifecycle !== "current") query.set("lifecycle", lifecycle);
   return `/app/${workspaceSlug}/projects?${query.toString()}`;
 }
 

@@ -88,6 +88,7 @@ async function getWorkspaceRole(
       and(
         eq(memberships.workspaceId, workspaceId),
         eq(memberships.userId, actor.userId),
+        eq(memberships.status, "active"),
       ),
     )
     .limit(1);
@@ -120,6 +121,7 @@ async function getScopedWorkItem(
 function authorizedProjectUserScope(workspaceId: string) {
   return and(
     eq(memberships.workspaceId, workspaceId),
+    eq(memberships.status, "active"),
     or(
       inArray(memberships.role, ["owner", "admin"]),
       isNotNull(projectMemberships.userId),

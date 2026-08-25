@@ -22,7 +22,10 @@ export default async function AdoptionPage({
           listImportSessions(actor, workspace.id, 1, 20),
           listClients(actor, workspace.id, 1, 100),
           listProjects(actor, workspace.id, 1, 100),
-          listWorkspaceMembers(actor, workspace.id),
+          listWorkspaceMembers(actor, workspace.id, {
+            status: "active",
+            pageSize: 100,
+          }),
         ]);
       return { workspace, templates, imports, clients, projects, directory };
     } catch {

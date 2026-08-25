@@ -93,12 +93,24 @@ describe("platform forms", () => {
     expect(screen.getByText(/Members can view/)).toBeInTheDocument();
   });
 
-  it("gives admins member-only controls without exposing admin or owner mutation", () => {
+  it("gives admins member-only suspension controls without destructive removal", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: { status: "suspended" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
     render(
       <MemberManagement
         workspaceId="workspace-id"
         currentUserId="admin-user"
         currentRole="admin"
+        workspaceSlug="workspace"
+        memberPage={{ number: 1, size: 50, total: 2, pages: 1 }}
+        invitationPage={{ number: 1, size: 50, total: 0, pages: 0 }}
+        query=""
         invitations={[]}
         members={[
           {
@@ -107,7 +119,9 @@ describe("platform forms", () => {
             name: "Workspace Owner",
             email: "owner@example.test",
             role: "owner",
+            status: "active",
             joinedAt: new Date().toISOString(),
+            suspendedAt: null,
           },
           {
             id: "member-membership",
@@ -115,7 +129,9 @@ describe("platform forms", () => {
             name: "Workspace Member",
             email: "member@example.test",
             role: "member",
+            status: "active",
             joinedAt: new Date().toISOString(),
+            suspendedAt: null,
           },
         ]}
       />,
@@ -124,7 +140,23 @@ describe("platform forms", () => {
     expect(screen.getByLabelText("Starting role")).not.toHaveTextContent(
       "Admin",
     );
-    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("button", { name: "Suspend access" }),
+    ).toHaveLength(1);
     expect(screen.queryByRole("combobox", { name: /Role for/ })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Suspend access" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/workspaces/workspace-id/members/member-membership",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ status: "suspended" }),
+        }),
+      ),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Workspace access suspended",
+    );
   });
 });

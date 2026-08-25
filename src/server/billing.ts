@@ -30,6 +30,7 @@ import {
 } from "@/lib/billing-plans";
 import type { EntitlementPolicy, PlatformCapability } from "@/lib/entitlements";
 import { forbidden, notFound, PlatformError } from "@/lib/platform-errors";
+import { recordWorkspaceProductSignal } from "@/server/self-service";
 import type { UserActor } from "@/server/workspaces";
 
 import {
@@ -152,6 +153,7 @@ async function membership(
       and(
         eq(memberships.workspaceId, workspaceId),
         eq(memberships.userId, actor.userId),
+        eq(memberships.status, "active"),
       ),
     )
     .limit(1);
@@ -204,7 +206,17 @@ export const deploymentEntitlementPolicy: EntitlementPolicy = {
     ) {
       return;
     }
-    await assertManagedAction(context.workspaceId);
+    try {
+      await assertManagedAction(context.workspaceId);
+    } catch (error) {
+      await recordWorkspaceProductSignal(getDb(), {
+        workspaceId: context.workspaceId,
+        eventType: "entitlement_denied",
+        outcome: "denied",
+        dimension: "capacity",
+      });
+      throw error;
+    }
   },
 };
 
@@ -261,7 +273,12 @@ export async function assertInternalMemberCapacity(
   const rows = await database
     .select({ total: count() })
     .from(memberships)
-    .where(eq(memberships.workspaceId, workspaceId));
+    .where(
+      and(
+        eq(memberships.workspaceId, workspaceId),
+        eq(memberships.status, "active"),
+      ),
+    );
   if ((rows[0]?.total ?? 0) >= limit) {
     throw new PlatformError(
       "internal_user_capacity_exceeded",
@@ -383,7 +400,8 @@ export async function settleManagedUsage(
 
 export async function consumeManagedEmailUsage(input: {
   workspaceId: string;
-  sourceType: "client_invitation" | "client_notification";
+  sourceType:
+    "workspace_invitation" | "client_invitation" | "client_notification";
   sourceId: string;
   attemptNumber: number;
 }) {
@@ -486,7 +504,12 @@ async function economics(
     database
       .select({ total: count() })
       .from(memberships)
-      .where(eq(memberships.workspaceId, workspaceId)),
+      .where(
+        and(
+          eq(memberships.workspaceId, workspaceId),
+          eq(memberships.status, "active"),
+        ),
+      ),
     database
       .select({ total: count() })
       .from(clientProjectParticipants)
@@ -791,6 +814,12 @@ export async function startCheckout(
         targetType: "billing_checkout",
         targetId: prepared.attemptId,
         metadata: { planKey, provider: "paddle" },
+      });
+      await recordWorkspaceProductSignal(transaction, {
+        workspaceId,
+        eventType: "billing_checkout_started",
+        outcome: "completed",
+        subjectId: prepared.attemptId,
       });
     });
     return { checkoutUrl: checkout.checkoutUrl };
@@ -1132,6 +1161,14 @@ export async function processPaddleSubscriptionEvent(
             status: transition.status,
             eventType: event.event_type,
           },
+        });
+        await recordWorkspaceProductSignal(transaction, {
+          workspaceId,
+          eventType: "billing_subscription_changed",
+          outcome: "completed",
+          dimension: transition.status,
+          subjectId: workspaceId,
+          occurredAt,
         });
       }
       return { state: "processed" as const, workspaceId };

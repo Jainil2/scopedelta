@@ -56,7 +56,10 @@ async function loadProject(
       await Promise.all([
         listMilestones(actor, workspace.id, project.id),
         listProjectMembers(actor, workspace.id, project.id),
-        listWorkspaceMembers(actor, workspace.id),
+        listWorkspaceMembers(actor, workspace.id, {
+          status: "active",
+          pageSize: 100,
+        }),
       ]);
     return {
       workspace,

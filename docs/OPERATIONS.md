@@ -2,7 +2,7 @@
 
 ## Status and change boundary
 
-Implemented through SC-010. This runbook covers the public lead flow,
+Implemented through SC-011C. This runbook covers the public lead flow,
 production platform kernel, delivery/commercial/client/engineering/QA/AI
 history, provider-neutral billing/entitlements, Paddle sandbox lifecycle, and
 the production-oriented self-host path. It does not authorize production
@@ -10,6 +10,31 @@ credentials, database creation, DNS changes, live payments, a paid service,
 public source release, or destructive database work without founder approval.
 It does not cover OCR extraction, SSO, anonymous action links, legal
 e-signature, live plan/pricing policy, or the final LIC-001 license boundary.
+
+SC-011C adds migration `0019`, deployment-local activation/reliability signals,
+non-destructive lifecycle requests, invitation delivery evidence, and membership
+suspension. A lifecycle request is an intent record only: it does not disable a
+workspace, delete data, or establish retention. Physical deletion remains a
+Layer-8 design and approval boundary.
+
+## Deployment-local product signals
+
+Run `pnpm operations:signals` with `DATABASE_URL` configured to emit one
+content-free JSON snapshot of activation funnel counts, unresolved billing/AI/
+import/provider/email states, repeated denials, and pending lifecycle requests.
+`--limit=N` is bounded to 1–200 rows per group. The command uses a fixed set of
+aggregate queries and performs no outbound network call.
+
+Signal rows may contain only workspace/subject IDs, allowlisted event/outcome/
+safe-dimension values, counters, and timestamps. Never add pageviews, names,
+emails, recipients, documents, prompts/results, comments, source code, message
+bodies, or provider payloads. Provider/operator alert delivery is not part of
+this release.
+
+Routine recovery screens must render the stable safe failure class, whether
+authoritative state is unchanged/partially committed/preserved, retry policy,
+and next action. They must not render raw provider errors. Successful retries
+clear current blocking guidance; historical bounded evidence remains available.
 
 ## Supported deployment shapes
 

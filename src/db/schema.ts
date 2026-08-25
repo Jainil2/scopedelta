@@ -258,6 +258,22 @@ export const billingEventState = pgEnum("billing_event_state", [
   "rejected",
   "failed",
 ]);
+export const membershipStatus = pgEnum("membership_status", [
+  "active",
+  "suspended",
+]);
+export const workspaceLifecycleIntent = pgEnum("workspace_lifecycle_intent", [
+  "closure",
+  "deletion",
+]);
+export const workspaceLifecycleRequestState = pgEnum(
+  "workspace_lifecycle_request_state",
+  ["requested", "canceled"],
+);
+export const workspaceProductSignalOutcome = pgEnum(
+  "workspace_product_signal_outcome",
+  ["completed", "succeeded", "failed", "denied"],
+);
 export const managedUsageMetric = pgEnum("managed_usage_metric", [
   "ai_job_start",
   "email_send",
@@ -661,6 +677,11 @@ export const memberships = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     role: workspaceRole("role").notNull(),
+    status: membershipStatus("status").default("active").notNull(),
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+    suspendedByUserId: uuid("suspended_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
     ...timestampColumns,
   },
   (table) => [
@@ -669,6 +690,16 @@ export const memberships = pgTable(
       table.userId,
     ),
     index("memberships_user_id_idx").on(table.userId),
+    index("memberships_workspace_status_role_idx").on(
+      table.workspaceId,
+      table.status,
+      table.role,
+      table.createdAt,
+    ),
+    check(
+      "memberships_suspension_consistency",
+      sql`(${table.status} = 'active' and ${table.suspendedAt} is null and ${table.suspendedByUserId} is null) or (${table.status} = 'suspended' and ${table.suspendedAt} is not null and ${table.suspendedByUserId} is not null)`,
+    ),
   ],
 );
 
@@ -689,6 +720,14 @@ export const workspaceInvitations = pgTable(
       .references(() => users.id, { onDelete: "restrict" }),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    emailDeliveryState: clientEmailDeliveryState("email_delivery_state")
+      .default("not_requested")
+      .notNull(),
+    emailAttemptCount: integer("email_attempt_count").default(0).notNull(),
+    lastEmailAttemptAt: timestamp("last_email_attempt_at", {
+      withTimezone: true,
+    }),
+    lastEmailErrorCode: text("last_email_error_code"),
     ...timestampColumns,
   },
   (table) => [
@@ -697,6 +736,135 @@ export const workspaceInvitations = pgTable(
       table.email,
     ),
     uniqueIndex("workspace_invitations_token_hash_uidx").on(table.tokenHash),
+    index("workspace_invitations_workspace_state_expiry_idx").on(
+      table.workspaceId,
+      table.state,
+      table.expiresAt,
+      table.id,
+    ),
+    check(
+      "workspace_invitations_attempt_count",
+      sql`${table.emailAttemptCount} >= 0`,
+    ),
+    check(
+      "workspace_invitations_error_code_length",
+      sql`${table.lastEmailErrorCode} is null or char_length(${table.lastEmailErrorCode}) between 1 and 80`,
+    ),
+  ],
+);
+
+export const workspaceOnboardingPreferences = pgTable(
+  "workspace_onboarding_preferences",
+  {
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.userId] }),
+    index("workspace_onboarding_preferences_user_idx").on(table.userId),
+  ],
+);
+
+export const workspaceLifecycleRequests = pgTable(
+  "workspace_lifecycle_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "restrict" }),
+    intent: workspaceLifecycleIntent("intent").notNull(),
+    state: workspaceLifecycleRequestState("state")
+      .default("requested")
+      .notNull(),
+    requestedByUserId: uuid("requested_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    canceledByUserId: uuid("canceled_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    uniqueIndex("workspace_lifecycle_requests_open_uidx")
+      .on(table.workspaceId)
+      .where(sql`${table.state} = 'requested'`),
+    index("workspace_lifecycle_requests_state_updated_idx").on(
+      table.state,
+      table.updatedAt,
+      table.workspaceId,
+    ),
+    check(
+      "workspace_lifecycle_requests_cancel_consistency",
+      sql`(${table.state} = 'requested' and ${table.canceledAt} is null and ${table.canceledByUserId} is null) or (${table.state} = 'canceled' and ${table.canceledAt} is not null and ${table.canceledByUserId} is not null)`,
+    ),
+  ],
+);
+
+export const workspaceProductSignals = pgTable(
+  "workspace_product_signals",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    eventType: text("event_type").notNull(),
+    outcome: workspaceProductSignalOutcome("outcome").notNull(),
+    dimension: text("dimension").default("none").notNull(),
+    subjectId: uuid("subject_id"),
+    occurrenceCount: integer("occurrence_count").default(1).notNull(),
+    firstOccurredAt: timestamp("first_occurred_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastOccurredAt: timestamp("last_occurred_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("workspace_product_signals_identity_uidx").on(
+      table.workspaceId,
+      table.eventType,
+      table.outcome,
+      table.dimension,
+    ),
+    index("workspace_product_signals_event_last_idx").on(
+      table.eventType,
+      table.lastOccurredAt,
+      table.workspaceId,
+    ),
+    check(
+      "workspace_product_signals_event_length",
+      sql`char_length(${table.eventType}) between 1 and 80`,
+    ),
+    check(
+      "workspace_product_signals_event_allowlist",
+      sql`${table.eventType} in ('workspace_created', 'client_created', 'project_created', 'commercial_baseline_created', 'client_invite_created', 'client_action_recorded', 'engineering_connected', 'qa_verification_recorded', 'ai_job_completed', 'migration_import_started', 'migration_import_completed', 'billing_checkout_started', 'billing_subscription_changed', 'onboarding_step_completed', 'email_delivery', 'provider_delivery', 'entitlement_denied')`,
+    ),
+    check(
+      "workspace_product_signals_dimension_length",
+      sql`char_length(${table.dimension}) between 1 and 80`,
+    ),
+    check(
+      "workspace_product_signals_dimension_allowlist",
+      sql`${table.dimension} in ('none', 'workspace_profile', 'internal_member', 'first_client', 'first_project', 'commercial_baseline', 'client_participant', 'engineering_connection', 'qa_verification', 'ai_provider', 'billing_awareness', 'provider_unavailable', 'provider_rejected', 'configuration', 'capacity', 'lease_expired', 'validation', 'workspace_invitation', 'client_invitation', 'client_notification', 'active', 'checkout_pending', 'canceled_paid_through', 'grace', 'expired', 'entry')`,
+    ),
+    check(
+      "workspace_product_signals_count_positive",
+      sql`${table.occurrenceCount} > 0`,
+    ),
+    check(
+      "workspace_product_signals_time_order",
+      sql`${table.firstOccurredAt} <= ${table.lastOccurredAt}`,
+    ),
   ],
 );
 
@@ -4416,6 +4584,13 @@ export const providerWebhookDeliveries = pgTable(
 );
 
 export type WorkspaceRole = (typeof workspaceRole.enumValues)[number];
+export type MembershipStatus = (typeof membershipStatus.enumValues)[number];
+export type WorkspaceLifecycleIntent =
+  (typeof workspaceLifecycleIntent.enumValues)[number];
+export type WorkspaceLifecycleRequestState =
+  (typeof workspaceLifecycleRequestState.enumValues)[number];
+export type WorkspaceProductSignalOutcome =
+  (typeof workspaceProductSignalOutcome.enumValues)[number];
 export type ClientLifecycle = (typeof clientLifecycle.enumValues)[number];
 export type ProjectLifecycle = (typeof projectLifecycle.enumValues)[number];
 export type MilestoneStatus = (typeof milestoneStatus.enumValues)[number];

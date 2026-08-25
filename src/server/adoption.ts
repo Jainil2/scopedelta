@@ -57,6 +57,7 @@ import type {
 import { forbidden, notFound, PlatformError } from "@/lib/platform-errors";
 import { assertActiveProjectCapacity } from "@/server/billing";
 import type { UserActor } from "@/server/workspaces";
+import { recordWorkspaceProductSignal } from "@/server/self-service";
 
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -569,6 +570,12 @@ export async function createImportPreview(
         blockedRows: String(preview.counts.blocked),
         unsupportedColumnCount: String(preview.unsupportedColumns.length),
       },
+    });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "migration_import_started",
+      outcome: "completed",
+      subjectId: sessionId,
     });
   });
   return getImportSession(actor, workspaceId, sessionId);
@@ -1554,6 +1561,13 @@ async function finalizeImportSession(
         blockedRows: String(blockedRows),
       },
     });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "migration_import_completed",
+      outcome: state === "completed" ? "succeeded" : "failed",
+      dimension: state === "completed" ? "none" : "validation",
+      subjectId: sessionId,
+    });
   });
 }
 
@@ -2151,6 +2165,7 @@ async function requireWorkspaceAdmin(
       and(
         eq(memberships.workspaceId, workspaceId),
         eq(memberships.userId, actor.userId),
+        eq(memberships.status, "active"),
       ),
     )
     .limit(1);
@@ -2191,6 +2206,7 @@ async function assertWorkspaceMember(
       and(
         eq(memberships.workspaceId, workspaceId),
         eq(memberships.userId, userId),
+        eq(memberships.status, "active"),
       ),
     )
     .limit(1);

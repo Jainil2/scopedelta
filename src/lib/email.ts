@@ -9,9 +9,12 @@ import {
   clientProjectParticipants,
   projects,
   users,
+  workspaceInvitations,
 } from "@/db/schema";
 import { getAppUrl, getSmtpConfig } from "@/lib/env";
 import { consumeManagedEmailUsage } from "@/server/billing";
+import { recordWorkspaceProductSignal } from "@/server/self-service";
+import { recordWorkspaceInvitationEmailResult } from "@/server/workspaces";
 
 type Mail = {
   to: string;
@@ -78,15 +81,62 @@ export function scheduleWorkspaceInvitationEmail(
   to: string,
   workspaceName: string,
   token: string,
+  invitationId?: string,
+  workspaceId?: string,
 ) {
-  const url = `${getAppUrl()}/invitations/accept#token=${encodeURIComponent(token)}`;
+  const url = workspaceInvitationUrl(token);
   const safeUrl = escapeHtml(url);
-  scheduleEmail({
+  const mail = {
     to,
     subject: `Join ${workspaceName} in ScopeDelta`,
     text: `You have been invited to join a ScopeDelta workspace: ${url}\n\nThis link expires in seven days.`,
     html: `<p>You have been invited to join <strong>${escapeHtml(workspaceName)}</strong> in ScopeDelta.</p><p><a href="${safeUrl}">Accept invitation</a></p><p>This link expires in seven days.</p>`,
+  };
+  if (!invitationId || !workspaceId) {
+    scheduleEmail(mail);
+    return;
+  }
+  after(async () => {
+    try {
+      const current = await getDb()
+        .select({ attempts: workspaceInvitations.emailAttemptCount })
+        .from(workspaceInvitations)
+        .where(eq(workspaceInvitations.id, invitationId))
+        .limit(1);
+      if (!current[0]) return;
+      await consumeManagedEmailUsage({
+        workspaceId,
+        sourceType: "workspace_invitation",
+        sourceId: invitationId,
+        attemptNumber: current[0].attempts + 1,
+      });
+      await deliver(mail);
+      await recordWorkspaceInvitationEmailResult(invitationId, "sent");
+      await recordEmailSignal(
+        workspaceId,
+        invitationId,
+        "succeeded",
+        "workspace_invitation",
+      );
+    } catch {
+      await recordWorkspaceInvitationEmailResult(
+        invitationId,
+        "failed",
+        "delivery_failed",
+      );
+      await recordEmailSignal(
+        workspaceId,
+        invitationId,
+        "failed",
+        "workspace_invitation",
+      );
+      console.error("workspace_invitation_email_delivery_failed");
+    }
   });
+}
+
+export function workspaceInvitationUrl(token: string) {
+  return `${getAppUrl()}/invitations/accept#token=${encodeURIComponent(token)}`;
 }
 
 export function scheduleClientInvitationEmail(
@@ -98,6 +148,7 @@ export function scheduleClientInvitationEmail(
   const url = `${getAppUrl()}/client/invitations/accept#token=${encodeURIComponent(token)}`;
   const safeUrl = escapeHtml(url);
   after(async () => {
+    let workspaceId: string | null = null;
     try {
       const invitation = await getDb()
         .select({
@@ -112,6 +163,7 @@ export function scheduleClientInvitationEmail(
         .where(eq(clientProjectInvitations.id, invitationId))
         .limit(1);
       if (!invitation[0]) return;
+      workspaceId = invitation[0].workspaceId;
       await consumeManagedEmailUsage({
         workspaceId: invitation[0].workspaceId,
         sourceType: "client_invitation",
@@ -133,6 +185,12 @@ export function scheduleClientInvitationEmail(
           updatedAt: new Date(),
         })
         .where(eq(clientProjectInvitations.id, invitationId));
+      await recordEmailSignal(
+        workspaceId,
+        invitationId,
+        "succeeded",
+        "client_invitation",
+      );
     } catch {
       await getDb()
         .update(clientProjectInvitations)
@@ -143,6 +201,14 @@ export function scheduleClientInvitationEmail(
           updatedAt: new Date(),
         })
         .where(eq(clientProjectInvitations.id, invitationId));
+      if (workspaceId) {
+        await recordEmailSignal(
+          workspaceId,
+          invitationId,
+          "failed",
+          "client_invitation",
+        );
+      }
       console.error("client_invitation_email_delivery_failed");
     }
   });
@@ -227,8 +293,20 @@ export async function scheduleClientCollaborationNotificationEmails(
             html: `<p>A shared project has an update that needs your attention.</p><p><a href="${escapeHtml(url)}">Open ScopeDelta</a></p>`,
           });
           await updateClientNotificationDelivery(notification.id, "sent");
+          await recordEmailSignal(
+            notification.workspaceId,
+            notification.id,
+            "succeeded",
+            "client_notification",
+          );
         } catch {
           await updateClientNotificationDelivery(notification.id, "failed");
+          await recordEmailSignal(
+            notification.workspaceId,
+            notification.id,
+            "failed",
+            "client_notification",
+          );
           console.error("client_notification_email_delivery_failed");
         }
       });
@@ -266,4 +344,24 @@ function escapeHtml(value: string) {
         "'": "&#039;",
       })[character]!,
   );
+}
+
+async function recordEmailSignal(
+  workspaceId: string,
+  subjectId: string,
+  outcome: "succeeded" | "failed",
+  dimension:
+    "workspace_invitation" | "client_invitation" | "client_notification",
+) {
+  try {
+    await recordWorkspaceProductSignal(getDb(), {
+      workspaceId,
+      eventType: "email_delivery",
+      outcome,
+      dimension,
+      subjectId,
+    });
+  } catch {
+    console.error("email_product_signal_record_failed");
+  }
 }

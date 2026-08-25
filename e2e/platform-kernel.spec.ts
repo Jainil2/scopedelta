@@ -76,6 +76,25 @@ test("verified signup, workspace persistence, invitation, and role management", 
     page.getByRole("heading", { name: "Northstar Delivery" }),
   ).toBeVisible();
   await expect(page.getByText("Tenant boundary active")).toBeVisible();
+  const workspacePath = new URL(page.url()).pathname;
+  const workspaceSlug = workspacePath.split("/").at(-1)!;
+  await page.getByRole("link", { name: "Continue setup" }).click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Reach the first useful delivery state",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText(/1 of 4 core steps complete/)).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss checklist" }).click();
+  await expect(page.getByRole("status")).toContainText("Checklist dismissed");
+  await page.getByRole("link", { name: "Overview" }).click();
+  await expect(page.getByRole("link", { name: "Continue setup" })).toHaveCount(
+    0,
+  );
+  await page.getByRole("link", { name: "Getting started" }).click();
+  await page.getByRole("button", { name: "Resume checklist" }).click();
+  await expect(page.getByRole("status")).toContainText("Checklist resumed");
+  await page.goto(workspacePath);
 
   await page.reload();
   await expect(
@@ -91,7 +110,10 @@ test("verified signup, workspace persistence, invitation, and role management", 
   await page.getByRole("link", { name: "Members" }).click();
   await page.getByLabel("Teammate email").fill(memberEmail);
   await page.getByRole("button", { name: "Invite teammate" }).click();
-  await expect(page.getByText("Invitation sent.")).toBeVisible();
+  await expect(page.getByText(/Invitation created/)).toBeVisible();
+  await expect(page.getByLabel("One-time invitation link")).toHaveValue(
+    /\/invitations\/accept#token=/,
+  );
 
   const invitationUrl = await waitForEmailLink(
     request,
@@ -122,8 +144,6 @@ test("verified signup, workspace persistence, invitation, and role management", 
   await expect(memberPage.getByText(/Authenticated workspace/)).toContainText(
     "member",
   );
-  await memberContext.close();
-
   await page.reload();
   const memberRole = page.getByRole("combobox", {
     name: "Role for Member Test",
@@ -131,6 +151,41 @@ test("verified signup, workspace persistence, invitation, and role management", 
   await expect(memberRole).toBeVisible();
   await memberRole.selectOption("admin");
   await expect(memberRole).toHaveValue("admin");
+  await page.getByRole("button", { name: "Suspend access" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Workspace access suspended",
+  );
+  const suspendedResponse = await memberPage.goto(
+    `${workspacePath}/settings/members`,
+  );
+  expect(suspendedResponse?.status()).toBe(404);
+  await page.getByRole("button", { name: "Reactivate" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Workspace access reactivated",
+  );
+  await memberPage.goto(workspacePath);
+  await expect(
+    memberPage.getByRole("heading", { name: "Northstar Delivery" }),
+  ).toBeVisible();
+  await memberContext.close();
+
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await page
+    .getByLabel(/Type the workspace slug to confirm/)
+    .fill(workspaceSlug);
+  await page.getByLabel(/reviewed the available export path/).check();
+  await page.getByLabel(/records remain/).check();
+  await page.getByRole("button", { name: "Record lifecycle request" }).click();
+  const lifecycleRegion = page.getByRole("region", {
+    name: "Request closure or deletion",
+  });
+  await expect(lifecycleRegion.getByRole("status")).toContainText(
+    "No workspace data was deleted",
+  );
+  await page.getByRole("button", { name: "Cancel request" }).click();
+  await expect(lifecycleRegion.getByRole("status")).toContainText(
+    "Lifecycle request canceled",
+  );
 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(

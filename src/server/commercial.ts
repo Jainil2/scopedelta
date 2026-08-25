@@ -57,6 +57,7 @@ import {
   type Transaction,
 } from "@/server/delivery";
 import type { UserActor } from "@/server/workspaces";
+import { recordWorkspaceProductSignal } from "@/server/self-service";
 import {
   assertDraftBaselineVersion,
   getBaselineVersionEvidenceSourceIds,
@@ -522,6 +523,19 @@ export async function createCommercialBaseline(
       targetType: "commercial_baseline",
       targetId: id,
       metadata: { projectId, versionId, sourceId: input.sourceId },
+    });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "commercial_baseline_created",
+      outcome: "completed",
+      subjectId: id,
+    });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "onboarding_step_completed",
+      outcome: "completed",
+      dimension: "commercial_baseline",
+      subjectId: id,
     });
     return id;
   });

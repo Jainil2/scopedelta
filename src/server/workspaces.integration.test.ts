@@ -10,14 +10,27 @@ import {
   auditEvents,
   authRateLimits,
   memberships,
+  projectMemberships,
+  projects,
   sessions,
   users,
   verifications,
   workspaceInvitations,
+  workspaceLifecycleRequests,
+  workspaceOnboardingPreferences,
+  workspaceProductSignals,
   workspaceSettings,
   workspaces,
 } from "@/db/schema";
 import { PlatformError } from "@/lib/platform-errors";
+import { createClient, createProject } from "@/server/delivery";
+import {
+  cancelWorkspaceLifecycleRequest,
+  getWorkspaceOnboarding,
+  recordWorkspaceProductSignal,
+  requestWorkspaceLifecycle,
+  setWorkspaceOnboardingDismissed,
+} from "@/server/self-service";
 import {
   acceptWorkspaceInvitation,
   createWorkspace,
@@ -27,6 +40,7 @@ import {
   removeWorkspaceMember,
   updateWorkspace,
   updateWorkspaceMemberRole,
+  updateWorkspaceMemberStatus,
 } from "@/server/workspaces";
 
 const databaseUrl =
@@ -42,6 +56,9 @@ const db = getDb();
 describe("workspace domain boundary", () => {
   beforeEach(async () => {
     await db.execute(sql`truncate table ${auditEvents}`);
+    await db.delete(workspaceLifecycleRequests);
+    await db.delete(workspaceOnboardingPreferences);
+    await db.delete(workspaceProductSignals);
     await db.delete(workspaceInvitations);
     await db.delete(memberships);
     await db.delete(workspaceSettings);
@@ -154,7 +171,7 @@ describe("workspace domain boundary", () => {
     await updateWorkspaceMemberRole(owner, workspace.id, memberId, "owner");
     await expect(
       removeWorkspaceMember(owner, workspace.id, ownerMembership[0]!.id),
-    ).resolves.toEqual({ id: ownerMembership[0]!.id });
+    ).resolves.toEqual({ id: ownerMembership[0]!.id, status: "suspended" });
   });
 
   it("isolates multi-workspace membership and enforces the admin boundary", async () => {
@@ -200,7 +217,7 @@ describe("workspace domain boundary", () => {
     ).rejects.toMatchObject({ code: "forbidden", status: 403 });
     await expect(
       removeWorkspaceMember(admin, first.id, memberMembershipId),
-    ).resolves.toEqual({ id: memberMembershipId });
+    ).resolves.toEqual({ id: memberMembershipId, status: "suspended" });
   });
 
   it("accepts a hashed invitation only for its verified matching identity", async () => {
@@ -288,6 +305,179 @@ describe("workspace domain boundary", () => {
         ),
       );
     expect(remainingOwners).toHaveLength(1);
+  });
+
+  it("suspends access without deleting history or silently restoring project grants", async () => {
+    const owner = await createUser("owner@example.test", "Owner");
+    const member = await createUser("member@example.test", "Member");
+    const workspace = await createWorkspace(owner, {
+      name: "Suspension Boundary",
+    });
+    const membershipId = randomUUID();
+    await db.insert(memberships).values({
+      id: membershipId,
+      workspaceId: workspace.id,
+      userId: member.userId,
+      role: "member",
+    });
+    const client = await createClient(owner, workspace.id, {
+      name: "Client",
+      internalReference: null,
+      summary: null,
+    });
+    const project = await createProject(owner, workspace.id, {
+      clientId: client.id,
+      key: "SAFE",
+      name: "Safe delivery",
+      summary: null,
+      leadUserId: member.userId,
+    });
+
+    await expect(
+      updateWorkspaceMemberStatus(
+        owner,
+        workspace.id,
+        membershipId,
+        "suspended",
+      ),
+    ).rejects.toMatchObject({
+      code: "member_leads_active_project",
+      status: 409,
+    });
+
+    await db
+      .update(projects)
+      .set({ leadUserId: owner.userId })
+      .where(eq(projects.id, project.id));
+    await expect(
+      updateWorkspaceMemberStatus(
+        owner,
+        workspace.id,
+        membershipId,
+        "suspended",
+      ),
+    ).resolves.toMatchObject({ id: membershipId, status: "suspended" });
+    await expect(
+      getWorkspaceBySlug(member, workspace.slug),
+    ).rejects.toMatchObject({
+      code: "not_found",
+      status: 404,
+    });
+    await expect(
+      db
+        .select()
+        .from(projectMemberships)
+        .where(eq(projectMemberships.userId, member.userId)),
+    ).resolves.toHaveLength(0);
+
+    await expect(
+      updateWorkspaceMemberStatus(owner, workspace.id, membershipId, "active"),
+    ).resolves.toMatchObject({ id: membershipId, status: "active" });
+    await expect(
+      getWorkspaceBySlug(member, workspace.slug),
+    ).resolves.toMatchObject({
+      id: workspace.id,
+    });
+    await expect(
+      db
+        .select()
+        .from(projectMemberships)
+        .where(eq(projectMemberships.userId, member.userId)),
+    ).resolves.toHaveLength(0);
+  });
+
+  it("derives onboarding from authoritative state and keeps dismissal per admin", async () => {
+    const owner = await createUser("owner@example.test", "Owner");
+    const outsider = await createUser("outsider@example.test", "Outsider");
+    const workspace = await createWorkspace(owner, {
+      name: "Activation Boundary",
+    });
+
+    const initial = await getWorkspaceOnboarding(owner, workspace.id);
+    expect(initial.complete).toBe(false);
+    expect(
+      initial.steps.find((step) => step.id === "workspace_profile")?.status,
+    ).toBe("complete");
+    expect(
+      initial.steps.find((step) => step.id === "first_client")?.status,
+    ).toBe("actionable");
+    await setWorkspaceOnboardingDismissed(owner, workspace.id, true);
+    await expect(
+      getWorkspaceOnboarding(owner, workspace.id),
+    ).resolves.toMatchObject({
+      dismissed: true,
+    });
+    await setWorkspaceOnboardingDismissed(owner, workspace.id, false);
+    await expect(
+      getWorkspaceOnboarding(owner, workspace.id),
+    ).resolves.toMatchObject({
+      dismissed: false,
+    });
+    await expect(
+      getWorkspaceOnboarding(outsider, workspace.id),
+    ).rejects.toMatchObject({
+      code: "not_found",
+      status: 404,
+    });
+  });
+
+  it("records non-destructive lifecycle requests and bounded aggregate signals", async () => {
+    const owner = await createUser("owner@example.test", "Owner");
+    const workspace = await createWorkspace(owner, {
+      name: "Lifecycle Boundary",
+    });
+
+    await expect(
+      requestWorkspaceLifecycle(owner, workspace.id, {
+        intent: "deletion",
+        confirmation: "wrong-slug",
+        exportAcknowledged: true,
+        retentionAcknowledged: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "lifecycle_confirmation_required",
+      status: 400,
+    });
+    const request = await requestWorkspaceLifecycle(owner, workspace.id, {
+      intent: "closure",
+      confirmation: workspace.slug,
+      exportAcknowledged: true,
+      retentionAcknowledged: true,
+    });
+    await expect(
+      getWorkspaceBySlug(owner, workspace.slug),
+    ).resolves.toMatchObject({
+      id: workspace.id,
+    });
+    await expect(
+      cancelWorkspaceLifecycleRequest(owner, workspace.id, request.id),
+    ).resolves.toMatchObject({ state: "canceled" });
+
+    await recordWorkspaceProductSignal(db, {
+      workspaceId: workspace.id,
+      eventType: "email_delivery",
+      outcome: "failed",
+      dimension: "configuration",
+    });
+    await recordWorkspaceProductSignal(db, {
+      workspaceId: workspace.id,
+      eventType: "email_delivery",
+      outcome: "failed",
+      dimension: "configuration",
+    });
+    const signals = await db
+      .select()
+      .from(workspaceProductSignals)
+      .where(
+        and(
+          eq(workspaceProductSignals.workspaceId, workspace.id),
+          eq(workspaceProductSignals.eventType, "email_delivery"),
+        ),
+      );
+    expect(signals).toHaveLength(1);
+    expect(signals[0]?.occurrenceCount).toBe(2);
+    expect(JSON.stringify(signals)).not.toContain(owner.email);
+    expect(JSON.stringify(signals)).not.toContain("Lifecycle Boundary");
   });
 });
 

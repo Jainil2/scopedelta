@@ -29,6 +29,7 @@ type Job = {
   };
   evidenceMap: Record<string, Evidence>;
   result: Record<string, unknown> | null;
+  errorCode: string | null;
   errorMessage: string | null;
   provider: string;
   model: string;
@@ -433,7 +434,7 @@ function JobResult({
       {job.status === "failed" ? (
         <div className="ai-error">
           <h3>Analysis could not be completed</h3>
-          <p>{job.errorMessage}</p>
+          <p>{safeAiFailure(job.errorCode)}</p>
           <p className="metadata">
             No automatic retry or provider fallback occurred.
           </p>
@@ -488,6 +489,21 @@ function JobResult({
       ) : null}
     </>
   );
+}
+
+function safeAiFailure(code: string | null) {
+  if (!code)
+    return "The analysis did not complete. Authoritative delivery state was unchanged.";
+  if (code.includes("config") || code.includes("disabled")) {
+    return "AI is disabled or requires administrator configuration. No authoritative delivery state changed.";
+  }
+  if (code.includes("lease") || code.includes("context")) {
+    return "The analysis became stale before completion. Run a fresh analysis after reviewing current project state.";
+  }
+  if (code.includes("allowance") || code.includes("capacity")) {
+    return "The configured AI allowance or concurrency limit was reached. Retry after capacity is available.";
+  }
+  return "The AI provider could not complete the analysis. Retrying is safe; no authoritative delivery state changed.";
 }
 
 function EvidenceKeys({

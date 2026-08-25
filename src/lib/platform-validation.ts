@@ -24,6 +24,40 @@ export const inviteMemberSchema = z.object({
 
 export const updateMemberSchema = z.object({ role: workspaceRole });
 
+export const updateMemberAccessSchema = z
+  .object({
+    role: workspaceRole.optional(),
+    status: z.enum(["active", "suspended"]).optional(),
+  })
+  .refine(
+    (value) =>
+      Number(Boolean(value.role)) + Number(Boolean(value.status)) === 1,
+    {
+      message: "Choose exactly one role or access status to update.",
+    },
+  );
+
+export const workspaceDirectoryFiltersSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  invitationPage: z.coerce.number().int().min(1).default(1),
+  query: z.string().trim().max(120).optional(),
+  role: workspaceRole.optional(),
+  status: z.enum(["active", "suspended"]).optional(),
+  invitationState: z
+    .enum(["pending", "accepted", "revoked", "expired", "all"])
+    .default("pending"),
+});
+
+export const onboardingPreferenceSchema = z.object({ dismissed: z.boolean() });
+
+export const workspaceLifecycleRequestSchema = z.object({
+  intent: z.enum(["closure", "deletion"]),
+  confirmation: z.string().trim().min(1).max(160),
+  exportAcknowledged: z.literal(true),
+  retentionAcknowledged: z.literal(true),
+});
+
 export const invitationTokenSchema = z.object({
   token: z.string().min(32).max(256),
 });

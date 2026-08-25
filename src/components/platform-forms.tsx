@@ -185,7 +185,9 @@ type Member = {
   name: string;
   email: string;
   role: WorkspaceRole;
+  status: "active" | "suspended";
   joinedAt: string;
+  suspendedAt: string | null;
 };
 type Invitation = {
   id: string;
@@ -193,24 +195,42 @@ type Invitation = {
   role: WorkspaceRole;
   state: string;
   expiresAt: string;
+  emailDeliveryState: "not_requested" | "pending" | "sent" | "failed";
+  emailAttemptCount: number;
+  lastEmailAttemptAt: string | null;
+  lastEmailErrorCode: string | null;
 };
 
 export function MemberManagement({
   workspaceId,
   currentUserId,
   currentRole,
+  workspaceSlug,
+  memberPage,
+  invitationPage,
+  query,
   members,
   invitations,
 }: Readonly<{
   workspaceId: string;
   currentUserId: string;
   currentRole: WorkspaceRole;
+  workspaceSlug: string;
+  memberPage: { number: number; size: number; total: number; pages: number };
+  invitationPage: {
+    number: number;
+    size: number;
+    total: number;
+    pages: number;
+  };
+  query: string;
   members: readonly Member[];
   invitations: readonly Invitation[];
 }>) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [acceptUrl, setAcceptUrl] = useState("");
 
   async function invite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -220,15 +240,19 @@ export function MemberManagement({
     setPending("invite");
     setMessage("");
     try {
-      await apiRequest(`/api/v1/workspaces/${workspaceId}/invitations`, {
-        method: "POST",
-        body: JSON.stringify({
-          email: formValue(data, "email"),
-          role: formValue(data, "role"),
-        }),
-      });
+      const result = await apiRequest<{ acceptUrl: string }>(
+        `/api/v1/workspaces/${workspaceId}/invitations`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            email: formValue(data, "email"),
+            role: formValue(data, "role"),
+          }),
+        },
+      );
       form.reset();
-      setMessage("Invitation sent.");
+      setAcceptUrl(result.acceptUrl);
+      setMessage("Invitation created. Copy the link if email is unavailable.");
       router.refresh();
     } catch (error) {
       setMessage(
@@ -259,23 +283,57 @@ export function MemberManagement({
     }
   }
 
-  async function removeMember(memberId: string) {
+  async function changeStatus(
+    memberId: string,
+    status: "active" | "suspended",
+  ) {
     setPending(memberId);
     setMessage("");
     try {
       await apiRequest(
         `/api/v1/workspaces/${workspaceId}/members/${memberId}`,
-        { method: "DELETE" },
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status }),
+        },
       );
-      if (
+      setMessage(
+        status === "active"
+          ? "Workspace access reactivated. Project access must be granted explicitly."
+          : "Workspace access suspended. Historical evidence was preserved.",
+      );
+      const changedSelf =
         members.find((member) => member.id === memberId)?.userId ===
-        currentUserId
-      ) {
-        router.push("/app");
-      } else router.refresh();
+        currentUserId;
+      if (status === "suspended" && changedSelf) router.push("/app");
+      else router.refresh();
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Could not remove the member.",
+        error instanceof Error ? error.message : "Could not update access.",
+      );
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function reissueInvitation(invitationId: string) {
+    setPending(invitationId);
+    setMessage("");
+    try {
+      const result = await apiRequest<{ acceptUrl: string }>(
+        `/api/v1/workspaces/${workspaceId}/invitations/${invitationId}/reissue`,
+        { method: "POST" },
+      );
+      setAcceptUrl(result.acceptUrl);
+      setMessage(
+        "Invitation reissued with a new token. Older links no longer work.",
+      );
+      router.refresh();
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not reissue the invitation.",
       );
     } finally {
       setPending(null);
@@ -345,6 +403,29 @@ export function MemberManagement({
       <output className="platform-status" aria-live="polite">
         {message}
       </output>
+      {currentRole !== "member" ? (
+        <p className="settings-readonly">
+          Transfer ownership and reassign active project leadership before
+          suspension. Reactivation restores workspace access only; add project
+          access again where it is still appropriate.
+        </p>
+      ) : null}
+      {acceptUrl ? (
+        <div className="invitation-copy-link">
+          <label>
+            One-time invitation link
+            <input
+              readOnly
+              value={acceptUrl}
+              onFocus={(event) => event.currentTarget.select()}
+            />
+          </label>
+          <small>
+            Share only with the intended teammate. The link expires in seven
+            days.
+          </small>
+        </div>
+      ) : null}
       <div className="member-list" aria-label="Workspace members">
         {members.map((member) => {
           const isSelf = member.userId === currentUserId;
@@ -359,6 +440,7 @@ export function MemberManagement({
                   {isSelf ? " (you)" : ""}
                 </strong>
                 <span>{member.email}</span>
+                <span>{member.status} access</span>
               </div>
               <div className="member-actions">
                 {ownerCanManage ? (
@@ -385,9 +467,18 @@ export function MemberManagement({
                     className="app-text-button danger-button"
                     type="button"
                     disabled={pending === member.id}
-                    onClick={() => void removeMember(member.id)}
+                    onClick={() =>
+                      void changeStatus(
+                        member.id,
+                        member.status === "active" ? "suspended" : "active",
+                      )
+                    }
                   >
-                    {isSelf ? "Leave" : "Remove"}
+                    {member.status === "active"
+                      ? isSelf
+                        ? "Suspend my access"
+                        : "Suspend access"
+                      : "Reactivate"}
                   </button>
                 ) : null}
               </div>
@@ -395,6 +486,9 @@ export function MemberManagement({
           );
         })}
       </div>
+      <p className="settings-readonly">
+        Showing {members.length} of {memberPage.total} matching members.
+      </p>
       {invitations.length ? (
         <section
           className="pending-invitations"
@@ -409,18 +503,43 @@ export function MemberManagement({
                   {invitation.role} · expires{" "}
                   {new Date(invitation.expiresAt).toLocaleDateString()}
                 </span>
+                <span>
+                  Email {invitation.emailDeliveryState.replaceAll("_", " ")}
+                  {invitation.emailAttemptCount
+                    ? ` · ${invitation.emailAttemptCount} attempt${invitation.emailAttemptCount === 1 ? "" : "s"}`
+                    : ""}
+                </span>
               </div>
-              <button
-                className="app-text-button danger-button"
-                type="button"
-                disabled={pending === invitation.id}
-                onClick={() => void revokeInvitation(invitation.id)}
-              >
-                Revoke
-              </button>
+              <div className="member-actions">
+                <button
+                  className="app-text-button"
+                  type="button"
+                  disabled={pending === invitation.id}
+                  onClick={() => void reissueInvitation(invitation.id)}
+                >
+                  Reissue
+                </button>
+                <button
+                  className="app-text-button danger-button"
+                  type="button"
+                  disabled={pending === invitation.id}
+                  onClick={() => void revokeInvitation(invitation.id)}
+                >
+                  Revoke
+                </button>
+              </div>
             </div>
           ))}
         </section>
+      ) : null}
+      {memberPage.pages > 1 || invitationPage.pages > 1 ? (
+        <p className="settings-readonly">
+          Refine the server-side search to narrow large directories. Current
+          query: {query || "all"}.{" "}
+          <Link href={`/app/${workspaceSlug}/settings/members`}>
+            Clear filters
+          </Link>
+        </p>
       ) : null}
     </div>
   );

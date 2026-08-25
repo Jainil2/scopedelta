@@ -303,6 +303,7 @@ describe("delivery workspace", () => {
       <ProjectDirectory
         workspaceId="workspace-id"
         workspaceSlug="northstar"
+        lifecycle="current"
         clients={[
           {
             id: "client-105",

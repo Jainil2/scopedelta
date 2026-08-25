@@ -477,29 +477,38 @@ async function reconcileRepositoryById(
   const context = await repositoryProviderContext(repositoryId);
   try {
     const repository = asGitHubRepository(context);
-    const evidence = pullNumber
-      ? [
-          await getGitHubPullRequestEvidence(
-            context.installationId,
-            repository,
-            pullNumber,
-          ),
-        ]
-      : await listGitHubPullRequestEvidence(
+    let evidence: ProviderPullRequestEvidence[];
+    let repositoryCoverageComplete = false;
+    if (pullNumber) {
+      evidence = [
+        await getGitHubPullRequestEvidence(
           context.installationId,
           repository,
-          MAX_RECONCILED_PULLS,
-        );
-    await upsertProviderEvidence(repositoryId, evidence, actorType, actorId);
-    await getDb()
-      .update(providerWebhookDeliveries)
-      .set({ state: "processed", errorCode: null, processedAt: new Date() })
-      .where(
-        and(
-          eq(providerWebhookDeliveries.repositoryId, repositoryId),
-          eq(providerWebhookDeliveries.state, "failed"),
+          pullNumber,
         ),
+      ];
+    } else {
+      const listedEvidence = await listGitHubPullRequestEvidence(
+        context.installationId,
+        repository,
+        MAX_RECONCILED_PULLS + 1,
       );
+      repositoryCoverageComplete =
+        listedEvidence.length <= MAX_RECONCILED_PULLS;
+      evidence = listedEvidence.slice(0, MAX_RECONCILED_PULLS);
+    }
+    await upsertProviderEvidence(repositoryId, evidence, actorType, actorId);
+    if (repositoryCoverageComplete) {
+      await getDb()
+        .update(providerWebhookDeliveries)
+        .set({ state: "processed", errorCode: null, processedAt: new Date() })
+        .where(
+          and(
+            eq(providerWebhookDeliveries.repositoryId, repositoryId),
+            eq(providerWebhookDeliveries.state, "failed"),
+          ),
+        );
+    }
     return evidence.length;
   } catch (error) {
     await markRepositoryStale(repositoryId, error);

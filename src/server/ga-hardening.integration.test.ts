@@ -118,12 +118,13 @@ describe("SC-012 GA hardening", () => {
       role: "admin",
     });
     const content = Buffer.from("signed commercial source\n", "utf8");
+    const longSourceName = `${"signed-amendment-".repeat(8)}final.pdf`;
     await db.insert(commercialEvidenceSources).values({
       id: randomUUID(),
       projectId: project.id,
       idempotencyKey: randomUUID(),
       kind: "pasted_text",
-      name: "statement-of-work.txt",
+      name: longSourceName,
       mediaType: "text/plain",
       byteSize: content.length,
       contentSha256: createHash("sha256").update(content).digest("hex"),
@@ -182,7 +183,8 @@ describe("SC-012 GA hardening", () => {
     );
     const archive = gunzipSync(first.artifact).toString("utf8");
     expect(archive).toContain("scopedelta-operational-export");
-    expect(archive).toContain("statement-of-work.txt");
+    expect(archive).toContain("commercial-sources/");
+    expect(archive).toContain(".pdf");
     expect(archive).toContain("signed commercial source");
     expect(archive).toContain("work_item_comment_revisions");
     expect(archive).toContain("commercial_baseline_version_sources");
@@ -319,6 +321,63 @@ describe("SC-012 GA hardening", () => {
     await expect(
       cancelWorkspaceLifecycleRequest(owner, workspace.id, cancelable.id),
     ).resolves.toMatchObject({ state: "canceled" });
+  });
+
+  it("notifies immediately when a resolved operator incident recurs", async () => {
+    const { owner, workspace, project } = await fixture();
+    vi.stubEnv("OPERATOR_ALERT_TO", "operator@example.test");
+    vi.stubEnv("SMTP_HOST", "127.0.0.1");
+    vi.stubEnv("SMTP_PORT", "1025");
+    vi.stubEnv("SMTP_SECURE", "false");
+    vi.stubEnv("SMTP_FROM", "ScopeDelta Test <no-reply@example.test>");
+    const jobId = randomUUID();
+    const jobValues = {
+      id: jobId,
+      workspaceId: workspace.id,
+      projectId: project.id,
+      createdByUserId: owner.userId,
+      kind: "delivery_risk_brief" as const,
+      status: "failed" as const,
+      idempotencyKey: randomUUID(),
+      promptVersion: "ga-v1",
+      contextSnapshot: {},
+      evidenceMap: {},
+      contextFingerprint: "ga-recurring-incident",
+      provider: "fake",
+      model: "fake",
+      providerBaseUrl: "http://127.0.0.1",
+      executionConfigFingerprint: "ga-config",
+      errorCode: "provider_unavailable",
+      completedAt: new Date(),
+    };
+
+    await db.insert(aiJobs).values(jobValues);
+    await expect(runOperationsAlerts()).resolves.toMatchObject({
+      outboundAttempted: true,
+      delivered: true,
+    });
+    await db.delete(aiJobs).where(eq(aiJobs.id, jobId));
+    await expect(runOperationsAlerts()).resolves.toMatchObject({
+      outboundAttempted: false,
+    });
+    await expect(
+      db
+        .select({ state: operatorIncidents.state })
+        .from(operatorIncidents)
+        .where(eq(operatorIncidents.signalType, "ai_attention")),
+    ).resolves.toEqual([{ state: "resolved" }]);
+
+    await db.insert(aiJobs).values(jobValues);
+    await expect(runOperationsAlerts()).resolves.toMatchObject({
+      outboundAttempted: true,
+      delivered: true,
+    });
+    await expect(
+      db
+        .select({ state: operatorAlertDeliveries.state })
+        .from(operatorAlertDeliveries)
+        .where(eq(operatorAlertDeliveries.state, "sent")),
+    ).resolves.toHaveLength(2);
   });
 
   it("reconciles expired AI reservations and sends deduplicated content-free operator evidence", async () => {

@@ -367,13 +367,21 @@ async function readDataset(
   );
 }
 
-function safeFileName(name: string) {
+function safeFileName(name: string, maxBytes: number) {
   const cleaned = name
     .normalize("NFKC")
     .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-  return cleaned || "source";
+    .replace(/^-+|-+$/g, "");
+  const fallback = "source".slice(0, maxBytes);
+  if (!cleaned) return fallback;
+  if (Buffer.byteLength(cleaned) <= maxBytes) return cleaned;
+  const extensionIndex = cleaned.lastIndexOf(".");
+  const extension =
+    extensionIndex > 0 && cleaned.length - extensionIndex <= 12
+      ? cleaned.slice(extensionIndex)
+      : "";
+  const stemBytes = Math.max(1, maxBytes - Buffer.byteLength(extension));
+  return `${cleaned.slice(0, stemBytes)}${extension}`;
 }
 
 async function readCommercialFiles(client: PoolClient, workspaceId: string) {
@@ -399,8 +407,10 @@ async function readCommercialFiles(client: PoolClient, workspaceId: string) {
     const content = Buffer.from(row.original_content);
     if (sha256(content) !== row.content_sha256)
       throw new Error("export_source_hash_mismatch");
+    const prefix = `commercial-sources/${row.id}-`;
+    const remainingNameBytes = 100 - Buffer.byteLength(prefix);
     return {
-      name: `commercial-sources/${row.id}-${safeFileName(row.name)}`,
+      name: `${prefix}${safeFileName(row.name, remainingNameBytes)}`,
       content,
       sha256: row.content_sha256,
     } satisfies ExportEntry;

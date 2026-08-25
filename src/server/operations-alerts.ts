@@ -109,8 +109,13 @@ async function reconcileIncidents(
          severity = excluded.severity,
          safe_error_code = excluded.safe_error_code,
          state = 'open', resolved_at = null,
+         last_notified_at = case
+           when operator_incidents.state = 'resolved' then null
+           else operator_incidents.last_notified_at
+         end,
          occurrence_count = operator_incidents.occurrence_count + 1,
          escalated_at = case
+           when operator_incidents.state = 'resolved' then now()
            when operator_incidents.severity = 'warning' and excluded.severity = 'critical' then now()
            else operator_incidents.escalated_at
          end,

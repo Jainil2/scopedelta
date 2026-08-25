@@ -28,6 +28,7 @@ export default async function ProjectsPage({
       clients={data.clientResult.items}
       clientPageInfo={data.clientResult.pageInfo}
       members={data.directory.members}
+      memberPageInfo={data.directory.memberPage}
       projects={data.projectResult.items}
       projectPageInfo={data.projectResult.pageInfo}
       query={data.projectFilters.query}
@@ -78,7 +79,7 @@ async function loadProjects(
       ),
       listWorkspaceMembers(actor, workspace.id, {
         status: "active",
-        pageSize: 100,
+        pageSize: 25,
       }),
     ]);
     return {

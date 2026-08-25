@@ -444,27 +444,46 @@ export function recoveryGuidance(
   const capacity = Boolean(
     code?.includes("allowance") || code?.includes("capacity"),
   );
+  const validation = Boolean(
+    code?.includes("validation") ||
+    code?.includes("invalid") ||
+    code?.includes("parse"),
+  );
   const stale = Boolean(code?.includes("lease") || code?.includes("stale"));
   return {
     failureClass: configuration
       ? "configuration"
       : capacity
         ? "capacity"
-        : stale
-          ? "stale_execution"
-          : kind === "email"
-            ? "delivery"
-            : "provider",
+        : validation
+          ? "validation"
+          : stale
+            ? "stale_execution"
+            : kind === "email"
+              ? "delivery"
+              : "provider",
     authoritativeState:
       kind === "import" && committedAnything
         ? "partially_committed"
         : kind === "github" || kind === "email"
           ? "preserved"
           : "unchanged",
-    retry: configuration || capacity ? "safe_after_configuration" : "safe_now",
-    summary: recoverySummary(kind, committedAnything),
+    retry: validation
+      ? "not_applicable"
+      : configuration || capacity
+        ? "safe_after_configuration"
+        : "safe_now",
+    summary: validation
+      ? committedAnything
+        ? "Some valid records were preserved, but the remaining source or input must be corrected before continuing."
+        : "Authoritative state is unchanged. Correct the source or input before trying again."
+      : recoverySummary(kind, committedAnything),
     nextAction: {
-      label: configuration ? "Review configuration" : "Retry safely",
+      label: validation
+        ? "Correct source or input"
+        : configuration
+          ? "Review configuration"
+          : "Retry safely",
       href,
     },
     adminRequired: configuration || capacity || kind === "billing",
@@ -599,19 +618,8 @@ export async function listOperatorSignals(limit = 100) {
   const bounded = Math.max(1, Math.min(limit, 200));
   const database = getDb();
   const staleBefore = new Date(Date.now() - 15 * 60_000);
-  const [
-    funnel,
-    ai,
-    imports,
-    billing,
-    provider,
-    workspaceEmail,
-    clientEmail,
-    notificationEmail,
-    lifecycle,
-    repeated,
-  ] = await Promise.all([
-    database
+  const buckets = await resolveNamedPromises({
+    workspaceEmail: database
       .select({
         id: workspaceInvitations.id,
         workspaceId: workspaceInvitations.workspaceId,
@@ -623,7 +631,7 @@ export async function listOperatorSignals(limit = 100) {
       .where(eq(workspaceInvitations.emailDeliveryState, "failed"))
       .orderBy(desc(workspaceInvitations.lastEmailAttemptAt))
       .limit(bounded),
-    database
+    clientEmail: database
       .select({
         id: clientProjectInvitations.id,
         workspaceId: projects.workspaceId,
@@ -635,7 +643,7 @@ export async function listOperatorSignals(limit = 100) {
       .where(eq(clientProjectInvitations.emailDeliveryState, "failed"))
       .orderBy(desc(clientProjectInvitations.lastEmailAttemptAt))
       .limit(bounded),
-    database
+    funnel: database
       .select({
         eventType: workspaceProductSignals.eventType,
         workspaces: count(),
@@ -650,7 +658,7 @@ export async function listOperatorSignals(limit = 100) {
         ]),
       )
       .groupBy(workspaceProductSignals.eventType),
-    database
+    ai: database
       .select({
         id: aiJobs.id,
         workspaceId: aiJobs.workspaceId,
@@ -670,7 +678,7 @@ export async function listOperatorSignals(limit = 100) {
       )
       .orderBy(desc(aiJobs.updatedAt))
       .limit(bounded),
-    database
+    imports: database
       .select({
         id: migrationImportSessions.id,
         workspaceId: migrationImportSessions.workspaceId,
@@ -690,7 +698,7 @@ export async function listOperatorSignals(limit = 100) {
       )
       .orderBy(desc(migrationImportSessions.updatedAt))
       .limit(bounded),
-    database
+    billing: database
       .select({
         id: billingProviderEvents.eventId,
         workspaceId: billingProviderEvents.workspaceId,
@@ -710,7 +718,7 @@ export async function listOperatorSignals(limit = 100) {
       )
       .orderBy(desc(billingProviderEvents.receivedAt))
       .limit(bounded),
-    database
+    provider: database
       .select({
         id: providerWebhookDeliveries.id,
         status: providerWebhookDeliveries.state,
@@ -729,7 +737,7 @@ export async function listOperatorSignals(limit = 100) {
       )
       .orderBy(desc(providerWebhookDeliveries.receivedAt))
       .limit(bounded),
-    database
+    notificationEmail: database
       .select({
         workspaceId: clientCollaborationNotifications.workspaceId,
         failures: count(),
@@ -742,7 +750,7 @@ export async function listOperatorSignals(limit = 100) {
         desc(sql`max(${clientCollaborationNotifications.lastEmailAttemptAt})`),
       )
       .limit(bounded),
-    database
+    lifecycle: database
       .select({
         id: workspaceLifecycleRequests.id,
         workspaceId: workspaceLifecycleRequests.workspaceId,
@@ -753,7 +761,7 @@ export async function listOperatorSignals(limit = 100) {
       .where(eq(workspaceLifecycleRequests.state, "requested"))
       .orderBy(asc(workspaceLifecycleRequests.requestedAt))
       .limit(bounded),
-    database
+    repeated: database
       .select({
         workspaceId: workspaceProductSignals.workspaceId,
         eventType: workspaceProductSignals.eventType,
@@ -774,23 +782,54 @@ export async function listOperatorSignals(limit = 100) {
       )
       .orderBy(desc(workspaceProductSignals.lastOccurredAt))
       .limit(bounded),
-  ]);
+  });
+  return buildOperatorSignalExport(buckets);
+}
+
+type OperatorSignalBuckets = {
+  funnel: readonly unknown[];
+  ai: readonly unknown[];
+  imports: readonly unknown[];
+  billing: readonly unknown[];
+  provider: readonly unknown[];
+  workspaceEmail: readonly unknown[];
+  clientEmail: readonly unknown[];
+  notificationEmail: readonly unknown[];
+  lifecycle: readonly unknown[];
+  repeated: readonly unknown[];
+};
+
+export function buildOperatorSignalExport<T extends OperatorSignalBuckets>(
+  buckets: T,
+) {
   return {
-    funnel,
+    funnel: buckets.funnel,
     attention: {
-      ai,
-      imports,
-      billing,
-      provider,
+      ai: buckets.ai,
+      imports: buckets.imports,
+      billing: buckets.billing,
+      provider: buckets.provider,
       email: {
-        workspaceInvitations: workspaceEmail,
-        clientInvitations: clientEmail,
-        notifications: notificationEmail,
+        workspaceInvitations: buckets.workspaceEmail,
+        clientInvitations: buckets.clientEmail,
+        notifications: buckets.notificationEmail,
       },
-      lifecycle,
-      repeated,
+      lifecycle: buckets.lifecycle,
+      repeated: buckets.repeated,
     },
   };
+}
+
+async function resolveNamedPromises<
+  T extends Record<string, Promise<readonly unknown[]>>,
+>(promises: T): Promise<{ [K in keyof T]: Awaited<T[K]> }> {
+  const entries = await Promise.all(
+    Object.entries(promises).map(async ([key, promise]) => [
+      key,
+      await promise,
+    ]),
+  );
+  return Object.fromEntries(entries) as { [K in keyof T]: Awaited<T[K]> };
 }
 
 async function requireWorkspaceAdmin(actor: UserActor, workspaceId: string) {

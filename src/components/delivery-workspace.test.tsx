@@ -13,6 +13,7 @@ import {
   ClientDirectory,
   CommercialProvenanceBadge,
   ProjectDirectory,
+  WorkspaceMemberPicker,
 } from "./delivery-workspace";
 
 describe("delivery workspace", () => {
@@ -326,6 +327,7 @@ describe("delivery workspace", () => {
             email: "owner@example.test",
           },
         ]}
+        memberPageInfo={{ number: 1, size: 25, total: 1, pages: 1 }}
         projects={[
           {
             id: "project-105",
@@ -357,6 +359,80 @@ describe("delivery workspace", () => {
     expect(screen.getByRole("link", { name: /^Previous$/ })).toHaveAttribute(
       "href",
       "/app/northstar/projects?page=2&clientPage=3",
+    );
+  });
+
+  it("searches and pages bounded member choices beyond the initial selector slice", async () => {
+    const memberPage = (userId: string, name: string, number: number) =>
+      new Response(
+        JSON.stringify({
+          data: {
+            members: [
+              {
+                id: `membership-${userId}`,
+                userId,
+                name,
+                email: `${userId}@example.test`,
+                role: "member",
+                status: "active",
+              },
+            ],
+            memberPage: {
+              number,
+              size: 25,
+              total: number === 1 ? 1 : 125,
+              pages: number === 1 ? 1 : 5,
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(memberPage("member-026", "Member 026", 2))
+      .mockResolvedValueOnce(memberPage("member-125", "Member 125", 1));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(
+      <WorkspaceMemberPicker
+        workspaceId="workspace-id"
+        name="leadUserId"
+        label="Lead"
+        initialMembers={[
+          {
+            userId: "member-001",
+            name: "Member 001",
+            email: "member-001@example.test",
+          },
+        ]}
+        initialPageInfo={{ number: 1, size: 25, total: 125, pages: 5 }}
+      />,
+    );
+
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Lead pages" })).getByRole(
+        "button",
+        { name: "Next" },
+      ),
+    );
+    expect(
+      await screen.findByRole("option", { name: /Member 026/ }),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/workspaces/workspace-id/members?status=active&page=2&pageSize=25",
+    );
+
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search lead" }),
+      "Member 125",
+    );
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.selectOptions(screen.getByLabelText("Lead"), "member-125");
+    expect(screen.getByLabelText("Lead")).toHaveValue("member-125");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/workspaces/workspace-id/members?status=active&page=1&pageSize=25&query=Member+125",
     );
   });
 });

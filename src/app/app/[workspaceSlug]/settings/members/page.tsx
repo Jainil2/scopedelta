@@ -56,7 +56,29 @@ export default async function MembersPage({
               <option value="suspended">Suspended</option>
             </select>
           </label>
-          <button type="submit">Search members</button>
+          <label>
+            Workspace role
+            <select name="role" defaultValue={filters.role ?? ""}>
+              <option value="">All</option>
+              <option value="owner">Owner</option>
+              <option value="admin">Admin</option>
+              <option value="member">Member</option>
+            </select>
+          </label>
+          <label>
+            Invitation state
+            <select
+              name="invitationState"
+              defaultValue={filters.invitationState}
+            >
+              <option value="pending">Pending</option>
+              <option value="expired">Expired</option>
+              <option value="revoked">Revoked</option>
+              <option value="accepted">Accepted</option>
+              <option value="all">All</option>
+            </select>
+          </label>
+          <button type="submit">Apply filters</button>
         </form>
         <MemberManagement
           workspaceId={workspace.id}
@@ -65,7 +87,12 @@ export default async function MembersPage({
           workspaceSlug={workspace.slug}
           memberPage={directory.memberPage}
           invitationPage={directory.invitationPage}
-          query={filters.query ?? ""}
+          filters={{
+            query: filters.query ?? "",
+            role: filters.role,
+            status: filters.status,
+            invitationState: filters.invitationState,
+          }}
           members={directory.members.map((member) => ({
             ...member,
             joinedAt: member.joinedAt.toISOString(),

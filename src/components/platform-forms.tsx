@@ -193,12 +193,20 @@ type Invitation = {
   id: string;
   email: string;
   role: WorkspaceRole;
-  state: string;
+  state: "pending" | "accepted" | "revoked";
+  expired: boolean;
   expiresAt: string;
   emailDeliveryState: "not_requested" | "pending" | "sent" | "failed";
   emailAttemptCount: number;
   lastEmailAttemptAt: string | null;
   lastEmailErrorCode: string | null;
+};
+
+type WorkspaceDirectoryViewFilters = {
+  query: string;
+  role?: WorkspaceRole;
+  status?: "active" | "suspended";
+  invitationState: "pending" | "accepted" | "revoked" | "expired" | "all";
 };
 
 export function MemberManagement({
@@ -208,7 +216,7 @@ export function MemberManagement({
   workspaceSlug,
   memberPage,
   invitationPage,
-  query,
+  filters,
   members,
   invitations,
 }: Readonly<{
@@ -223,7 +231,7 @@ export function MemberManagement({
     total: number;
     pages: number;
   };
-  query: string;
+  filters: WorkspaceDirectoryViewFilters;
   members: readonly Member[];
   invitations: readonly Invitation[];
 }>) {
@@ -489,53 +497,134 @@ export function MemberManagement({
       <p className="settings-readonly">
         Showing {members.length} of {memberPage.total} matching members.
       </p>
-      {invitations.length ? (
-        <section
-          className="pending-invitations"
-          aria-labelledby="pending-title"
+      {memberPage.pages > 1 ? (
+        <nav
+          className="pagination compact-pagination"
+          aria-label="Member pages"
         >
-          <h3 id="pending-title">Pending invitations</h3>
-          {invitations.map((invitation) => (
-            <div className="member-row" key={invitation.id}>
-              <div>
-                <strong>{invitation.email}</strong>
-                <span>
-                  {invitation.role} · expires{" "}
-                  {new Date(invitation.expiresAt).toLocaleDateString()}
-                </span>
-                <span>
-                  Email {invitation.emailDeliveryState.replaceAll("_", " ")}
-                  {invitation.emailAttemptCount
-                    ? ` · ${invitation.emailAttemptCount} attempt${invitation.emailAttemptCount === 1 ? "" : "s"}`
-                    : ""}
-                </span>
+          {memberPage.number > 1 ? (
+            <Link
+              href={workspaceDirectoryHref(
+                workspaceSlug,
+                filters,
+                memberPage.number - 1,
+                invitationPage.number,
+              )}
+            >
+              Previous members
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span>
+            Members · page {memberPage.number} of {memberPage.pages}
+          </span>
+          {memberPage.number < memberPage.pages ? (
+            <Link
+              href={workspaceDirectoryHref(
+                workspaceSlug,
+                filters,
+                memberPage.number + 1,
+                invitationPage.number,
+              )}
+            >
+              Next members
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
+      ) : null}
+      {invitations.length ? (
+        <section className="pending-invitations" aria-labelledby="invite-title">
+          <h3 id="invite-title">Invitations</h3>
+          {invitations.map((invitation) => {
+            const state = invitation.expired ? "expired" : invitation.state;
+            return (
+              <div className="member-row" key={invitation.id}>
+                <div>
+                  <strong>{invitation.email}</strong>
+                  <span>
+                    {invitation.role} · {state} · expires{" "}
+                    {new Date(invitation.expiresAt).toLocaleDateString()}
+                  </span>
+                  <span>
+                    Email {invitation.emailDeliveryState.replaceAll("_", " ")}
+                    {invitation.emailAttemptCount
+                      ? ` · ${invitation.emailAttemptCount} attempt${invitation.emailAttemptCount === 1 ? "" : "s"}`
+                      : ""}
+                  </span>
+                </div>
+                <div className="member-actions">
+                  {state !== "accepted" ? (
+                    <button
+                      className="app-text-button"
+                      type="button"
+                      disabled={pending === invitation.id}
+                      onClick={() => void reissueInvitation(invitation.id)}
+                    >
+                      Reissue
+                    </button>
+                  ) : null}
+                  {state === "pending" ? (
+                    <button
+                      className="app-text-button danger-button"
+                      type="button"
+                      disabled={pending === invitation.id}
+                      onClick={() => void revokeInvitation(invitation.id)}
+                    >
+                      Revoke
+                    </button>
+                  ) : null}
+                </div>
               </div>
-              <div className="member-actions">
-                <button
-                  className="app-text-button"
-                  type="button"
-                  disabled={pending === invitation.id}
-                  onClick={() => void reissueInvitation(invitation.id)}
-                >
-                  Reissue
-                </button>
-                <button
-                  className="app-text-button danger-button"
-                  type="button"
-                  disabled={pending === invitation.id}
-                  onClick={() => void revokeInvitation(invitation.id)}
-                >
-                  Revoke
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
       ) : null}
-      {memberPage.pages > 1 || invitationPage.pages > 1 ? (
+      {invitationPage.pages > 1 ? (
+        <nav
+          className="pagination compact-pagination"
+          aria-label="Invitation pages"
+        >
+          {invitationPage.number > 1 ? (
+            <Link
+              href={workspaceDirectoryHref(
+                workspaceSlug,
+                filters,
+                memberPage.number,
+                invitationPage.number - 1,
+              )}
+            >
+              Previous invitations
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span>
+            Invitations · page {invitationPage.number} of {invitationPage.pages}
+          </span>
+          {invitationPage.number < invitationPage.pages ? (
+            <Link
+              href={workspaceDirectoryHref(
+                workspaceSlug,
+                filters,
+                memberPage.number,
+                invitationPage.number + 1,
+              )}
+            >
+              Next invitations
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
+      ) : null}
+      {filters.query ||
+      filters.role ||
+      filters.status ||
+      filters.invitationState !== "pending" ? (
         <p className="settings-readonly">
-          Refine the server-side search to narrow large directories. Current
-          query: {query || "all"}.{" "}
           <Link href={`/app/${workspaceSlug}/settings/members`}>
             Clear filters
           </Link>
@@ -543,6 +632,24 @@ export function MemberManagement({
       ) : null}
     </div>
   );
+}
+
+export function workspaceDirectoryHref(
+  workspaceSlug: string,
+  filters: WorkspaceDirectoryViewFilters,
+  memberPage: number,
+  invitationPage: number,
+) {
+  const query = new URLSearchParams();
+  if (filters.query) query.set("query", filters.query);
+  if (filters.role) query.set("role", filters.role);
+  if (filters.status) query.set("status", filters.status);
+  if (filters.invitationState !== "pending")
+    query.set("invitationState", filters.invitationState);
+  if (memberPage > 1) query.set("page", String(memberPage));
+  if (invitationPage > 1) query.set("invitationPage", String(invitationPage));
+  const suffix = query.toString();
+  return `/app/${workspaceSlug}/settings/members${suffix ? `?${suffix}` : ""}`;
 }
 
 export function InvitationAcceptance({

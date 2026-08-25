@@ -342,6 +342,7 @@ export async function listWorkspaceMembers(
               email: workspaceInvitations.email,
               role: workspaceInvitations.role,
               state: workspaceInvitations.state,
+              expired: sql<boolean>`${workspaceInvitations.state} = 'pending' and ${workspaceInvitations.expiresAt} <= now()`,
               expiresAt: workspaceInvitations.expiresAt,
               emailDeliveryState: workspaceInvitations.emailDeliveryState,
               emailAttemptCount: workspaceInvitations.emailAttemptCount,

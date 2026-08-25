@@ -5265,6 +5265,39 @@ h2 {
   gap: 0.7rem;
 }
 
+.workspace-member-picker {
+  display: grid;
+  flex: 1;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.workspace-member-picker-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.delivery-form .workspace-member-picker button,
+.inline-form .workspace-member-picker button {
+  min-height: 2.35rem;
+  padding: 0.45rem 0.7rem;
+  border-color: var(--line);
+  background: var(--white);
+  color: var(--ink);
+}
+
+.workspace-member-picker .compact-pagination {
+  margin-top: 0;
+  font-size: 0.72rem;
+}
+
+.workspace-member-picker output {
+  color: var(--danger);
+  font-size: 0.78rem;
+}
+
 .lifecycle-actions {
   display: flex;
   flex-wrap: wrap;

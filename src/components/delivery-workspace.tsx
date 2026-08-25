@@ -98,6 +98,187 @@ export type PageInfo = {
   hasNextPage: boolean;
 };
 
+export type WorkspaceMemberPageInfo = {
+  number: number;
+  size: number;
+  total: number;
+  pages: number;
+};
+
+export function WorkspaceMemberPicker({
+  workspaceId,
+  name,
+  label,
+  initialMembers,
+  initialPageInfo,
+  defaultValue,
+  excludeUserIds = [],
+}: Readonly<{
+  workspaceId: string;
+  name: string;
+  label: string;
+  initialMembers: Member[];
+  initialPageInfo: WorkspaceMemberPageInfo;
+  defaultValue?: string;
+  excludeUserIds?: string[];
+}>) {
+  const excluded = useMemo(() => new Set(excludeUserIds), [excludeUserIds]);
+  const eligibleInitial = useMemo(
+    () => initialMembers.filter((member) => !excluded.has(member.userId)),
+    [excluded, initialMembers],
+  );
+  const [members, setMembers] = useState(eligibleInitial);
+  const [pageInfo, setPageInfo] = useState(initialPageInfo);
+  const [selectedUserId, setSelectedUserId] = useState(
+    defaultValue ?? eligibleInitial[0]?.userId ?? "",
+  );
+  const [search, setSearch] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const eligibleMembers = members.filter(
+    (member) => !excluded.has(member.userId),
+  );
+  const selectedMember = [...eligibleInitial, ...eligibleMembers].find(
+    (member) => member.userId === selectedUserId,
+  );
+  const choices = selectedMember
+    ? [
+        selectedMember,
+        ...eligibleMembers.filter(
+          (member) => member.userId !== selectedMember.userId,
+        ),
+      ]
+    : eligibleMembers;
+  const effectiveSelectedUserId =
+    selectedMember?.userId ?? choices[0]?.userId ?? "";
+
+  async function load(page: number) {
+    setLoading(true);
+    setMessage("");
+    try {
+      const query = new URLSearchParams({
+        status: "active",
+        page: String(page),
+        pageSize: "25",
+      });
+      if (search.trim()) query.set("query", search.trim());
+      const response = await fetch(
+        `/api/v1/workspaces/${workspaceId}/members?${query.toString()}`,
+      );
+      const payload = (await response.json()) as {
+        data?: {
+          members: Array<
+            Member & { role?: string; status?: "active" | "suspended" }
+          >;
+          memberPage: WorkspaceMemberPageInfo;
+        };
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.data) {
+        throw new Error(
+          payload.error?.message ?? "Member choices could not be loaded.",
+        );
+      }
+      const nextMembers = payload.data.members
+        .filter((member) => !excluded.has(member.userId))
+        .map((member) => ({
+          userId: member.userId,
+          name: member.name,
+          email: member.email,
+          workspaceRole: member.workspaceRole ?? member.role,
+        }));
+      setMembers(nextMembers);
+      setPageInfo(payload.data.memberPage);
+      if (!selectedUserId && nextMembers[0]) {
+        setSelectedUserId(nextMembers[0].userId);
+      }
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Member choices could not be loaded.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="workspace-member-picker">
+      <label>
+        <span>{label}</span>
+        <select
+          name={name}
+          value={effectiveSelectedUserId}
+          onChange={(event) => setSelectedUserId(event.target.value)}
+          required
+        >
+          {!choices.length ? (
+            <option value="">No matching members</option>
+          ) : null}
+          {choices.map((member) => (
+            <option value={member.userId} key={member.userId}>
+              {member.name} · {member.email}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="workspace-member-picker-search">
+        <label>
+          <span>Search {label.toLowerCase()}</span>
+          <input
+            type="search"
+            value={search}
+            maxLength={120}
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void load(1);
+              }
+            }}
+          />
+        </label>
+        <button type="button" disabled={loading} onClick={() => void load(1)}>
+          {loading ? "Loading…" : "Search"}
+        </button>
+      </div>
+      <nav
+        className="pagination compact-pagination"
+        aria-label={`${label} pages`}
+      >
+        {pageInfo.number > 1 ? (
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void load(pageInfo.number - 1)}
+          >
+            Previous
+          </button>
+        ) : (
+          <span />
+        )}
+        <span>
+          Page {pageInfo.number} of {Math.max(pageInfo.pages, 1)} ·{" "}
+          {pageInfo.total} active members
+        </span>
+        {pageInfo.number < pageInfo.pages ? (
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void load(pageInfo.number + 1)}
+          >
+            Next
+          </button>
+        ) : (
+          <span />
+        )}
+      </nav>
+      {message ? <output>{message}</output> : null}
+    </div>
+  );
+}
+
 export type BacklogFilters = {
   page: number;
   pageSize: number;
@@ -312,6 +493,7 @@ export function ProjectDirectory({
   clients,
   clientPageInfo,
   members,
+  memberPageInfo,
   projects,
   projectPageInfo,
   query,
@@ -322,6 +504,7 @@ export function ProjectDirectory({
   clients: Client[];
   clientPageInfo: PageInfo;
   members: Member[];
+  memberPageInfo: WorkspaceMemberPageInfo;
   projects: Project[];
   projectPageInfo: PageInfo;
   query?: string;
@@ -394,16 +577,13 @@ export function ProjectDirectory({
                 <span>Project name</span>
                 <input name="name" minLength={2} maxLength={160} required />
               </label>
-              <label>
-                <span>Lead</span>
-                <select name="leadUserId" required>
-                  {members.map((member) => (
-                    <option key={member.userId} value={member.userId}>
-                      {member.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <WorkspaceMemberPicker
+                workspaceId={workspaceId}
+                name="leadUserId"
+                label="Lead"
+                initialMembers={members}
+                initialPageInfo={memberPageInfo}
+              />
               <label>
                 <span>Target date</span>
                 <input name="targetDate" type="date" />
@@ -577,6 +757,7 @@ export function ProjectOverview({
   milestones,
   projectMembers,
   workspaceMembers,
+  workspaceMemberPageInfo,
   canManage,
 }: Readonly<{
   workspaceId: string;
@@ -589,16 +770,13 @@ export function ProjectOverview({
   milestones: Milestone[];
   projectMembers: Member[];
   workspaceMembers: Member[];
+  workspaceMemberPageInfo: WorkspaceMemberPageInfo;
   canManage: boolean;
 }>) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
   const milestoneComposerRef = useRef<HTMLDetailsElement>(null);
-  const available = workspaceMembers.filter(
-    (candidate) =>
-      !projectMembers.some((member) => member.userId === candidate.userId),
-  );
 
   async function createMilestone(formData: FormData) {
     const response = await apiRequest(
@@ -747,16 +925,17 @@ export function ProjectOverview({
               <span>Project name</span>
               <input name="name" defaultValue={project.name} required />
             </label>
-            <label>
-              <span>Lead</span>
-              <select name="leadUserId" defaultValue={project.leadUserId}>
-                {projectMembers.map((member) => (
-                  <option value={member.userId} key={member.userId}>
-                    {member.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <WorkspaceMemberPicker
+              workspaceId={workspaceId}
+              name="leadUserId"
+              label="Lead"
+              initialMembers={uniqueMembers([
+                ...projectMembers,
+                ...workspaceMembers,
+              ])}
+              initialPageInfo={workspaceMemberPageInfo}
+              defaultValue={project.leadUserId}
+            />
             <label>
               <span>Start date</span>
               <input
@@ -923,18 +1102,16 @@ export function ProjectOverview({
               </li>
             ))}
           </ul>
-          {canManage && available.length ? (
+          {canManage ? (
             <form action={addMember} className="inline-form">
-              <label>
-                <span>Add member</span>
-                <select name="userId">
-                  {available.map((member) => (
-                    <option value={member.userId} key={member.userId}>
-                      {member.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <WorkspaceMemberPicker
+                workspaceId={workspaceId}
+                name="userId"
+                label="Add member"
+                initialMembers={workspaceMembers}
+                initialPageInfo={workspaceMemberPageInfo}
+                excludeUserIds={projectMembers.map((member) => member.userId)}
+              />
               <button type="submit" disabled={pending}>
                 Add
               </button>
@@ -1777,6 +1954,12 @@ export function workItemPayload(formData: FormData) {
 
 function nullable(value: FormDataEntryValue | null) {
   return typeof value === "string" && value ? value : null;
+}
+
+function uniqueMembers(members: Member[]) {
+  return [
+    ...new Map(members.map((member) => [member.userId, member])).values(),
+  ];
 }
 
 function formText(formData: FormData, name: string) {

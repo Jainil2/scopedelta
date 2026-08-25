@@ -43,6 +43,7 @@ import {
   settleManagedUsageInTransaction,
 } from "@/server/billing";
 import { recordWorkspaceProductSignal } from "@/server/self-service";
+import { consumeActionLimit } from "@/server/action-rate-limit";
 
 import {
   assembleAiContext,
@@ -315,6 +316,11 @@ export async function createAiJob(
   const { config } = execution;
   const access = await getProjectAccess(getDb(), actor, workspaceId, projectId);
   assertJobAuthorization(input.target.kind, access, actor.userId);
+  await consumeActionLimit(
+    `ai-create:${workspaceId}:${actor.userId}`,
+    20,
+    60 * 60,
+  );
   await entitlements.assertAllowed("ai.job.run", {
     userId: actor.userId,
     workspaceId,
@@ -557,6 +563,11 @@ export async function retryAiJob(
   const execution = requireAiExecutionConfig();
   const { config } = execution;
   const access = await getProjectAccess(getDb(), actor, workspaceId, projectId);
+  await consumeActionLimit(
+    `ai-retry:${workspaceId}:${actor.userId}`,
+    20,
+    60 * 60,
+  );
   await entitlements.assertAllowed("ai.job.run", {
     userId: actor.userId,
     workspaceId,
@@ -1161,6 +1172,11 @@ async function actionJob(
   const selection = aiActionSelectionSchema.parse(rawInput);
   const access = await getProjectAccess(getDb(), actor, workspaceId, projectId);
   assertProjectManager(access, actor.userId);
+  await consumeActionLimit(
+    `ai-action:${workspaceId}:${actor.userId}`,
+    40,
+    60 * 60,
+  );
   const rows = await getDb()
     .select()
     .from(aiJobs)

@@ -32,6 +32,7 @@ import type { EntitlementPolicy, PlatformCapability } from "@/lib/entitlements";
 import { forbidden, notFound, PlatformError } from "@/lib/platform-errors";
 import { recordWorkspaceProductSignal } from "@/server/self-service";
 import type { UserActor } from "@/server/workspaces";
+import { consumeActionLimit } from "@/server/action-rate-limit";
 
 import {
   createPaddleCheckout,
@@ -636,6 +637,12 @@ export async function startCheckout(
   planKey: string,
   idempotencyKey: string,
 ) {
+  await owner(getDb(), actor, workspaceId);
+  await consumeActionLimit(
+    `billing-checkout:${workspaceId}:${actor.userId}`,
+    10,
+    60 * 60,
+  );
   const config = getDistributionConfig();
   if (config.mode !== "managed_cloud") {
     throw new PlatformError(
@@ -859,6 +866,11 @@ export async function startCheckout(
 
 export async function openBillingPortal(actor: UserActor, workspaceId: string) {
   await owner(getDb(), actor, workspaceId);
+  await consumeActionLimit(
+    `billing-portal:${workspaceId}:${actor.userId}`,
+    20,
+    60 * 60,
+  );
   const state = await ensureBillingState(getDb(), workspaceId);
   if (!state.providerCustomerId) {
     throw new PlatformError(

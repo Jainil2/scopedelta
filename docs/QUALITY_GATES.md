@@ -49,6 +49,9 @@ The complete merge-candidate run contains:
 - production deploy-guard verification;
 - migration-definition checks and two consecutive migration applications;
 - formatting, lint, typecheck, unit tests, and PostgreSQL integration tests;
+- final-only `pnpm test:ga` scale/query-plan/export proof;
+- PostgreSQL 17 dump/restore into an isolated database with comparison of
+  commercial/client/audit/provider/AI/import/lifecycle evidence;
 - migrated-database Playwright browser journeys;
 - production build and HTTP smoke test;
 - production container build;

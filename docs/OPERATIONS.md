@@ -2,7 +2,7 @@
 
 ## Status and change boundary
 
-Implemented through SC-011C. This runbook covers the public lead flow,
+Implemented through SC-012. This runbook covers the public lead flow,
 production platform kernel, delivery/commercial/client/engineering/QA/AI
 history, provider-neutral billing/entitlements, Paddle sandbox lifecycle, and
 the production-oriented self-host path. It does not authorize production
@@ -28,13 +28,38 @@ aggregate queries and performs no outbound network call.
 Signal rows may contain only workspace/subject IDs, allowlisted event/outcome/
 safe-dimension values, counters, and timestamps. Never add pageviews, names,
 emails, recipients, documents, prompts/results, comments, source code, message
-bodies, or provider payloads. Provider/operator alert delivery is not part of
-this release.
+bodies, or provider payloads.
+
+SC-012 reconciles local signals into content-free incidents. Run
+`pnpm operations:alerts` to recover expired AI reservations/stale alert claims,
+remove expired action limits, and send SMTP only when `OPERATOR_ALERT_TO` is
+configured. New/escalated incidents send promptly and unresolved incidents are
+reminded after 24 hours. The Netlify function runs every 15 minutes. Alert SMTP
+does not consume tenant managed-email allowance. Without a recipient,
+reconciliation remains local and makes no outbound alert call.
 
 Routine recovery screens must render the stable safe failure class, whether
 authoritative state is unchanged/partially committed/preserved, retry policy,
 and next action. They must not render raw provider errors. Successful retries
 clear current blocking guidance; historical bounded evidence remains available.
+
+## GA lifecycle and containment
+
+- `pnpm lifecycle:process -- --operator-id UUID --workspace-id UUID --request-id UUID --action inspect|start-review|block|process|purge`
+- `pnpm operations:signals -- --limit=200`
+- `pnpm operations:alerts`
+- `pnpm production:validate`
+
+Lifecycle processing rechecks a completed non-expired owner export, managed
+subscription state, and AI/import/GitHub/billing/email work in flight. It writes
+operator audit evidence but never disables access or mutates authoritative
+customer data. Purge always fails pending approved policy.
+
+Containment uses reversible switches: disable AI, disconnect provider access,
+leave Paddle live actions disabled/unconfigured, disable SMTP, or remove
+`OPERATOR_ALERT_TO` while retaining local reconciliation. Repair configuration,
+reconcile durable provider/billing/import/email state, then retry the explicit
+idempotent action. See `docs/DATA_LIFECYCLE.md` and `docs/GA_READINESS.md`.
 
 ## Supported deployment shapes
 

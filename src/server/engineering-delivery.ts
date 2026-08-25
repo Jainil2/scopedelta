@@ -73,6 +73,7 @@ import {
 } from "@/server/delivery";
 import type { UserActor } from "@/server/workspaces";
 import { recordWorkspaceProductSignal } from "@/server/self-service";
+import { consumeActionLimit } from "@/server/action-rate-limit";
 
 const MAX_RECONCILED_PULLS = 25;
 const MAX_COVERAGE_WORK = 1_000;
@@ -490,6 +491,15 @@ async function reconcileRepositoryById(
           MAX_RECONCILED_PULLS,
         );
     await upsertProviderEvidence(repositoryId, evidence, actorType, actorId);
+    await getDb()
+      .update(providerWebhookDeliveries)
+      .set({ state: "processed", errorCode: null, processedAt: new Date() })
+      .where(
+        and(
+          eq(providerWebhookDeliveries.repositoryId, repositoryId),
+          eq(providerWebhookDeliveries.state, "failed"),
+        ),
+      );
     return evidence.length;
   } catch (error) {
     await markRepositoryStale(repositoryId, error);
@@ -508,6 +518,11 @@ export async function createGitHubRepositoryInstallationUrl(
     actor,
     workspaceId,
     projectId,
+  );
+  await consumeActionLimit(
+    `github-install:${workspaceId}:${actor.userId}`,
+    10,
+    60 * 60,
   );
   const workspaceRows = await getDb()
     .select({ slug: workspaces.slug })
@@ -803,6 +818,11 @@ export async function reconcileEngineeringRepository(
   repositoryId: string,
 ) {
   await assertWritableProject(getDb(), actor, workspaceId, projectId);
+  await consumeActionLimit(
+    `github-reconcile:${workspaceId}:${actor.userId}`,
+    30,
+    60 * 60,
+  );
   const rows = await getDb()
     .select({ id: engineeringRepositories.id })
     .from(engineeringRepositories)

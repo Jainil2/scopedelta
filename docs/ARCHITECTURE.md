@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented through SC-010. The SC-004 production platform kernel now supports
+Implemented through SC-012. The SC-004 production platform kernel now supports
 the client-project delivery foundation plus production board, optional cycle
 planning, authorized cross-project daily execution, and internal project
 collaboration. SC-006A adds the first evidence-backed commercial baseline and
@@ -24,6 +24,10 @@ SC-010 adds provider-neutral plan/subscription snapshots, workspace-serialized
 capacity rules, managed-resource usage reservations, Paddle sandbox lifecycle,
 owner billing/usage UI, operator economics evidence, and a documented self-host
 boundary with no cloud entitlement phone-home.
+SC-011 adds portfolio/self-service scale, imports, onboarding, lifecycle intent,
+and local signals. SC-012 adds owner multipart export, non-destructive operator
+lifecycle processing, durable content-free incidents/SMTP evidence, bounded
+recovery, representative scale/query proof, and PostgreSQL 17 restore proof.
 
 ## System decision
 
@@ -53,6 +57,8 @@ Browser
        ├─ /api/v1/* ────────────────> tenant-aware domain services
        ├─ signed GitHub webhook ────> normalized engineering evidence
        ├─ signed Paddle webhook ────> subscription + effective entitlements
+       ├─ owner multipart export ───> bounded tar.gz parts in PostgreSQL
+       ├─ operator/cron reconcile ──> incidents + content-free SMTP digest
        ├─ Server Components ─────────> the same domain services
        ├─ node-postgres/Drizzle ─────> PostgreSQL
        └─ Next after() + Nodemailer ─> SMTP

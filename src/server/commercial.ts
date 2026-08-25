@@ -58,6 +58,7 @@ import {
 } from "@/server/delivery";
 import type { UserActor } from "@/server/workspaces";
 import { recordWorkspaceProductSignal } from "@/server/self-service";
+import { consumeActionLimit } from "@/server/action-rate-limit";
 import {
   assertDraftBaselineVersion,
   getBaselineVersionEvidenceSourceIds,
@@ -296,6 +297,11 @@ export async function createCommercialSource(
   entitlements: EntitlementPolicy = communityEntitlementPolicy,
 ) {
   await assertCommercialManage(actor, workspaceId, projectId, entitlements);
+  await consumeActionLimit(
+    `commercial-source:create:${workspaceId}:${actor.userId}`,
+    20,
+    60 * 60,
+  );
   const content = decodeCommercialSource(
     input.contentBase64,
     input.kind,
@@ -375,6 +381,11 @@ export async function retryCommercialSource(
   entitlements: EntitlementPolicy = communityEntitlementPolicy,
 ) {
   await assertCommercialManage(actor, workspaceId, projectId, entitlements);
+  await consumeActionLimit(
+    `commercial-source:retry:${workspaceId}:${actor.userId}`,
+    20,
+    60 * 60,
+  );
   const rows = await getDb()
     .select({
       kind: commercialEvidenceSources.kind,

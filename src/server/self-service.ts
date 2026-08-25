@@ -19,6 +19,7 @@ import { getDb, type Database } from "@/db";
 import {
   aiJobs,
   auditEvents,
+  billingCheckoutAttempts,
   billingProviderEvents,
   clientCollaborationNotifications,
   clientProjectInvitations,
@@ -26,8 +27,10 @@ import {
   clients,
   commercialBaselines,
   engineeringRepositories,
+  managedUsageRecords,
   memberships,
   migrationImportSessions,
+  operatorAlertDeliveries,
   projectTemplates,
   projects,
   providerWebhookDeliveries,
@@ -42,8 +45,9 @@ import {
   type WorkspaceProductSignalOutcome,
 } from "@/db/schema";
 import { getDistributionConfig } from "@/lib/billing-plans";
-import { getAiConfig } from "@/lib/env";
+import { getAiConfig, getOperatorAlertConfig } from "@/lib/env";
 import { forbidden, notFound, PlatformError } from "@/lib/platform-errors";
+import { consumeActionLimit } from "@/server/action-rate-limit";
 import type { UserActor } from "@/server/workspaces";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -514,6 +518,11 @@ export async function requestWorkspaceLifecycle(
   },
 ) {
   const access = await requireWorkspaceOwner(actor, workspaceId);
+  await consumeActionLimit(
+    `workspace-lifecycle:request:${workspaceId}:${actor.userId}`,
+    3,
+    24 * 60 * 60,
+  );
   if (
     input.confirmation !== access.slug ||
     !input.exportAcknowledged ||
@@ -595,7 +604,11 @@ export async function cancelWorkspaceLifecycleRequest(
         and(
           eq(workspaceLifecycleRequests.id, requestId),
           eq(workspaceLifecycleRequests.workspaceId, workspaceId),
-          eq(workspaceLifecycleRequests.state, "requested"),
+          inArray(workspaceLifecycleRequests.state, [
+            "requested",
+            "in_review",
+            "blocked",
+          ]),
         ),
       )
       .returning();
@@ -618,6 +631,7 @@ export async function listOperatorSignals(limit = 100) {
   const bounded = Math.max(1, Math.min(limit, 200));
   const database = getDb();
   const staleBefore = new Date(Date.now() - 15 * 60_000);
+  const usageAllowance = getOperatorAlertConfig().managedUsageAllowance;
   const buckets = await resolveNamedPromises({
     workspaceEmail: database
       .select({
@@ -737,6 +751,84 @@ export async function listOperatorSignals(limit = 100) {
       )
       .orderBy(desc(providerWebhookDeliveries.receivedAt))
       .limit(bounded),
+    repositories: database
+      .select({
+        id: engineeringRepositories.id,
+        workspaceId: engineeringRepositories.workspaceId,
+        status: engineeringRepositories.state,
+        code: engineeringRepositories.lastSyncErrorCode,
+        updatedAt: engineeringRepositories.updatedAt,
+      })
+      .from(engineeringRepositories)
+      .where(
+        or(
+          inArray(engineeringRepositories.state, ["disconnected", "revoked"]),
+          sql`${engineeringRepositories.staleAt} is not null`,
+          sql`${engineeringRepositories.lastSyncErrorCode} is not null`,
+        ),
+      )
+      .orderBy(desc(engineeringRepositories.updatedAt))
+      .limit(bounded),
+    checkouts: database
+      .select({
+        id: billingCheckoutAttempts.id,
+        workspaceId: billingCheckoutAttempts.workspaceId,
+        status: billingCheckoutAttempts.status,
+        code: billingCheckoutAttempts.failureCode,
+        updatedAt: billingCheckoutAttempts.updatedAt,
+      })
+      .from(billingCheckoutAttempts)
+      .where(
+        or(
+          eq(billingCheckoutAttempts.status, "failed"),
+          and(
+            inArray(billingCheckoutAttempts.status, ["creating", "pending"]),
+            lt(billingCheckoutAttempts.updatedAt, staleBefore),
+          ),
+        ),
+      )
+      .orderBy(desc(billingCheckoutAttempts.updatedAt))
+      .limit(bounded),
+    alertDelivery: database
+      .select({
+        id: operatorAlertDeliveries.id,
+        status: operatorAlertDeliveries.state,
+        code: operatorAlertDeliveries.errorCode,
+        updatedAt: operatorAlertDeliveries.updatedAt,
+      })
+      .from(operatorAlertDeliveries)
+      .where(
+        or(
+          eq(operatorAlertDeliveries.state, "failed"),
+          and(
+            eq(operatorAlertDeliveries.state, "claimed"),
+            lt(operatorAlertDeliveries.claimedAt, staleBefore),
+          ),
+        ),
+      )
+      .orderBy(desc(operatorAlertDeliveries.updatedAt))
+      .limit(bounded),
+    usage:
+      usageAllowance > 0
+        ? database
+            .select({
+              workspaceId: managedUsageRecords.workspaceId,
+              units: sql<number>`sum(case when ${managedUsageRecords.state} = 'released' then 0 else ${managedUsageRecords.unitsReserved} end)`,
+            })
+            .from(managedUsageRecords)
+            .where(
+              and(
+                sql`${managedUsageRecords.periodStartsAt} <= now()`,
+                sql`${managedUsageRecords.periodEndsAt} > now()`,
+              ),
+            )
+            .groupBy(managedUsageRecords.workspaceId)
+            .having(
+              sql`sum(case when ${managedUsageRecords.state} = 'released' then 0 else ${managedUsageRecords.unitsReserved} end) >= ${Math.ceil(usageAllowance * 0.8)}`,
+            )
+            .orderBy(desc(sql`sum(${managedUsageRecords.unitsReserved})`))
+            .limit(bounded)
+        : Promise.resolve([]),
     notificationEmail: database
       .select({
         workspaceId: clientCollaborationNotifications.workspaceId,
@@ -758,7 +850,13 @@ export async function listOperatorSignals(limit = 100) {
         updatedAt: workspaceLifecycleRequests.updatedAt,
       })
       .from(workspaceLifecycleRequests)
-      .where(eq(workspaceLifecycleRequests.state, "requested"))
+      .where(
+        inArray(workspaceLifecycleRequests.state, [
+          "requested",
+          "in_review",
+          "blocked",
+        ]),
+      )
       .orderBy(asc(workspaceLifecycleRequests.requestedAt))
       .limit(bounded),
     repeated: database
@@ -792,6 +890,10 @@ type OperatorSignalBuckets = {
   imports: readonly unknown[];
   billing: readonly unknown[];
   provider: readonly unknown[];
+  repositories?: readonly unknown[];
+  checkouts?: readonly unknown[];
+  alertDelivery?: readonly unknown[];
+  usage?: readonly unknown[];
   workspaceEmail: readonly unknown[];
   clientEmail: readonly unknown[];
   notificationEmail: readonly unknown[];
@@ -808,7 +910,11 @@ export function buildOperatorSignalExport<T extends OperatorSignalBuckets>(
       ai: buckets.ai,
       imports: buckets.imports,
       billing: buckets.billing,
+      billingCheckouts: buckets.checkouts ?? [],
       provider: buckets.provider,
+      repositories: buckets.repositories ?? [],
+      managedUsage: buckets.usage ?? [],
+      alertDelivery: buckets.alertDelivery ?? [],
       email: {
         workspaceInvitations: buckets.workspaceEmail,
         clientInvitations: buckets.clientEmail,
@@ -838,7 +944,10 @@ async function requireWorkspaceAdmin(actor: UserActor, workspaceId: string) {
   return access;
 }
 
-async function requireWorkspaceOwner(actor: UserActor, workspaceId: string) {
+export async function requireWorkspaceOwner(
+  actor: UserActor,
+  workspaceId: string,
+) {
   const access = await activeAccess(actor, workspaceId);
   if (access.role !== "owner") throw forbidden();
   return access;

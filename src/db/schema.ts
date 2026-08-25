@@ -135,6 +135,7 @@ export const auditActorType = pgEnum("audit_actor_type", [
   "system",
   "integration",
   "ai_agent",
+  "operator",
 ]);
 export const clientLifecycle = pgEnum("client_lifecycle", [
   "active",
@@ -268,7 +269,24 @@ export const workspaceLifecycleIntent = pgEnum("workspace_lifecycle_intent", [
 ]);
 export const workspaceLifecycleRequestState = pgEnum(
   "workspace_lifecycle_request_state",
-  ["requested", "canceled"],
+  ["requested", "in_review", "blocked", "processed", "canceled"],
+);
+export const workspaceExportState = pgEnum("workspace_export_state", [
+  "building",
+  "ready",
+  "failed",
+]);
+export const operatorIncidentState = pgEnum("operator_incident_state", [
+  "open",
+  "resolved",
+]);
+export const operatorIncidentSeverity = pgEnum("operator_incident_severity", [
+  "warning",
+  "critical",
+]);
+export const operatorAlertDeliveryState = pgEnum(
+  "operator_alert_delivery_state",
+  ["claimed", "sent", "failed"],
 );
 export const workspaceProductSignalOutcome = pgEnum(
   "workspace_product_signal_outcome",
@@ -574,6 +592,11 @@ export const billingCheckoutAttempts = pgTable(
       table.status,
       table.createdAt,
     ),
+    index("billing_checkout_status_updated_idx").on(
+      table.status,
+      table.updatedAt,
+      table.id,
+    ),
     check(
       "billing_checkout_pending_shape",
       sql`(${table.status} = 'pending' and ${table.providerTransactionId} is not null and ${table.checkoutUrl} is not null) or ${table.status} <> 'pending'`,
@@ -649,6 +672,11 @@ export const managedUsageRecords = pgTable(
       table.metric,
       table.periodStartsAt,
       table.state,
+    ),
+    index("managed_usage_state_period_end_idx").on(
+      table.state,
+      table.periodEndsAt,
+      table.workspaceId,
     ),
     check("managed_usage_reserved_positive", sql`${table.unitsReserved} > 0`),
     check(
@@ -771,6 +799,85 @@ export const workspaceOnboardingPreferences = pgTable(
   ],
 );
 
+export const workspaceExportRuns = pgTable(
+  "workspace_export_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "restrict" }),
+    requestedByUserId: uuid("requested_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    state: workspaceExportState("state").default("building").notNull(),
+    formatVersion: integer("format_version").default(1).notNull(),
+    partCount: integer("part_count").default(0).notNull(),
+    totalBytes: bigint("total_bytes", { mode: "number" }).default(0).notNull(),
+    manifestSha256: text("manifest_sha256"),
+    failureCode: text("failure_code"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    index("workspace_export_runs_workspace_created_idx").on(
+      table.workspaceId,
+      table.createdAt,
+      table.id,
+    ),
+    index("workspace_export_runs_state_expiry_idx").on(
+      table.state,
+      table.expiresAt,
+      table.id,
+    ),
+    check(
+      "workspace_export_runs_format_positive",
+      sql`${table.formatVersion} > 0`,
+    ),
+    check("workspace_export_runs_part_count", sql`${table.partCount} >= 0`),
+    check("workspace_export_runs_total_bytes", sql`${table.totalBytes} >= 0`),
+    check(
+      "workspace_export_runs_state_consistency",
+      sql`(${table.state} = 'building' and ${table.completedAt} is null and ${table.failureCode} is null) or (${table.state} = 'ready' and ${table.completedAt} is not null and ${table.failureCode} is null and ${table.manifestSha256} is not null and ${table.partCount} > 0) or (${table.state} = 'failed' and ${table.completedAt} is not null and ${table.failureCode} is not null)`,
+    ),
+  ],
+);
+
+export const workspaceExportParts = pgTable(
+  "workspace_export_parts",
+  {
+    exportId: uuid("export_id")
+      .notNull()
+      .references(() => workspaceExportRuns.id, { onDelete: "cascade" }),
+    partNumber: integer("part_number").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    sha256: text("sha256").notNull(),
+    artifact: bytea("artifact").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.exportId, table.partNumber] }),
+    index("workspace_export_parts_export_number_idx").on(
+      table.exportId,
+      table.partNumber,
+    ),
+    check(
+      "workspace_export_parts_number_positive",
+      sql`${table.partNumber} > 0`,
+    ),
+    check(
+      "workspace_export_parts_size_cap",
+      sql`${table.byteSize} between 1 and 15728639`,
+    ),
+    check(
+      "workspace_export_parts_hash_format",
+      sql`${table.sha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
 export const workspaceLifecycleRequests = pgTable(
   "workspace_lifecycle_requests",
   {
@@ -788,16 +895,26 @@ export const workspaceLifecycleRequests = pgTable(
     canceledByUserId: uuid("canceled_by_user_id").references(() => users.id, {
       onDelete: "restrict",
     }),
+    operatorId: uuid("operator_id"),
+    exportId: uuid("export_id").references(() => workspaceExportRuns.id, {
+      onDelete: "restrict",
+    }),
+    blockerCodes: jsonb("blocker_codes")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
     requestedAt: timestamp("requested_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    reviewStartedAt: timestamp("review_started_at", { withTimezone: true }),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
     canceledAt: timestamp("canceled_at", { withTimezone: true }),
     ...timestampColumns,
   },
   (table) => [
     uniqueIndex("workspace_lifecycle_requests_open_uidx")
       .on(table.workspaceId)
-      .where(sql`${table.state} = 'requested'`),
+      .where(sql`${table.state} in ('requested', 'in_review', 'blocked')`),
     index("workspace_lifecycle_requests_state_updated_idx").on(
       table.state,
       table.updatedAt,
@@ -805,7 +922,19 @@ export const workspaceLifecycleRequests = pgTable(
     ),
     check(
       "workspace_lifecycle_requests_cancel_consistency",
-      sql`(${table.state} = 'requested' and ${table.canceledAt} is null and ${table.canceledByUserId} is null) or (${table.state} = 'canceled' and ${table.canceledAt} is not null and ${table.canceledByUserId} is not null)`,
+      sql`(${table.state} = 'canceled' and ${table.canceledAt} is not null and ${table.canceledByUserId} is not null) or (${table.state} <> 'canceled' and ${table.canceledAt} is null and ${table.canceledByUserId} is null)`,
+    ),
+    check(
+      "workspace_lifecycle_requests_review_consistency",
+      sql`(${table.state} = 'requested' and ${table.reviewStartedAt} is null and ${table.operatorId} is null) or (${table.state} <> 'requested' and ${table.state} <> 'canceled' and ${table.reviewStartedAt} is not null and ${table.operatorId} is not null) or (${table.state} = 'canceled')`,
+    ),
+    check(
+      "workspace_lifecycle_requests_processed_consistency",
+      sql`(${table.state} = 'processed' and ${table.processedAt} is not null and ${table.exportId} is not null and jsonb_array_length(${table.blockerCodes}) = 0) or (${table.state} <> 'processed' and ${table.processedAt} is null)`,
+    ),
+    check(
+      "workspace_lifecycle_requests_blocker_consistency",
+      sql`(${table.state} = 'blocked' and jsonb_array_length(${table.blockerCodes}) > 0) or (${table.state} <> 'blocked')`,
     ),
   ],
 );
@@ -879,6 +1008,99 @@ export const actionRateLimits = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
   (table) => [index("action_rate_limits_expires_at_idx").on(table.expiresAt)],
+);
+
+export const operatorIncidents = pgTable(
+  "operator_incidents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    fingerprint: text("fingerprint").notNull(),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "restrict",
+    }),
+    signalType: text("signal_type").notNull(),
+    severity: operatorIncidentSeverity("severity").default("warning").notNull(),
+    state: operatorIncidentState("state").default("open").notNull(),
+    safeErrorCode: text("safe_error_code"),
+    occurrenceCount: integer("occurrence_count").default(1).notNull(),
+    firstObservedAt: timestamp("first_observed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastObservedAt: timestamp("last_observed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    escalatedAt: timestamp("escalated_at", { withTimezone: true }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    lastNotifiedAt: timestamp("last_notified_at", { withTimezone: true }),
+    ...timestampColumns,
+  },
+  (table) => [
+    uniqueIndex("operator_incidents_fingerprint_uidx").on(table.fingerprint),
+    index("operator_incidents_state_notify_idx").on(
+      table.state,
+      table.lastNotifiedAt,
+      table.lastObservedAt,
+      table.id,
+    ),
+    index("operator_incidents_workspace_state_idx").on(
+      table.workspaceId,
+      table.state,
+      table.lastObservedAt,
+    ),
+    check(
+      "operator_incidents_fingerprint_format",
+      sql`${table.fingerprint} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "operator_incidents_signal_length",
+      sql`char_length(${table.signalType}) between 1 and 80`,
+    ),
+    check(
+      "operator_incidents_count_positive",
+      sql`${table.occurrenceCount} > 0`,
+    ),
+    check(
+      "operator_incidents_resolution_consistency",
+      sql`(${table.state} = 'open' and ${table.resolvedAt} is null) or (${table.state} = 'resolved' and ${table.resolvedAt} is not null)`,
+    ),
+  ],
+);
+
+export const operatorAlertDeliveries = pgTable(
+  "operator_alert_deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    digestKey: text("digest_key").notNull(),
+    recipientHash: text("recipient_hash").notNull(),
+    state: operatorAlertDeliveryState("state").default("claimed").notNull(),
+    incidentCount: integer("incident_count").notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    errorCode: text("error_code"),
+    ...timestampColumns,
+  },
+  (table) => [
+    uniqueIndex("operator_alert_deliveries_digest_uidx").on(table.digestKey),
+    index("operator_alert_deliveries_state_claim_idx").on(
+      table.state,
+      table.claimedAt,
+      table.id,
+    ),
+    check(
+      "operator_alert_deliveries_digest_format",
+      sql`${table.digestKey} ~ '^[0-9a-f]{64}$' and ${table.recipientHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "operator_alert_deliveries_count_positive",
+      sql`${table.incidentCount} > 0`,
+    ),
+    check(
+      "operator_alert_deliveries_state_consistency",
+      sql`(${table.state} = 'claimed' and ${table.sentAt} is null and ${table.errorCode} is null) or (${table.state} = 'sent' and ${table.sentAt} is not null and ${table.errorCode} is null) or (${table.state} = 'failed' and ${table.sentAt} is null and ${table.errorCode} is not null)`,
+    ),
+  ],
 );
 
 export const auditEvents = pgTable(
@@ -1442,6 +1664,11 @@ export const migrationImportSessions = pgTable(
       table.workspaceId,
       table.state,
       table.updatedAt,
+    ),
+    index("migration_import_sessions_state_lease_idx").on(
+      table.state,
+      table.processingLeaseUntil,
+      table.id,
     ),
     check(
       "migration_import_sessions_namespace_length",
@@ -3929,6 +4156,11 @@ export const engineeringRepositories = pgTable(
       table.state,
       table.id,
     ),
+    index("engineering_repositories_state_stale_idx").on(
+      table.state,
+      table.staleAt,
+      table.id,
+    ),
     check(
       "engineering_repositories_disconnect_consistency",
       sql`(${table.state} = 'active' and ${table.disconnectedAt} is null and ${table.disconnectedByUserId} is null) or (${table.state} <> 'active' and ${table.disconnectedAt} is not null)`,
@@ -4576,6 +4808,11 @@ export const providerWebhookDeliveries = pgTable(
       table.receivedAt,
       table.id,
     ),
+    index("provider_webhook_deliveries_state_received_idx").on(
+      table.state,
+      table.receivedAt,
+      table.id,
+    ),
     check(
       "provider_webhook_deliveries_processed_consistency",
       sql`(${table.state} = 'processing' and ${table.processedAt} is null) or (${table.state} <> 'processing' and ${table.processedAt} is not null)`,
@@ -4589,6 +4826,14 @@ export type WorkspaceLifecycleIntent =
   (typeof workspaceLifecycleIntent.enumValues)[number];
 export type WorkspaceLifecycleRequestState =
   (typeof workspaceLifecycleRequestState.enumValues)[number];
+export type WorkspaceExportState =
+  (typeof workspaceExportState.enumValues)[number];
+export type OperatorIncidentState =
+  (typeof operatorIncidentState.enumValues)[number];
+export type OperatorIncidentSeverity =
+  (typeof operatorIncidentSeverity.enumValues)[number];
+export type OperatorAlertDeliveryState =
+  (typeof operatorAlertDeliveryState.enumValues)[number];
 export type WorkspaceProductSignalOutcome =
   (typeof workspaceProductSignalOutcome.enumValues)[number];
 export type ClientLifecycle = (typeof clientLifecycle.enumValues)[number];

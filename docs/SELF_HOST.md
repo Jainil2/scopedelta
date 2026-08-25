@@ -65,6 +65,18 @@ Migrations are forward-only. Never edit an applied SQL migration or drop new
 schema objects to roll back. If the application fails after an additive
 migration, restore the prior compatible application image and fix forward.
 
+Run `pnpm production:validate` in the production runtime before cutover.
+External production database URLs must explicitly require/verify TLS. Loopback
+development is not rejected outside production.
+
+## Operator attention
+
+Set `OPERATOR_ALERT_TO` to enable content-free SMTP digests. Optionally set
+`OPERATOR_MANAGED_USAGE_ALLOWANCE`; workspace use at 80% becomes attention.
+Schedule `pnpm operations:alerts` every 15 minutes when Netlify scheduling is
+not present. Without a recipient it reconciles local incidents but makes no
+outbound alert call, preserving a local-only self-host mode.
+
 ## Backup and restore
 
 Use the direct database credential only in a restricted operator environment:

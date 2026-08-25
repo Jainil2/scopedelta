@@ -4375,6 +4375,35 @@ h2 {
   opacity: 0.55;
 }
 
+.app-secondary-button {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 750;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.app-secondary-button:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.app-secondary-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .platform-status {
   min-height: 1.4rem;
   margin: 0;

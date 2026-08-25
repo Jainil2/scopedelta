@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { requireSession } from "@/lib/session";
 import { listClients, listProjects } from "@/server/delivery";
+import { getWorkspaceOnboarding } from "@/server/self-service";
 import { getWorkspaceBySlug } from "@/server/workspaces";
 
 export default async function WorkspaceOverview({
@@ -16,9 +17,12 @@ export default async function WorkspaceOverview({
     workspaceSlug,
   );
   const actor = { userId: session.user.id, email: session.user.email };
-  const [clientResult, projectResult] = await Promise.all([
+  const [clientResult, projectResult, onboarding] = await Promise.all([
     listClients(actor, workspace.id, 1, 1),
     listProjects(actor, workspace.id, 1, 1),
+    workspace.role === "member"
+      ? Promise.resolve(null)
+      : getWorkspaceOnboarding(actor, workspace.id),
   ]);
   return (
     <div className="app-content">
@@ -34,6 +38,20 @@ export default async function WorkspaceOverview({
           <i aria-hidden="true" /> Tenant boundary active
         </span>
       </header>
+      {onboarding && !onboarding.complete && !onboarding.dismissed ? (
+        <section className="onboarding-prompt" aria-label="Getting started">
+          <div>
+            <strong>
+              {onboarding.completedRequired} of {onboarding.requiredCount} core
+              activation steps complete
+            </strong>
+            <p>Continue from authoritative workspace state at any time.</p>
+          </div>
+          <Link href={`/app/${workspace.slug}/settings/getting-started`}>
+            Continue setup
+          </Link>
+        </section>
+      ) : null}
       <section className="kernel-proof" aria-labelledby="kernel-title">
         <div>
           <p className="section-index">Layer 1A</p>

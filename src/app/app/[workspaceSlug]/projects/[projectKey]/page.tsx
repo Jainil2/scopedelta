@@ -34,6 +34,7 @@ export default async function ProjectPage({
         milestones={data.milestones}
         projectMembers={data.projectDirectory.members}
         workspaceMembers={data.workspaceDirectory.members}
+        workspaceMemberPageInfo={data.workspaceDirectory.memberPage}
         canManage={data.projectDirectory.canManage}
       />
     </>
@@ -56,7 +57,10 @@ async function loadProject(
       await Promise.all([
         listMilestones(actor, workspace.id, project.id),
         listProjectMembers(actor, workspace.id, project.id),
-        listWorkspaceMembers(actor, workspace.id),
+        listWorkspaceMembers(actor, workspace.id, {
+          status: "active",
+          pageSize: 25,
+        }),
       ]);
     return {
       workspace,

@@ -332,7 +332,7 @@ Exact source-license/public-package boundary, public prices/allowances, live bil
 
 ### Status
 
-SC-011A / #46 is complete. SC-011B / #47 is implemented for review with versioned project templates, durable preview-first Jira/generic CSV migration, unresolved identity mapping, idempotent bounded confirmation, and core delivery export. Both slices are Local/LAN. Layer 7 remains partially delivered; onboarding/help, routine recovery, and privacy-safe telemetry remain SC-011C scope.
+SC-011A / #46 and SC-011B / #47 are merged. SC-011C / #48 completes Layer 7 with authoritative onboarding, routine access administration and recovery, non-destructive lifecycle intent, and privacy-safe deployment-local signals. All three product-core slices are Local/LAN; external providers retain their existing runtime boundaries.
 
 ### SC-011A delivered boundary
 
@@ -343,7 +343,7 @@ SC-011A / #46 is complete. SC-011B / #47 is implemented for review with versione
 - confirmed-versus-pending, currency-grouped commercial exposure and separate billable/non-billable actual minutes;
 - no estimate conversion, baseline-value invention, net schedule arithmetic, margin, profit, cost, revenue, or exchange-rate logic.
 
-### SC-011B review-candidate boundary
+### SC-011B delivered boundary
 
 - versioned workspace project templates instantiate copied project snapshots; later edits do not mutate project history;
 - Jira-first and generic CSV import create durable row-level previews before delivery mutation;
@@ -354,6 +354,17 @@ SC-011A / #46 is complete. SC-011B / #47 is implemented for review with versione
 - confirmation uses recoverable 100-row batches and records committed/created/skipped/failed outcomes;
 - formula-neutralized core delivery CSV export is page/record bounded and explicitly not a complete legal/audit export;
 - direct Jira API/OAuth, attachments, custom workflows, and generic ETL remain deferred/out of scope.
+
+### SC-011C delivered boundary
+
+- onboarding completion derives from authoritative records; dismissal is per admin and never becomes shared product state;
+- suspension removes access and project grants while retaining historical assignments, audit, delivery, and acceptance evidence;
+- reactivation rechecks managed capacity and does not restore project access silently;
+- invitation reissue rotates the token and exposes a one-time admin acceptance URL for offline/self-host operation;
+- lifecycle requests record cancelable closure/deletion intent without disabling or deleting a workspace;
+- recovery guidance exposes safe classes and authoritative-state effects instead of provider messages;
+- activation/reliability signals aggregate allowlisted content-free outcomes locally and export through a bounded CLI with no network transport;
+- archived projects remain outside default project, portfolio, and operator paths.
 
 ### Outcome
 Larger 50–500-person organizations can operate many concurrent projects with low administrative burden.
@@ -428,7 +439,7 @@ Current sequence:
 5. SC-008 / #12 — Layer 4 engineering/QA evidence — **DONE** through PR #41.
 6. SC-009 / #17 — Layer 5 AI-native delivery intelligence — **DONE** through PR #43.
 7. SC-010 / #13 — Layer 6 subscription/cloud economics/source distribution — **DONE** through merge `38168f4`.
-8. SC-011 / #14 — Layer 7 portfolio/operations/self-service scale — **PARTIALLY DELIVERED** through SC-011A / #46; SC-011B / #47 is implemented for review.
+8. SC-011 / #14 — Layer 7 portfolio/operations/self-service scale — **DONE** through SC-011A / #46, SC-011B / #47, and SC-011C / #48.
 9. SC-012 / #15 — Layer 8 enterprise/GA hardening.
 
 Superseded planning issues #36/#37/#38 are closed and should not be implemented separately.

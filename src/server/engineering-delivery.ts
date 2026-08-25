@@ -72,6 +72,7 @@ import {
   type Transaction,
 } from "@/server/delivery";
 import type { UserActor } from "@/server/workspaces";
+import { recordWorkspaceProductSignal } from "@/server/self-service";
 
 const MAX_RECONCILED_PULLS = 25;
 const MAX_COVERAGE_WORK = 1_000;
@@ -721,6 +722,19 @@ async function connectAuthorizedGitHubRepository(
       targetType: "engineering_repository",
       targetId: id,
       metadata: { provider: "github", projectId },
+    });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "engineering_connected",
+      outcome: "completed",
+      subjectId: id,
+    });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "onboarding_step_completed",
+      outcome: "completed",
+      dimension: "engineering_connection",
+      subjectId: id,
     });
     return id;
   });
@@ -1385,6 +1399,19 @@ export async function createVerificationRecord(
       targetType: "verification_record",
       targetId: id,
       metadata: { method: input.method, result: input.result, projectId },
+    });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "qa_verification_recorded",
+      outcome: "completed",
+      subjectId: id,
+    });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "onboarding_step_completed",
+      outcome: "completed",
+      dimension: "qa_verification",
+      subjectId: id,
     });
   });
   return { id };
@@ -3025,6 +3052,7 @@ export async function processGitHubWebhookDelivery(
     .returning({ id: providerWebhookDeliveries.id });
   if (!inserted[0]) return { duplicate: true, processed: 0 };
   let repositoryIds: string[] = [];
+  let repositoryWorkspaceIds: string[] = [];
   try {
     const payload = JSON.parse(rawBody) as GitHubWebhookPayload;
     const revokedRepositoryIds = await revokeGitHubProviderGrants(
@@ -3050,7 +3078,10 @@ export async function processGitHubWebhookDelivery(
       return { duplicate: false, processed: 0 };
     }
     const repositories = await db
-      .select({ id: engineeringRepositories.id })
+      .select({
+        id: engineeringRepositories.id,
+        workspaceId: engineeringRepositories.workspaceId,
+      })
       .from(engineeringRepositories)
       .where(
         and(
@@ -3064,6 +3095,9 @@ export async function processGitHubWebhookDelivery(
       )
       .limit(20);
     repositoryIds = repositories.map((repository) => repository.id);
+    repositoryWorkspaceIds = [
+      ...new Set(repositories.map((repository) => repository.workspaceId)),
+    ];
     if (!repositoryIds.length) {
       await db
         .update(providerWebhookDeliveries)
@@ -3094,6 +3128,17 @@ export async function processGitHubWebhookDelivery(
         processedAt: new Date(),
       })
       .where(eq(providerWebhookDeliveries.id, inserted[0].id));
+    await Promise.all(
+      repositoryWorkspaceIds.map((workspaceId) =>
+        recordWorkspaceProductSignal(db, {
+          workspaceId,
+          eventType: "provider_delivery",
+          outcome: "failed",
+          dimension: "provider_unavailable",
+          subjectId: inserted[0].id,
+        }),
+      ),
+    );
     return { duplicate: false, processed: 0, failed: true };
   }
 }

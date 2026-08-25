@@ -28,9 +28,11 @@ export default async function ProjectsPage({
       clients={data.clientResult.items}
       clientPageInfo={data.clientResult.pageInfo}
       members={data.directory.members}
+      memberPageInfo={data.directory.memberPage}
       projects={data.projectResult.items}
       projectPageInfo={data.projectResult.pageInfo}
       query={data.projectFilters.query}
+      lifecycle={data.projectFilters.lifecycle}
     />
   );
 }
@@ -47,6 +49,10 @@ async function loadProjects(
       pageSize: 50,
       query:
         typeof searchParams.query === "string" ? searchParams.query : undefined,
+      lifecycle:
+        typeof searchParams.lifecycle === "string"
+          ? searchParams.lifecycle
+          : undefined,
     });
     const clientPagination = parseInput(paginationSchema, {
       page:
@@ -69,8 +75,12 @@ async function loadProjects(
         projectFilters.page,
         projectFilters.pageSize,
         projectFilters.query,
+        projectFilters.lifecycle,
       ),
-      listWorkspaceMembers(actor, workspace.id),
+      listWorkspaceMembers(actor, workspace.id, {
+        status: "active",
+        pageSize: 25,
+      }),
     ]);
     return {
       workspace,

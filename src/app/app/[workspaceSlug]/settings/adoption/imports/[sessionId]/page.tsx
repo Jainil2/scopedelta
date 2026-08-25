@@ -34,7 +34,10 @@ export default async function ImportResultPage({
           filters.page,
           filters.pageSize,
         ),
-        listWorkspaceMembers(actor, workspace.id),
+        listWorkspaceMembers(actor, workspace.id, {
+          status: "active",
+          pageSize: 100,
+        }),
       ]);
       return { workspace, result, directory };
     } catch {

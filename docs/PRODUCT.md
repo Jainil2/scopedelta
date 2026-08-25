@@ -301,7 +301,7 @@ SC-010 implements:
 
 External client participants remain separate and non-billable by default. Browser checkout return never activates paid access. Final public plans/prices/allowances, live payments, and public source distribution remain founder/legal gates.
 
-### Layer 7 — Portfolio, Operations & Self-Service Scale — PARTIALLY DELIVERED
+### Layer 7 — Portfolio, Operations & Self-Service Scale — DELIVERED
 
 SC-011A / #46 adds the Local/LAN operating core:
 
@@ -324,10 +324,18 @@ SC-011B / #47 adds the Local/LAN adoption and portability boundary:
 - a formula-neutralized, bounded core-delivery CSV export explicitly labeled as incomplete for legal/commercial/engineering/QA/audit purposes;
 - no direct Jira API/OAuth, attachments, custom-workflow recreation, remote parser, AI, or mandatory external provider.
 
-ADR-014 records the template, migration, and portability boundary. SC-011C remains future Layer-7 work.
+ADR-014 records the template, migration, and portability boundary.
 
-- self-service onboarding/admin/help/recovery;
-- privacy-safe activation/reliability telemetry.
+SC-011C / #48 completes the Local/LAN Layer-7 boundary with:
+
+- a permission-aware, dismissible checklist whose completion is derived from authoritative workspace state;
+- paginated member/invitation administration, durable suspension/reactivation, invitation reissue, and one-time manual acceptance links;
+- non-destructive, owner-only closure/deletion intent with export-first guidance and managed-subscription blocking;
+- stable content-free recovery guidance across import, AI, GitHub, email, and billing;
+- allowlisted, aggregated activation/reliability signals plus a bounded deployment-local operator export with no automatic transport;
+- active/completed project defaults that keep archived history outside ordinary list and operator paths.
+
+ADR-015 records the activation, recovery, lifecycle-intent, and privacy-safe signal boundary. Outbound telemetry/alerts, physical deletion, retention policy, and global operator identity remain Layer 8.
 
 ### Layer 8 — Enterprise & General-Availability Hardening
 

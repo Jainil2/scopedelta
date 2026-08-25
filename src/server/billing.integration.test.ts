@@ -23,7 +23,10 @@ import {
 } from "@/server/billing";
 import { createClient, createProject, getProject } from "@/server/delivery";
 import type { PaddleWebhookEvent } from "@/server/paddle-billing";
-import { createWorkspace } from "@/server/workspaces";
+import {
+  createWorkspace,
+  updateWorkspaceMemberStatus,
+} from "@/server/workspaces";
 
 const databaseUrl =
   process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
@@ -126,6 +129,57 @@ describe("subscription, entitlements, and managed usage", () => {
     ).rejects.toMatchObject({ code: "active_project_capacity_exceeded" });
   });
 
+  it("rechecks managed internal-user capacity before membership reactivation", async () => {
+    const fixture = await createFixture();
+    const activeUser = await createUser("active@example.test", "Active member");
+    const suspendedUser = await createUser(
+      "suspended@example.test",
+      "Suspended member",
+    );
+    const activeMembershipId = randomUUID();
+    const suspendedMembershipId = randomUUID();
+    await db.insert(memberships).values([
+      {
+        id: activeMembershipId,
+        workspaceId: fixture.workspace.id,
+        userId: activeUser.userId,
+        role: "member",
+      },
+      {
+        id: suspendedMembershipId,
+        workspaceId: fixture.workspace.id,
+        userId: suspendedUser.userId,
+        role: "member",
+        status: "suspended",
+        suspendedAt: new Date(),
+        suspendedByUserId: fixture.owner.userId,
+      },
+    ]);
+
+    await expect(
+      updateWorkspaceMemberStatus(
+        fixture.owner,
+        fixture.workspace.id,
+        suspendedMembershipId,
+        "active",
+      ),
+    ).rejects.toMatchObject({ code: "internal_user_capacity_exceeded" });
+    await updateWorkspaceMemberStatus(
+      fixture.owner,
+      fixture.workspace.id,
+      activeMembershipId,
+      "suspended",
+    );
+    await expect(
+      updateWorkspaceMemberStatus(
+        fixture.owner,
+        fixture.workspace.id,
+        suspendedMembershipId,
+        "active",
+      ),
+    ).resolves.toMatchObject({ status: "active" });
+  });
+
   it("reserves managed AI atomically and keeps client participants non-billable", async () => {
     const fixture = await createFixture();
     const project = await createProject(fixture.owner, fixture.workspace.id, {
@@ -207,6 +261,8 @@ describe("subscription, entitlements, and managed usage", () => {
 
   it("activates only from ordered provider events and derives grace/cancellation safely", async () => {
     const fixture = await createFixture();
+    const occurredAt = (daysAgo: number) =>
+      new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1_000).toISOString();
     const project = await createProject(fixture.owner, fixture.workspace.id, {
       clientId: fixture.client.id,
       key: "HISTORY",
@@ -218,7 +274,7 @@ describe("subscription, entitlements, and managed usage", () => {
     });
     const active = subscriptionEvent({
       id: "evt_active",
-      occurredAt: "2026-08-16T06:00:00.000Z",
+      occurredAt: occurredAt(4),
       workspaceId: fixture.workspace.id,
       status: "active",
     });
@@ -239,7 +295,7 @@ describe("subscription, entitlements, and managed usage", () => {
 
     const old = subscriptionEvent({
       id: "evt_old",
-      occurredAt: "2026-08-15T06:00:00.000Z",
+      occurredAt: occurredAt(5),
       workspaceId: fixture.workspace.id,
       status: "past_due",
     });
@@ -254,7 +310,7 @@ describe("subscription, entitlements, and managed usage", () => {
 
     const pastDue = subscriptionEvent({
       id: "evt_past_due",
-      occurredAt: "2026-08-17T06:00:00.000Z",
+      occurredAt: occurredAt(3),
       workspaceId: fixture.workspace.id,
       status: "past_due",
     });
@@ -267,7 +323,7 @@ describe("subscription, entitlements, and managed usage", () => {
 
     const recovered = subscriptionEvent({
       id: "evt_recovered",
-      occurredAt: "2026-08-18T06:00:00.000Z",
+      occurredAt: occurredAt(2),
       workspaceId: fixture.workspace.id,
       status: "active",
       scheduledCancel: true,
@@ -284,7 +340,7 @@ describe("subscription, entitlements, and managed usage", () => {
 
     const canceled = subscriptionEvent({
       id: "evt_canceled",
-      occurredAt: "2026-08-19T06:00:00.000Z",
+      occurredAt: occurredAt(1),
       workspaceId: fixture.workspace.id,
       status: "canceled",
     });

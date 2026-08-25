@@ -49,7 +49,7 @@ import {
   setWorkspaceAvailability,
   updateTimeEntry,
 } from "@/server/operations";
-import { createWorkspace } from "@/server/workspaces";
+import { createWorkspace, listWorkspaceMembers } from "@/server/workspaces";
 import { updateWorkPurpose } from "@/server/commercial";
 
 const databaseUrl =
@@ -922,7 +922,7 @@ describe("portfolio operations domain boundary", () => {
     expect(JSON.stringify(exposure)).not.toMatch(/margin|profit|revenue|cost/i);
   });
 
-  it("keeps representative 220-person portfolio responses bounded", async () => {
+  it("keeps representative 500-person administration and portfolio responses bounded", async () => {
     const owner = await createUser("scale-owner@example.test", "Scale Owner");
     const workspace = await createWorkspace(owner, { name: "Scale fixture" });
     const client = await createClient(owner, workspace.id, {
@@ -935,12 +935,45 @@ describe("portfolio operations domain boundary", () => {
       insert into users (id, email, name, email_verified)
       select gen_random_uuid(), 'scale-' || value || '@example.test',
         'Scale member ' || lpad(value::text, 3, '0'), true
-      from generate_series(1, 219) value;
+      from generate_series(1, 499) value;
     `);
     await db.execute(sql`
-      insert into memberships (id, workspace_id, user_id, role)
-      select gen_random_uuid(), ${workspace.id}, id, 'member'
-      from users where email ~ '^scale-[0-9]+@example\\.test$';
+      with candidates as (
+        select id, row_number() over (order by email) position
+        from users where email ~ '^scale-[0-9]+@example\\.test$'
+      )
+      insert into memberships (
+        id, workspace_id, user_id, role, status, suspended_at,
+        suspended_by_user_id
+      )
+      select gen_random_uuid(), ${workspace.id}, id, 'member',
+        case when position <= 349 then 'active'::membership_status
+          else 'suspended'::membership_status end,
+        case when position <= 349 then null else now() end,
+        case when position <= 349 then null else ${owner.userId}::uuid end
+      from candidates;
+    `);
+    await db.execute(sql`
+      insert into workspace_invitations (
+        id, workspace_id, email, role, state, expires_at, invited_by_user_id,
+        revoked_at, email_delivery_state, email_attempt_count,
+        last_email_attempt_at, last_email_error_code
+      )
+      select gen_random_uuid(), ${workspace.id},
+        'pending-' || value || '@example.test', 'member',
+        case when value <= 200 then 'pending'::invitation_state
+          else 'revoked'::invitation_state end,
+        case when value <= 100 then now() + interval '7 days'
+          else now() - interval '1 day' end,
+        ${owner.userId},
+        case when value <= 200 then null else now() end,
+        case when value % 3 = 0 then 'failed'::client_email_delivery_state
+          when value % 3 = 1 then 'sent'::client_email_delivery_state
+          else 'not_requested'::client_email_delivery_state end,
+        case when value % 3 = 2 then 0 else 1 end,
+        case when value % 3 = 2 then null else now() end,
+        case when value % 3 = 0 then 'delivery_failed' else null end
+      from generate_series(1, 300) value;
     `);
     await db.execute(sql`
       insert into projects (id, workspace_id, client_id, key, name, lead_user_id, lifecycle)
@@ -955,7 +988,8 @@ describe("portfolio operations domain boundary", () => {
     await db.execute(sql`
       with member_rows as (
         select user_id, row_number() over (order by user_id) position
-        from memberships where workspace_id = ${workspace.id}
+        from memberships
+        where workspace_id = ${workspace.id} and status = 'active'
       ), project_rows as (
         select id, row_number() over (order by key) position
         from projects where workspace_id = ${workspace.id} and lifecycle = 'active'
@@ -967,13 +1001,14 @@ describe("portfolio operations domain boundary", () => {
       select gen_random_uuid(), ${workspace.id}, project_rows.id, member_rows.user_id,
         ${currentWeek}::date, ${currentWeek}::date, 120, ${owner.userId}, ${owner.userId}
       from generate_series(1, 2000) value
-      join member_rows on member_rows.position = ((value - 1) % 220) + 1
+      join member_rows on member_rows.position = ((value - 1) % 350) + 1
       join project_rows on project_rows.position = ((value - 1) % 80) + 1;
     `);
     await db.execute(sql`
       with member_rows as (
         select user_id, row_number() over (order by user_id) position
-        from memberships where workspace_id = ${workspace.id}
+        from memberships
+        where workspace_id = ${workspace.id} and status = 'active'
       ), project_rows as (
         select id, row_number() over (order by key) position
         from projects where workspace_id = ${workspace.id} and lifecycle = 'active'
@@ -986,13 +1021,14 @@ describe("portfolio operations domain boundary", () => {
         'Representative work ' || value, 'ready', 'unclassified',
         member_rows.user_id, (value % 8) + 1, value
       from generate_series(1, 3000) value
-      join member_rows on member_rows.position = ((value - 1) % 220) + 1
+      join member_rows on member_rows.position = ((value - 1) % 350) + 1
       join project_rows on project_rows.position = ((value - 1) % 80) + 1;
     `);
     await db.execute(sql`
       with member_rows as (
         select user_id, row_number() over (order by user_id) position
-        from memberships where workspace_id = ${workspace.id}
+        from memberships
+        where workspace_id = ${workspace.id} and status = 'active'
       ), project_rows as (
         select id, row_number() over (order by key) position
         from projects where workspace_id = ${workspace.id} and lifecycle = 'active'
@@ -1007,11 +1043,21 @@ describe("portfolio operations domain boundary", () => {
           else 'billable'::delivery_time_classification end,
         member_rows.user_id, member_rows.user_id
       from generate_series(1, 5000) value
-      join member_rows on member_rows.position = ((value - 1) % 220) + 1
+      join member_rows on member_rows.position = ((value - 1) % 350) + 1
       join project_rows on project_rows.position = ((value - 1) % 80) + 1;
     `);
 
-    const [portfolio, capacity, emptyCapacity, time] = await Promise.all([
+    const [
+      portfolio,
+      capacity,
+      emptyCapacity,
+      time,
+      activeDirectory,
+      suspendedDirectory,
+      pendingInvitations,
+      expiredInvitations,
+      revokedInvitations,
+    ] = await Promise.all([
       listPortfolio(owner, workspace.id, portfolioFilters),
       listCapacity(owner, workspace.id, {
         page: 1,
@@ -1020,29 +1066,58 @@ describe("portfolio operations domain boundary", () => {
         weeks: 4,
       }),
       listCapacity(owner, workspace.id, {
-        page: 4,
+        page: 5,
         pageSize: 100,
         startWeek: currentWeek,
         weeks: 4,
       }),
       listTimeEntries(owner, workspace.id, { page: 1, pageSize: 25 }),
+      listWorkspaceMembers(owner, workspace.id, {
+        page: 1,
+        pageSize: 100,
+        status: "active",
+      }),
+      listWorkspaceMembers(owner, workspace.id, {
+        page: 1,
+        pageSize: 100,
+        status: "suspended",
+      }),
+      listWorkspaceMembers(owner, workspace.id, {
+        pageSize: 100,
+        invitationState: "pending",
+      }),
+      listWorkspaceMembers(owner, workspace.id, {
+        pageSize: 100,
+        invitationState: "expired",
+      }),
+      listWorkspaceMembers(owner, workspace.id, {
+        pageSize: 100,
+        invitationState: "revoked",
+      }),
     ]);
     expect(portfolio.page).toMatchObject({ total: 80, size: 25 });
     expect(portfolio.items).toHaveLength(25);
     expect(
       portfolio.items.every((project) => project.lifecycle === "active"),
     ).toBe(true);
-    expect(capacity.page).toMatchObject({ total: 220, size: 100 });
+    expect(capacity.page).toMatchObject({ total: 350, size: 100 });
     expect(capacity.members).toHaveLength(100);
     expect(emptyCapacity.members).toEqual([]);
     expect(emptyCapacity.page).toEqual({
-      number: 4,
+      number: 5,
       size: 100,
-      total: 220,
-      pages: 3,
+      total: 350,
+      pages: 4,
     });
     expect(time.page).toMatchObject({ total: 5_000, size: 25 });
     expect(time.items).toHaveLength(25);
+    expect(activeDirectory.memberPage.total).toBe(350);
+    expect(activeDirectory.members).toHaveLength(100);
+    expect(suspendedDirectory.memberPage.total).toBe(150);
+    expect(suspendedDirectory.members).toHaveLength(100);
+    expect(pendingInvitations.invitationPage.total).toBe(100);
+    expect(expiredInvitations.invitationPage.total).toBe(100);
+    expect(revokedInvitations.invitationPage.total).toBe(100);
     expect(JSON.stringify(portfolio).length).toBeLessThan(250_000);
   });
 });

@@ -56,6 +56,7 @@ import {
   type Executor,
   type Transaction,
 } from "@/server/delivery";
+import { recordWorkspaceProductSignal } from "@/server/self-service";
 import type { UserActor } from "@/server/workspaces";
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
@@ -190,6 +191,7 @@ async function notifyInternalManagers(
     .where(
       and(
         eq(projects.id, input.projectId),
+        eq(memberships.status, "active"),
         or(
           inArray(memberships.role, ["owner", "admin"]),
           eq(memberships.userId, projects.leadUserId),
@@ -449,6 +451,12 @@ export async function inviteClientParticipant(
       invitationId,
       { projectId, role: input.role },
     );
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "client_invite_created",
+      outcome: "completed",
+      subjectId: invitationId,
+    });
   });
   return {
     id: invitationId,
@@ -688,6 +696,13 @@ export async function acceptClientInvitation(actor: UserActor, token: string) {
       participantId,
       { projectId: invitation.projectId, role: invitation.role },
     );
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId: invitation.workspaceId,
+      eventType: "onboarding_step_completed",
+      outcome: "completed",
+      dimension: "client_participant",
+      subjectId: participantId,
+    });
     return { projectId: invitation.projectId };
   });
 }
@@ -1510,6 +1525,13 @@ export async function actOnClientCommercialPacket(
       id,
       { projectId, packetId, action: input.action },
     );
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId: liveAccess.workspaceId,
+      eventType: "client_action_recorded",
+      outcome: "completed",
+      dimension: "client_participant",
+      subjectId: id,
+    });
     return {
       id,
       action: input.action,
@@ -1816,6 +1838,13 @@ export async function actOnClientAcceptanceTarget(
       id,
       { projectId, acceptanceTargetId: targetId, action: input.action },
     );
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId: liveAccess.workspaceId,
+      eventType: "client_action_recorded",
+      outcome: "completed",
+      dimension: "client_participant",
+      subjectId: id,
+    });
     return {
       id,
       action: input.action,
@@ -1880,6 +1909,7 @@ export async function listInternalClientNotifications(
       and(
         eq(memberships.workspaceId, workspaceId),
         eq(memberships.userId, actor.userId),
+        eq(memberships.status, "active"),
       ),
     )
     .limit(1);

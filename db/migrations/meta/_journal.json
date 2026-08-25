@@ -134,6 +134,13 @@
       "when": 1787286901005,
       "tag": "0018_tiny_fenris",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787573120786,
+      "tag": "0019_sc011c_self_service_scale",
+      "breakpoints": true
     }
   ]
 }

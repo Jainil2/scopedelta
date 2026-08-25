@@ -24,6 +24,7 @@ export async function GET(request: Request, { params }: Context) {
         filters.page,
         filters.pageSize,
         filters.query,
+        filters.lifecycle,
       ),
     );
   } catch (error) {

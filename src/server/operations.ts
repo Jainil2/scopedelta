@@ -99,6 +99,7 @@ async function getWorkspaceOperationsAccess(
       and(
         eq(memberships.workspaceId, workspaceId),
         eq(memberships.userId, actor.userId),
+        eq(memberships.status, "active"),
       ),
     )
     .limit(1);
@@ -704,6 +705,7 @@ export async function createAllocation(
         and(
           eq(memberships.workspaceId, workspaceId),
           eq(memberships.userId, input.memberUserId),
+          eq(memberships.status, "active"),
         ),
       )
       .limit(1);
@@ -775,6 +777,7 @@ export async function updateAllocation(
         and(
           eq(memberships.workspaceId, workspaceId),
           eq(memberships.userId, memberUserId),
+          eq(memberships.status, "active"),
         ),
       )
       .limit(1);
@@ -931,7 +934,10 @@ export async function listCapacity(
     isoWeekStart(dateInTimeZone(new Date(), access.timezone));
   const weeks = enumerateIsoWeeks(startWeek, filters.weeks);
   const endWeek = weeks.at(-1) ?? startWeek;
-  const memberConditions = [eq(memberships.workspaceId, workspaceId)];
+  const memberConditions = [
+    eq(memberships.workspaceId, workspaceId),
+    eq(memberships.status, "active"),
+  ];
   if (filters.memberId)
     conditionsPush(memberConditions, eq(users.id, filters.memberId));
   if (filters.query)

@@ -1,17 +1,31 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
-import { and, asc, count, eq, ne, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { getDb } from "@/db";
 import {
   auditEvents,
   memberships,
+  projectMemberships,
+  projects,
   users,
   workspaceDeliveryAvailabilityPeriods,
   workspaceInvitations,
   workspaceSettings,
   workspaces,
   type WorkspaceRole,
+  type MembershipStatus,
 } from "@/db/schema";
 import {
   communityEntitlementPolicy,
@@ -24,6 +38,7 @@ import {
   deploymentEntitlementPolicy,
   initializeWorkspaceBillingState,
 } from "@/server/billing";
+import { recordWorkspaceProductSignal } from "@/server/self-service";
 
 export type UserActor = { userId: string; email: string };
 
@@ -56,7 +71,12 @@ export async function listWorkspaces(
       workspaceSettings,
       eq(workspaceSettings.workspaceId, workspaces.id),
     )
-    .where(eq(memberships.userId, actor.userId))
+    .where(
+      and(
+        eq(memberships.userId, actor.userId),
+        eq(memberships.status, "active"),
+      ),
+    )
     .orderBy(asc(workspaces.name));
 }
 
@@ -120,6 +140,19 @@ export async function createWorkspace(
         metadata: { timezone: "UTC" },
       },
     ]);
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "workspace_created",
+      outcome: "completed",
+      subjectId: workspaceId,
+    });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "onboarding_step_completed",
+      outcome: "completed",
+      dimension: "workspace_profile",
+      subjectId: workspaceId,
+    });
   });
 
   return {
@@ -146,7 +179,13 @@ export async function getWorkspaceBySlug(actor: UserActor, slug: string) {
       workspaceSettings,
       eq(workspaceSettings.workspaceId, workspaces.id),
     )
-    .where(and(eq(workspaces.slug, slug), eq(memberships.userId, actor.userId)))
+    .where(
+      and(
+        eq(workspaces.slug, slug),
+        eq(memberships.userId, actor.userId),
+        eq(memberships.status, "active"),
+      ),
+    )
     .limit(1);
 
   if (!rows[0]) throw notFound();
@@ -169,6 +208,7 @@ export async function updateWorkspace(
         and(
           eq(memberships.workspaceId, workspaceId),
           eq(memberships.userId, actor.userId),
+          eq(memberships.status, "active"),
         ),
       )
       .limit(1);
@@ -204,6 +244,13 @@ export async function updateWorkspace(
       targetId: workspaceId,
       metadata: { changedFields: ["name", "timezone"] },
     });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId,
+      eventType: "onboarding_step_completed",
+      outcome: "completed",
+      dimension: "workspace_profile",
+      subjectId: workspaceId,
+    });
 
     return { ...updated[0], timezone: input.timezone, role: access[0].role };
   });
@@ -212,47 +259,120 @@ export async function updateWorkspace(
 export async function listWorkspaceMembers(
   actor: UserActor,
   workspaceId: string,
+  filters: {
+    page?: number;
+    pageSize?: number;
+    query?: string;
+    role?: WorkspaceRole;
+    status?: MembershipStatus;
+    invitationPage?: number;
+    invitationState?: "pending" | "accepted" | "revoked" | "expired" | "all";
+  } = {},
 ) {
   const db = getDb();
   const access = await getMembership(actor, workspaceId);
-  const memberRows = await db
-    .select({
-      id: memberships.id,
-      userId: users.id,
-      name: users.name,
-      email: users.email,
-      role: memberships.role,
-      joinedAt: memberships.createdAt,
-    })
-    .from(memberships)
-    .innerJoin(users, eq(users.id, memberships.userId))
-    .where(eq(memberships.workspaceId, workspaceId))
-    .orderBy(asc(users.name));
+  const page = Math.max(1, filters.page ?? 1);
+  const pageSize = Math.max(1, Math.min(filters.pageSize ?? 50, 100));
+  const memberConditions = [eq(memberships.workspaceId, workspaceId)];
+  if (access.role === "member")
+    memberConditions.push(eq(memberships.status, "active"));
+  else if (filters.status)
+    memberConditions.push(eq(memberships.status, filters.status));
+  if (filters.role) memberConditions.push(eq(memberships.role, filters.role));
+  if (filters.query) {
+    const pattern = `%${filters.query}%`;
+    memberConditions.push(
+      or(ilike(users.name, pattern), ilike(users.email, pattern))!,
+    );
+  }
+  const [memberRows, memberTotals] = await Promise.all([
+    db
+      .select({
+        id: memberships.id,
+        userId: users.id,
+        name: users.name,
+        email: users.email,
+        role: memberships.role,
+        status: memberships.status,
+        joinedAt: memberships.createdAt,
+        suspendedAt: memberships.suspendedAt,
+      })
+      .from(memberships)
+      .innerJoin(users, eq(users.id, memberships.userId))
+      .where(and(...memberConditions))
+      .orderBy(asc(users.name), asc(memberships.id))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    db
+      .select({ total: count() })
+      .from(memberships)
+      .innerJoin(users, eq(users.id, memberships.userId))
+      .where(and(...memberConditions)),
+  ]);
 
-  const invitationRows =
+  const invitationPage = Math.max(1, filters.invitationPage ?? 1);
+  const invitationConditions = [
+    eq(workspaceInvitations.workspaceId, workspaceId),
+  ];
+  if (filters.query)
+    invitationConditions.push(
+      ilike(workspaceInvitations.email, `%${filters.query}%`),
+    );
+  const invitationState = filters.invitationState ?? "pending";
+  if (invitationState === "expired") {
+    invitationConditions.push(
+      and(
+        eq(workspaceInvitations.state, "pending"),
+        sql`${workspaceInvitations.expiresAt} <= now()`,
+      )!,
+    );
+  } else if (invitationState !== "all") {
+    invitationConditions.push(eq(workspaceInvitations.state, invitationState));
+    if (invitationState === "pending") {
+      invitationConditions.push(sql`${workspaceInvitations.expiresAt} > now()`);
+    }
+  }
+  const [invitationRows, invitationTotals] =
     access.role === "member"
-      ? []
-      : await db
-          .select({
-            id: workspaceInvitations.id,
-            email: workspaceInvitations.email,
-            role: workspaceInvitations.role,
-            state: workspaceInvitations.state,
-            expiresAt: workspaceInvitations.expiresAt,
-          })
-          .from(workspaceInvitations)
-          .where(
-            and(
-              eq(workspaceInvitations.workspaceId, workspaceId),
-              eq(workspaceInvitations.state, "pending"),
-            ),
-          )
-          .orderBy(asc(workspaceInvitations.email));
+      ? [[], [{ total: 0 }]]
+      : await Promise.all([
+          db
+            .select({
+              id: workspaceInvitations.id,
+              email: workspaceInvitations.email,
+              role: workspaceInvitations.role,
+              state: workspaceInvitations.state,
+              expired: sql<boolean>`${workspaceInvitations.state} = 'pending' and ${workspaceInvitations.expiresAt} <= now()`,
+              expiresAt: workspaceInvitations.expiresAt,
+              emailDeliveryState: workspaceInvitations.emailDeliveryState,
+              emailAttemptCount: workspaceInvitations.emailAttemptCount,
+              lastEmailAttemptAt: workspaceInvitations.lastEmailAttemptAt,
+              lastEmailErrorCode: workspaceInvitations.lastEmailErrorCode,
+            })
+            .from(workspaceInvitations)
+            .where(and(...invitationConditions))
+            .orderBy(
+              desc(workspaceInvitations.updatedAt),
+              asc(workspaceInvitations.id),
+            )
+            .limit(pageSize)
+            .offset((invitationPage - 1) * pageSize),
+          db
+            .select({ total: count() })
+            .from(workspaceInvitations)
+            .where(and(...invitationConditions)),
+        ]);
 
   return {
     role: access.role,
     members: memberRows,
     invitations: invitationRows,
+    memberPage: pageResult(page, pageSize, Number(memberTotals[0]?.total ?? 0)),
+    invitationPage: pageResult(
+      invitationPage,
+      pageSize,
+      Number(invitationTotals[0]?.total ?? 0),
+    ),
   };
 }
 
@@ -277,7 +397,7 @@ export async function inviteWorkspaceMember(
 
   const db = getDb();
   const existingMembership = await db
-    .select({ id: memberships.id })
+    .select({ id: memberships.id, status: memberships.status })
     .from(memberships)
     .innerJoin(users, eq(users.id, memberships.userId))
     .where(
@@ -288,6 +408,13 @@ export async function inviteWorkspaceMember(
     )
     .limit(1);
   if (existingMembership[0]) {
+    if (existingMembership[0].status === "suspended") {
+      throw new PlatformError(
+        "member_access_suspended",
+        409,
+        "This person already has suspended workspace access. Reactivate them from Members instead of sending an invitation.",
+      );
+    }
     throw new PlatformError(
       "already_a_member",
       409,
@@ -320,6 +447,7 @@ export async function inviteWorkspaceMember(
         tokenHash,
         expiresAt,
         invitedByUserId: actor.userId,
+        emailDeliveryState: "pending",
       })
       .onConflictDoUpdate({
         target: [workspaceInvitations.workspaceId, workspaceInvitations.email],
@@ -331,6 +459,8 @@ export async function inviteWorkspaceMember(
           invitedByUserId: actor.userId,
           acceptedAt: null,
           revokedAt: null,
+          emailDeliveryState: "pending",
+          lastEmailErrorCode: null,
           updatedAt: new Date(),
         },
       })
@@ -354,7 +484,11 @@ export async function inviteWorkspaceMember(
     email: input.email,
     role: input.role,
     expiresAt,
-    delivery: { to: input.email, workspaceName: workspace[0].name, token },
+    delivery: {
+      to: input.email,
+      workspaceName: workspace[0].name,
+      token,
+    },
   };
 }
 
@@ -485,6 +619,13 @@ export async function acceptWorkspaceInvitation(
       targetId: membershipId,
       metadata: { role: invitation.role },
     });
+    await recordWorkspaceProductSignal(transaction, {
+      workspaceId: invitation.workspaceId,
+      eventType: "onboarding_step_completed",
+      outcome: "completed",
+      dimension: "internal_member",
+      subjectId: membershipId,
+    });
     return { workspaceId: invitation.workspaceId, slug: invitation.slug };
   });
 }
@@ -505,6 +646,7 @@ export async function updateWorkspaceMemberRole(
         and(
           eq(memberships.workspaceId, workspaceId),
           eq(memberships.userId, actor.userId),
+          eq(memberships.status, "active"),
         ),
       )
       .limit(1);
@@ -559,6 +701,22 @@ export async function removeWorkspaceMember(
   membershipId: string,
   entitlements: EntitlementPolicy = communityEntitlementPolicy,
 ) {
+  return updateWorkspaceMemberStatus(
+    actor,
+    workspaceId,
+    membershipId,
+    "suspended",
+    entitlements,
+  );
+}
+
+export async function updateWorkspaceMemberStatus(
+  actor: UserActor,
+  workspaceId: string,
+  membershipId: string,
+  nextStatus: MembershipStatus,
+  entitlements: EntitlementPolicy = communityEntitlementPolicy,
+) {
   const db = getDb();
   return db.transaction(async (transaction) => {
     const actorMembership = await transaction
@@ -568,6 +726,7 @@ export async function removeWorkspaceMember(
         and(
           eq(memberships.workspaceId, workspaceId),
           eq(memberships.userId, actor.userId),
+          eq(memberships.status, "active"),
         ),
       )
       .limit(1);
@@ -583,7 +742,12 @@ export async function removeWorkspaceMember(
       .for("update");
 
     const target = await transaction
-      .select({ id: memberships.id, role: memberships.role })
+      .select({
+        id: memberships.id,
+        userId: memberships.userId,
+        role: memberships.role,
+        status: memberships.status,
+      })
       .from(memberships)
       .where(
         and(
@@ -598,24 +762,75 @@ export async function removeWorkspaceMember(
       actorMembership[0].role === "owner" ||
       (actorMembership[0].role === "admin" && target[0].role === "member");
     if (!allowed) throw forbidden();
-    if (target[0].role === "owner") {
+    if (target[0].status === nextStatus) {
+      return { id: membershipId, status: nextStatus };
+    }
+    if (nextStatus === "suspended" && target[0].role === "owner") {
       await assertAnotherOwner(transaction, workspaceId, membershipId);
     }
-
-    await transaction
-      .delete(memberships)
-      .where(eq(memberships.id, membershipId));
+    if (nextStatus === "suspended") {
+      const activeLead = await transaction
+        .select({ id: projects.id })
+        .from(projects)
+        .where(
+          and(
+            eq(projects.workspaceId, workspaceId),
+            eq(projects.leadUserId, target[0].userId),
+            eq(projects.lifecycle, "active"),
+          ),
+        )
+        .limit(1);
+      if (activeLead[0]) {
+        throw new PlatformError(
+          "member_leads_active_project",
+          409,
+          "Reassign this person's active project leadership before suspending access.",
+        );
+      }
+      const now = new Date();
+      await transaction
+        .delete(projectMemberships)
+        .where(
+          and(
+            eq(projectMemberships.workspaceId, workspaceId),
+            eq(projectMemberships.userId, target[0].userId),
+          ),
+        );
+      await transaction
+        .update(memberships)
+        .set({
+          status: "suspended",
+          suspendedAt: now,
+          suspendedByUserId: actor.userId,
+          updatedAt: now,
+        })
+        .where(eq(memberships.id, membershipId));
+    } else {
+      await assertInternalMemberCapacity(transaction, workspaceId);
+      await transaction
+        .update(memberships)
+        .set({
+          status: "active",
+          suspendedAt: null,
+          suspendedByUserId: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(memberships.id, membershipId));
+    }
     await transaction.insert(auditEvents).values({
       id: randomUUID(),
       workspaceId,
       actorType: "human",
       actorId: actor.userId,
-      eventType: "membership.removed.v1",
+      eventType:
+        nextStatus === "suspended"
+          ? "membership.suspended.v1"
+          : "membership.reactivated.v1",
       targetType: "membership",
       targetId: membershipId,
-      metadata: { previousRole: target[0].role },
+      metadata: { previousStatus: target[0].status, status: nextStatus },
     });
-    return { id: membershipId };
+    return { id: membershipId, status: nextStatus };
   });
 }
 
@@ -671,6 +886,62 @@ export async function revokeWorkspaceInvitation(
   return { id: invitationId };
 }
 
+export async function reissueWorkspaceInvitation(
+  actor: UserActor,
+  workspaceId: string,
+  invitationId: string,
+  entitlements: EntitlementPolicy = communityEntitlementPolicy,
+) {
+  const access = await getMembership(actor, workspaceId);
+  if (access.role === "member") throw forbidden();
+  const invitation = await getDb()
+    .select({
+      email: workspaceInvitations.email,
+      role: workspaceInvitations.role,
+    })
+    .from(workspaceInvitations)
+    .where(
+      and(
+        eq(workspaceInvitations.id, invitationId),
+        eq(workspaceInvitations.workspaceId, workspaceId),
+        inArray(workspaceInvitations.state, ["pending", "revoked"]),
+      ),
+    )
+    .limit(1);
+  if (!invitation[0]) throw notFound();
+  if (access.role === "admin" && invitation[0].role !== "member") {
+    throw forbidden();
+  }
+  return inviteWorkspaceMember(
+    actor,
+    workspaceId,
+    {
+      email: invitation[0].email,
+      role: invitation[0].role as "admin" | "member",
+    },
+    entitlements,
+  );
+}
+
+export async function recordWorkspaceInvitationEmailResult(
+  invitationId: string,
+  state: "sent" | "failed",
+  errorCode: string | null = null,
+) {
+  const now = new Date();
+  await getDb()
+    .update(workspaceInvitations)
+    .set({
+      emailDeliveryState: state,
+      emailAttemptCount: sql`${workspaceInvitations.emailAttemptCount} + 1`,
+      lastEmailAttemptAt: now,
+      lastEmailErrorCode:
+        state === "failed" ? (errorCode ?? "delivery_failed") : null,
+      updatedAt: now,
+    })
+    .where(eq(workspaceInvitations.id, invitationId));
+}
+
 async function getMembership(actor: UserActor, workspaceId: string) {
   const rows = await getDb()
     .select({ id: memberships.id, role: memberships.role })
@@ -679,6 +950,7 @@ async function getMembership(actor: UserActor, workspaceId: string) {
       and(
         eq(memberships.workspaceId, workspaceId),
         eq(memberships.userId, actor.userId),
+        eq(memberships.status, "active"),
       ),
     )
     .limit(1);
@@ -700,6 +972,7 @@ async function assertAnotherOwner(
       and(
         eq(memberships.workspaceId, workspaceId),
         eq(memberships.role, "owner"),
+        eq(memberships.status, "active"),
         ne(memberships.id, excludingMembershipId),
       ),
     );
@@ -726,4 +999,8 @@ function createWorkspaceSlug(name: string) {
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
+}
+
+function pageResult(number: number, size: number, total: number) {
+  return { number, size, total, pages: Math.ceil(total / size) };
 }

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
 
+import { ActionableEmptyState } from "@/components/self-service-workspace";
+
 type Client = {
   id: string;
   name: string;
@@ -95,6 +97,187 @@ export type PageInfo = {
   total: number;
   hasNextPage: boolean;
 };
+
+export type WorkspaceMemberPageInfo = {
+  number: number;
+  size: number;
+  total: number;
+  pages: number;
+};
+
+export function WorkspaceMemberPicker({
+  workspaceId,
+  name,
+  label,
+  initialMembers,
+  initialPageInfo,
+  defaultValue,
+  excludeUserIds = [],
+}: Readonly<{
+  workspaceId: string;
+  name: string;
+  label: string;
+  initialMembers: Member[];
+  initialPageInfo: WorkspaceMemberPageInfo;
+  defaultValue?: string;
+  excludeUserIds?: string[];
+}>) {
+  const excluded = useMemo(() => new Set(excludeUserIds), [excludeUserIds]);
+  const eligibleInitial = useMemo(
+    () => initialMembers.filter((member) => !excluded.has(member.userId)),
+    [excluded, initialMembers],
+  );
+  const [members, setMembers] = useState(eligibleInitial);
+  const [pageInfo, setPageInfo] = useState(initialPageInfo);
+  const [selectedUserId, setSelectedUserId] = useState(
+    defaultValue ?? eligibleInitial[0]?.userId ?? "",
+  );
+  const [search, setSearch] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const eligibleMembers = members.filter(
+    (member) => !excluded.has(member.userId),
+  );
+  const selectedMember = [...eligibleInitial, ...eligibleMembers].find(
+    (member) => member.userId === selectedUserId,
+  );
+  const choices = selectedMember
+    ? [
+        selectedMember,
+        ...eligibleMembers.filter(
+          (member) => member.userId !== selectedMember.userId,
+        ),
+      ]
+    : eligibleMembers;
+  const effectiveSelectedUserId =
+    selectedMember?.userId ?? choices[0]?.userId ?? "";
+
+  async function load(page: number) {
+    setLoading(true);
+    setMessage("");
+    try {
+      const query = new URLSearchParams({
+        status: "active",
+        page: String(page),
+        pageSize: "25",
+      });
+      if (search.trim()) query.set("query", search.trim());
+      const response = await fetch(
+        `/api/v1/workspaces/${workspaceId}/members?${query.toString()}`,
+      );
+      const payload = (await response.json()) as {
+        data?: {
+          members: Array<
+            Member & { role?: string; status?: "active" | "suspended" }
+          >;
+          memberPage: WorkspaceMemberPageInfo;
+        };
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.data) {
+        throw new Error(
+          payload.error?.message ?? "Member choices could not be loaded.",
+        );
+      }
+      const nextMembers = payload.data.members
+        .filter((member) => !excluded.has(member.userId))
+        .map((member) => ({
+          userId: member.userId,
+          name: member.name,
+          email: member.email,
+          workspaceRole: member.workspaceRole ?? member.role,
+        }));
+      setMembers(nextMembers);
+      setPageInfo(payload.data.memberPage);
+      if (!selectedUserId && nextMembers[0]) {
+        setSelectedUserId(nextMembers[0].userId);
+      }
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Member choices could not be loaded.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="workspace-member-picker">
+      <label>
+        <span>{label}</span>
+        <select
+          name={name}
+          value={effectiveSelectedUserId}
+          onChange={(event) => setSelectedUserId(event.target.value)}
+          required
+        >
+          {!choices.length ? (
+            <option value="">No matching members</option>
+          ) : null}
+          {choices.map((member) => (
+            <option value={member.userId} key={member.userId}>
+              {member.name} · {member.email}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="workspace-member-picker-search">
+        <label>
+          <span>Search {label.toLowerCase()}</span>
+          <input
+            type="search"
+            value={search}
+            maxLength={120}
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void load(1);
+              }
+            }}
+          />
+        </label>
+        <button type="button" disabled={loading} onClick={() => void load(1)}>
+          {loading ? "Loading…" : "Search"}
+        </button>
+      </div>
+      <nav
+        className="pagination compact-pagination"
+        aria-label={`${label} pages`}
+      >
+        {pageInfo.number > 1 ? (
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void load(pageInfo.number - 1)}
+          >
+            Previous
+          </button>
+        ) : (
+          <span />
+        )}
+        <span>
+          Page {pageInfo.number} of {Math.max(pageInfo.pages, 1)} ·{" "}
+          {pageInfo.total} active members
+        </span>
+        {pageInfo.number < pageInfo.pages ? (
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void load(pageInfo.number + 1)}
+          >
+            Next
+          </button>
+        ) : (
+          <span />
+        )}
+      </nav>
+      {message ? <output>{message}</output> : null}
+    </div>
+  );
+}
 
 export type BacklogFilters = {
   page: number;
@@ -268,12 +451,13 @@ export function ClientDirectory({
             </article>
           ))
         ) : (
-          <div className="delivery-empty">
-            <h2>No clients yet</h2>
-            <p>
-              Create the client account that owns your first delivery project.
-            </p>
-          </div>
+          <ActionableEmptyState
+            title="No clients yet"
+            why="Clients establish the tenant-safe account boundary for delivery projects."
+            prerequisite="An owner or admin can create the first client from this page."
+            next="Review the activation path"
+            href={`/app/${workspaceSlug}/settings/getting-started`}
+          />
         )}
       </div>
       <nav className="pagination" aria-label="Client pages">
@@ -309,18 +493,22 @@ export function ProjectDirectory({
   clients,
   clientPageInfo,
   members,
+  memberPageInfo,
   projects,
   projectPageInfo,
   query,
+  lifecycle,
 }: Readonly<{
   workspaceId: string;
   workspaceSlug: string;
   clients: Client[];
   clientPageInfo: PageInfo;
   members: Member[];
+  memberPageInfo: WorkspaceMemberPageInfo;
   projects: Project[];
   projectPageInfo: PageInfo;
   query?: string;
+  lifecycle: "current" | "active" | "completed" | "archived" | "all";
 }>) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -389,16 +577,13 @@ export function ProjectDirectory({
                 <span>Project name</span>
                 <input name="name" minLength={2} maxLength={160} required />
               </label>
-              <label>
-                <span>Lead</span>
-                <select name="leadUserId" required>
-                  {members.map((member) => (
-                    <option key={member.userId} value={member.userId}>
-                      {member.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <WorkspaceMemberPicker
+                workspaceId={workspaceId}
+                name="leadUserId"
+                label="Lead"
+                initialMembers={members}
+                initialPageInfo={memberPageInfo}
+              />
               <label>
                 <span>Target date</span>
                 <input name="targetDate" type="date" />
@@ -425,6 +610,7 @@ export function ProjectDirectory({
                   projectPageInfo.page,
                   clientPageInfo.page - 1,
                   query,
+                  lifecycle,
                 )}
               >
                 Previous clients
@@ -440,6 +626,7 @@ export function ProjectDirectory({
                   projectPageInfo.page,
                   clientPageInfo.page + 1,
                   query,
+                  lifecycle,
                 )}
               >
                 Next clients
@@ -461,6 +648,17 @@ export function ProjectDirectory({
           defaultValue={query || ""}
           maxLength={120}
         />
+        <select
+          name="lifecycle"
+          aria-label="Project lifecycle"
+          defaultValue={lifecycle}
+        >
+          <option value="current">Active and completed</option>
+          <option value="active">Active</option>
+          <option value="completed">Completed</option>
+          <option value="archived">Archived</option>
+          <option value="all">All lifecycle states</option>
+        </select>
         <button type="submit" className="button-secondary">
           Search
         </button>
@@ -494,10 +692,23 @@ export function ProjectDirectory({
             </Link>
           ))
         ) : (
-          <div className="delivery-empty">
-            <h2>No accessible projects</h2>
-            <p>Create a project or ask a project lead to add you.</p>
-          </div>
+          <ActionableEmptyState
+            title="No accessible projects"
+            why="Projects hold delivery, commercial, collaboration, and evidence records."
+            prerequisite={
+              activeClients.length
+                ? "Use a template when one exists, or create a project directly."
+                : "Create an active client before creating a project."
+            }
+            next={
+              activeClients.length ? "Review project setup" : "Create a client"
+            }
+            href={
+              activeClients.length
+                ? `/app/${workspaceSlug}/settings/getting-started`
+                : `/app/${workspaceSlug}/clients`
+            }
+          />
         )}
       </div>
       <nav className="pagination" aria-label="Project pages">
@@ -508,6 +719,7 @@ export function ProjectDirectory({
               projectPageInfo.page - 1,
               clientPageInfo.page,
               query,
+              lifecycle,
             )}
           >
             Previous
@@ -525,6 +737,7 @@ export function ProjectDirectory({
               projectPageInfo.page + 1,
               clientPageInfo.page,
               query,
+              lifecycle,
             )}
           >
             Next
@@ -544,6 +757,7 @@ export function ProjectOverview({
   milestones,
   projectMembers,
   workspaceMembers,
+  workspaceMemberPageInfo,
   canManage,
 }: Readonly<{
   workspaceId: string;
@@ -556,16 +770,13 @@ export function ProjectOverview({
   milestones: Milestone[];
   projectMembers: Member[];
   workspaceMembers: Member[];
+  workspaceMemberPageInfo: WorkspaceMemberPageInfo;
   canManage: boolean;
 }>) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
   const milestoneComposerRef = useRef<HTMLDetailsElement>(null);
-  const available = workspaceMembers.filter(
-    (candidate) =>
-      !projectMembers.some((member) => member.userId === candidate.userId),
-  );
 
   async function createMilestone(formData: FormData) {
     const response = await apiRequest(
@@ -714,16 +925,17 @@ export function ProjectOverview({
               <span>Project name</span>
               <input name="name" defaultValue={project.name} required />
             </label>
-            <label>
-              <span>Lead</span>
-              <select name="leadUserId" defaultValue={project.leadUserId}>
-                {projectMembers.map((member) => (
-                  <option value={member.userId} key={member.userId}>
-                    {member.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <WorkspaceMemberPicker
+              workspaceId={workspaceId}
+              name="leadUserId"
+              label="Lead"
+              initialMembers={uniqueMembers([
+                ...projectMembers,
+                ...workspaceMembers,
+              ])}
+              initialPageInfo={workspaceMemberPageInfo}
+              defaultValue={project.leadUserId}
+            />
             <label>
               <span>Start date</span>
               <input
@@ -890,18 +1102,16 @@ export function ProjectOverview({
               </li>
             ))}
           </ul>
-          {canManage && available.length ? (
+          {canManage ? (
             <form action={addMember} className="inline-form">
-              <label>
-                <span>Add member</span>
-                <select name="userId">
-                  {available.map((member) => (
-                    <option value={member.userId} key={member.userId}>
-                      {member.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <WorkspaceMemberPicker
+                workspaceId={workspaceId}
+                name="userId"
+                label="Add member"
+                initialMembers={workspaceMembers}
+                initialPageInfo={workspaceMemberPageInfo}
+                excludeUserIds={projectMembers.map((member) => member.userId)}
+              />
               <button type="submit" disabled={pending}>
                 Add
               </button>
@@ -1657,12 +1867,15 @@ function projectDirectoryHref(
   projectPage: number,
   clientPage: number,
   search?: string,
+  lifecycle:
+    "current" | "active" | "completed" | "archived" | "all" = "current",
 ) {
   const query = new URLSearchParams({
     page: String(projectPage),
     clientPage: String(clientPage),
   });
   if (search) query.set("query", search);
+  if (lifecycle !== "current") query.set("lifecycle", lifecycle);
   return `/app/${workspaceSlug}/projects?${query.toString()}`;
 }
 
@@ -1741,6 +1954,12 @@ export function workItemPayload(formData: FormData) {
 
 function nullable(value: FormDataEntryValue | null) {
   return typeof value === "string" && value ? value : null;
+}
+
+function uniqueMembers(members: Member[]) {
+  return [
+    ...new Map(members.map((member) => [member.userId, member])).values(),
+  ];
 }
 
 function formText(formData: FormData, name: string) {

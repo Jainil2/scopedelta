@@ -2,7 +2,7 @@
 
 ## Status
 
-Planning baseline, updated 2026-08-20 for the SC-011B template, migration, and portability implementation. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
+Planning baseline, updated 2026-08-25 for the SC-011C self-service, recovery, lifecycle-intent, and signal boundary. Counts are product capabilities, not individual screens or API endpoints. The inventory is refined before each layer enters engineering.
 
 ## Current capability count
 
@@ -17,7 +17,7 @@ The Layer-3 review reclassifies the core client portal/request/approval capabili
 
 Layer 3 therefore introduces **no mandatory paid external service dependency**. Layer 4 preserves that local core for QA, defects, traceability and readiness; the implemented GitHub evidence connection is an explicitly selected external provider dependency. GitLab remains deferred and classified Hybrid because a future adapter could target self-hosted or hosted GitLab.
 
-Layer 5 is complete through SC-009 / PR #43. Layer 6 preserves the distinction between software capability and ScopeDelta-managed resources: self-host core operation is Local/LAN and does not call cloud billing, while hosted checkout/portal/lifecycle inherently use an external payment service. Active-project/internal-user rules and managed usage accounting remain provider-neutral local domain behavior. External client participants remain separate from internal-user capacity. Layer 7 is partially delivered through SC-011A and the SC-011B review candidate: portfolio operations, templates, generic/Jira CSV migration, and bounded core export are Local/LAN with no mandatory AI or external-provider dependency. The Jira CSV preset is therefore reclassified from Hybrid to Local/LAN; a future direct Jira API/OAuth adapter would be provider-dependent but remains deferred.
+Layer 5 is complete through SC-009 / PR #43. Layer 6 preserves the distinction between software capability and ScopeDelta-managed resources: self-host core operation is Local/LAN and does not call cloud billing, while hosted checkout/portal/lifecycle inherently use an external payment service. Active-project/internal-user rules and managed usage accounting remain provider-neutral local domain behavior. External client participants remain separate from internal-user capacity. Layer 7 is delivered through SC-011A/B/C: portfolio operations, templates, generic/Jira CSV migration, bounded core export, onboarding/admin/recovery, lifecycle intent, and local signal storage/export are Local/LAN with no mandatory AI or external-provider dependency. Outbound telemetry/alerts and physical deletion remain deferred Layer-8 capabilities.
 
 ### Runtime meaning
 
@@ -226,9 +226,9 @@ Layer-6 runtime rules:
 | Project/workflow templates | Local/LAN | SC-011B; versioned definitions and copied application snapshots, no workflow builder |
 | CSV import/export | Local/LAN | SC-011B; durable preview/confirm plus formula-neutralized bounded core delivery export |
 | Jira migration/import | Local/LAN | SC-011B Jira CSV preset; direct API/OAuth deferred |
-| Admin/member management | Local/LAN |
-| Guided onboarding/help | Local/LAN |
-| Privacy-safe product telemetry | Hybrid/optional external |
+| Admin/member management | Local/LAN | SC-011C; suspension/reactivation, bounded directory filters, invitation reissue/manual links |
+| Guided onboarding/help | Local/LAN | SC-011C; authoritative derived completion plus per-admin dismiss/resume |
+| Privacy-safe product telemetry | Local/LAN | SC-011C local bounded signal storage/operator export; outbound transport/alerts deferred |
 
 ## Layer 8 — Enterprise / GA Hardening
 

@@ -34,7 +34,10 @@ export default async function CapacityPage({
   const projectQuery = raw.projectQuery ?? "";
   const [data, directory, projectResult] = await Promise.all([
     listCapacity(actor, workspace.id, filters),
-    listWorkspaceMembers(actor, workspace.id),
+    listWorkspaceMembers(actor, workspace.id, {
+      status: "active",
+      pageSize: 100,
+    }),
     listProjects(actor, workspace.id, 1, 100, projectQuery),
   ]);
   const memberOptions = directory.members.map((member) => ({

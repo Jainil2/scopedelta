@@ -93,12 +93,24 @@ describe("platform forms", () => {
     expect(screen.getByText(/Members can view/)).toBeInTheDocument();
   });
 
-  it("gives admins member-only controls without exposing admin or owner mutation", () => {
+  it("gives admins member-only suspension controls without destructive removal", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: { status: "suspended" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
     render(
       <MemberManagement
         workspaceId="workspace-id"
         currentUserId="admin-user"
         currentRole="admin"
+        workspaceSlug="workspace"
+        memberPage={{ number: 1, size: 50, total: 2, pages: 1 }}
+        invitationPage={{ number: 1, size: 50, total: 0, pages: 0 }}
+        filters={{ query: "", invitationState: "pending" }}
         invitations={[]}
         members={[
           {
@@ -107,7 +119,9 @@ describe("platform forms", () => {
             name: "Workspace Owner",
             email: "owner@example.test",
             role: "owner",
+            status: "active",
             joinedAt: new Date().toISOString(),
+            suspendedAt: null,
           },
           {
             id: "member-membership",
@@ -115,7 +129,9 @@ describe("platform forms", () => {
             name: "Workspace Member",
             email: "member@example.test",
             role: "member",
+            status: "active",
             joinedAt: new Date().toISOString(),
+            suspendedAt: null,
           },
         ]}
       />,
@@ -124,7 +140,93 @@ describe("platform forms", () => {
     expect(screen.getByLabelText("Starting role")).not.toHaveTextContent(
       "Admin",
     );
-    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("button", { name: "Suspend access" }),
+    ).toHaveLength(1);
     expect(screen.queryByRole("combobox", { name: /Role for/ })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Suspend access" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/workspaces/workspace-id/members/member-membership",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ status: "suspended" }),
+        }),
+      ),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Workspace access suspended",
+    );
+  });
+
+  it("keeps directory filters while paging and discovering revoked invitations for reissue", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            acceptUrl:
+              "http://localhost:3000/invitations/accept#token=rotated-token-with-more-than-32-characters",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(
+      <MemberManagement
+        workspaceId="workspace-id"
+        currentUserId="owner-user"
+        currentRole="owner"
+        workspaceSlug="workspace"
+        memberPage={{ number: 2, size: 50, total: 125, pages: 3 }}
+        invitationPage={{ number: 2, size: 50, total: 110, pages: 3 }}
+        filters={{
+          query: "alex",
+          role: "member",
+          status: "suspended",
+          invitationState: "revoked",
+        }}
+        members={[]}
+        invitations={[
+          {
+            id: "revoked-invitation",
+            email: "alex@example.test",
+            role: "member",
+            state: "revoked",
+            expired: false,
+            expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+            emailDeliveryState: "failed",
+            emailAttemptCount: 1,
+            lastEmailAttemptAt: new Date().toISOString(),
+            lastEmailErrorCode: "delivery_failed",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Next members" })).toHaveAttribute(
+      "href",
+      "/app/workspace/settings/members?query=alex&role=member&status=suspended&invitationState=revoked&page=3&invitationPage=2",
+    );
+    expect(
+      screen.getByRole("link", { name: "Previous invitations" }),
+    ).toHaveAttribute(
+      "href",
+      "/app/workspace/settings/members?query=alex&role=member&status=suspended&invitationState=revoked&page=2",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Reissue" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/workspaces/workspace-id/invitations/revoked-invitation/reissue",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    expect(
+      (screen.getByLabelText("One-time invitation link") as HTMLInputElement)
+        .value,
+    ).toMatch(/rotated-token/);
   });
 });

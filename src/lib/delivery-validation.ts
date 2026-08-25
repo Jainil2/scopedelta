@@ -172,6 +172,9 @@ export const myWorkFilterSchema = workItemFilterSchema.extend({
 
 export const projectListFilterSchema = paginationSchema.extend({
   query: z.string().trim().max(120).optional(),
+  lifecycle: z
+    .enum(["current", "active", "completed", "archived", "all"])
+    .default("current"),
 });
 
 export type CreateClientInput = z.output<typeof createClientSchema>;

@@ -42,6 +42,7 @@ import {
   reserveManagedAiUsage,
   settleManagedUsageInTransaction,
 } from "@/server/billing";
+import { recordWorkspaceProductSignal } from "@/server/self-service";
 
 import {
   assembleAiContext,
@@ -1013,6 +1014,20 @@ export async function runAiJob(jobId: string) {
             executionConfigFingerprint: job!.executionConfigFingerprint,
           },
         });
+        await recordWorkspaceProductSignal(transaction, {
+          workspaceId: job!.workspaceId,
+          eventType: "ai_job_completed",
+          outcome: "succeeded",
+          dimension: "none",
+          subjectId: jobId,
+        });
+        await recordWorkspaceProductSignal(transaction, {
+          workspaceId: job!.workspaceId,
+          eventType: "onboarding_step_completed",
+          outcome: "completed",
+          dimension: "ai_provider",
+          subjectId: jobId,
+        });
       }
     });
   } catch (error) {
@@ -1070,8 +1085,42 @@ export async function runAiJob(jobId: string) {
         usageRecordId,
         providerCallStarted ? "consumed" : "released",
       );
+      if (failed[0]) {
+        await transaction.insert(auditEvents).values({
+          id: randomUUID(),
+          workspaceId: job!.workspaceId,
+          actorType: "ai_agent",
+          actorId: null,
+          eventType: "ai_job.failed.v1",
+          targetType: "ai_job",
+          targetId: jobId,
+          metadata: { failureClass: aiFailureDimension(providerError.code) },
+        });
+        await recordWorkspaceProductSignal(transaction, {
+          workspaceId: job!.workspaceId,
+          eventType: "ai_job_completed",
+          outcome: "failed",
+          dimension: aiFailureDimension(providerError.code),
+          subjectId: jobId,
+        });
+      }
     });
   }
+}
+
+function aiFailureDimension(code: string) {
+  if (code.includes("config") || code.includes("disabled"))
+    return "configuration";
+  if (code.includes("allowance") || code.includes("capacity"))
+    return "capacity";
+  if (code.includes("lease")) return "lease_expired";
+  if (
+    code.includes("malformed") ||
+    code.includes("evidence") ||
+    code.includes("context")
+  )
+    return "validation";
+  return "provider_unavailable";
 }
 
 function selectedCandidates(

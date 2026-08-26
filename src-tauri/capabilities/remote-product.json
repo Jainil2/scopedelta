@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/remote-schema.json",
+  "identifier": "remote-product",
+  "description": "Narrow bridge available to the verified selected deployment",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["https://*", "http://localhost:*", "http://127.0.0.1:*"]
+  },
+  "permissions": [
+    "allow-remote-notification-context",
+    "allow-remote-submit-notifications"
+  ]
+}

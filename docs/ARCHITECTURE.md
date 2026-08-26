@@ -28,6 +28,9 @@ SC-011 adds portfolio/self-service scale, imports, onboarding, lifecycle intent,
 and local signals. SC-012 adds owner multipart export, non-destructive operator
 lifecycle processing, durable content-free incidents/SMTP evidence, bounded
 recovery, representative scale/query proof, and PostgreSQL 17 restore proof.
+DX-001 adds a Tauri 2.11 desktop client for Windows, macOS, and Linux. It renders
+the selected deployment and keeps authentication, authorization, project data,
+and commercial data server-authoritative.
 
 ## System decision
 
@@ -44,10 +47,11 @@ Generic SMTP carries verification, password-recovery, and invitation mail.
 None of these boundaries depend on a proprietary runtime SDK.
 
 The collaborative source of truth remains one server-side PostgreSQL database
-per deployment. Managed cloud, customer-controlled LAN/VPN deployments, future
-web clients, and a future first-party desktop client use the same versioned API
-and server domain rules. SC-004 does not add per-device project databases,
-peer-to-peer synchronization, or full offline collaborative writes.
+per deployment. Managed cloud, customer-controlled LAN/VPN deployments, web
+clients, and the first-party desktop client use the same versioned API and
+server domain rules. The desktop client does not add per-device project
+databases, peer-to-peer synchronization, credential duplication, or offline
+collaborative writes.
 
 ```text
 Browser
@@ -62,7 +66,49 @@ Browser
        ├─ Server Components ─────────> the same domain services
        ├─ node-postgres/Drizzle ─────> PostgreSQL
        └─ Next after() + Nodemailer ─> SMTP
+
+Tauri desktop
+  ├─ bundled selector/preferences UI ─> minimal native commands
+  ├─ selected deployment WebView ─────> Better Auth + existing product UI
+  ├─ GET /api/v1/desktop/bootstrap ───> protocol/canonical-origin proof
+  ├─ GET /api/v1/desktop/notifications
+  │    └─ authorized content-free events + opaque cursor
+  ├─ scopedelta://open ───────────────> verified origin + route allowlist
+  └─ signed updater ──────────────────> build-configured HTTPS endpoint only
 ```
+
+## Desktop trust boundary
+
+The bundled selector is trusted application code. The remote product WebView is
+treated as deployment-controlled content even after bootstrap verification. A
+Tauri capability grants remote pages only `remote_notification_context` and
+`remote_submit_notifications`; each Rust command also verifies the `main`
+window label and exact current origin against the persisted canonical origin.
+No filesystem, process/shell, clipboard, generic opener, store, updater,
+notification-plugin, window-creation, or generic window permission is granted
+to remote content.
+
+Production server selection accepts only HTTPS origins, follows no bootstrap
+redirects, and relies on the platform TLS verifier. Debug builds additionally
+accept loopback HTTP. A deployment switch verifies the new bootstrap contract,
+clears all WebView browsing data, then atomically persists the new origin and
+resets notification cursor/dedupe state. Native storage contains only the
+canonical origin, notification preference/cursor/dedupe identifiers, and
+window-state plugin data; Better Auth cookies remain WebView-managed.
+
+Deep links are untrusted input. The native parser accepts only
+`scopedelta://open?server=<origin>&path=<route>`, rejects credentials,
+fragments, encoded separators, traversal, duplicate parameters, and arbitrary
+URLs, and permits a small set of `/app/...` and `/client/...` product routes.
+Same-deployment links focus the existing single instance. Cross-deployment
+links return to the bundled UI and require an explicit verified switch.
+
+OS notifications are opt-in and active-app only. The server feed aggregates
+only currently authorized internal/project and active client-participant
+events. Responses contain `id`, generic `category`, `createdAt`, and an
+allowlisted relative `path`; names, message bodies, commercial content, code,
+AI content, and provider payloads are absent. The native notification text is
+fixed and content-free. See `docs/DESKTOP_OPERATIONS.md`.
 
 ## Persistence and migrations
 

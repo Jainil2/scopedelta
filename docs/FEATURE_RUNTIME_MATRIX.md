@@ -257,13 +257,28 @@ Layer-8 runtime rules:
 
 ## Cross-cutting — Desktop Client
 
-| Capability | Runtime class |
-|---|---|
-| Desktop shell Windows/macOS/Linux | Desktop client |
-| Custom server URL / LAN connection | Desktop client |
-| Native notifications/deep links | Desktop client |
-| Local encrypted cache | Desktop client |
-| Auto-update channel | Hybrid/optional external |
+DX-001 delivers the desktop beta with the same server-authoritative Better Auth,
+API, authorization, and PostgreSQL boundaries as the browser product. It adds no
+mandatory ScopeDelta Cloud dependency and no offline project database.
+
+| Capability | Runtime class | Delivered slice |
+|---|---|---|
+| Desktop shell Windows/macOS/Linux | Desktop client | DX-001 Tauri 2.11 system-WebView clients and private CI artifacts |
+| Custom server URL / LAN connection | Desktop client | Verified canonical HTTPS origin; debug-only loopback HTTP; browsing data cleared on switch |
+| Native notifications/deep links | Desktop client | Opt-in active-app content-free notifications, strict route parser, single-instance focus |
+| Minimal local preferences/window state | Desktop client | Origin, notification cursor/dedupe/preference, window state only; no credentials or project cache |
+| Auto-update channel | Hybrid/optional external | Signature-required, build-configured HTTPS updater; absent configuration disables updates |
+
+Desktop runtime rules:
+
+- The selected customer deployment remains the authority for sessions, tenant
+  authorization, API behavior, notifications, and PostgreSQL data.
+- Remote product content receives only two origin-revalidated notification
+  commands. Native plugins and generic device APIs are not exposed to it.
+- GitHub/Paddle navigation uses an explicit native provider allowlist; unknown
+  off-origin navigation is blocked.
+- Public signing/notarization, paid certificates, stores, and release
+  publication remain founder gates rather than core runtime dependencies.
 
 ## External dependency inventory
 

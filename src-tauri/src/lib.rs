@@ -419,12 +419,9 @@ fn remote_submit_notifications(
                 }
                 NotificationCategory::ClientActivity => "New client activity is ready to review.",
             };
-            let _ = app
-                .notification()
-                .builder()
-                .title("ScopeDelta")
-                .body(body)
-                .show();
+            if let Some(origin) = preferences.selected_origin.clone() {
+                show_native_notification(&app, body, origin, event.path);
+            }
             preferences.seen_event_ids.push_back(event.id);
             while preferences.seen_event_ids.len() > MAX_DEDUPE_IDS {
                 preferences.seen_event_ids.pop_front();
@@ -438,6 +435,56 @@ fn remote_submit_notifications(
         .lock()
         .map_err(|_| "Desktop preferences are unavailable.".to_string())? = preferences;
     Ok(())
+}
+
+fn notification_destination(
+    selected_origin: Option<&str>,
+    event_origin: &str,
+    path: &str,
+) -> Option<Url> {
+    let selected = normalize_origin(selected_origin?, cfg!(debug_assertions)).ok()?;
+    if selected != event_origin {
+        return None;
+    }
+    let route = validate_route(path).ok()?;
+    Url::parse(&format!("{selected}{route}")).ok()
+}
+
+fn show_native_notification(app: &AppHandle, body: &str, origin: String, path: String) {
+    let mut notification = notify_rust::Notification::new();
+    notification
+        .appname("com.scopedelta.desktop")
+        .summary("ScopeDelta")
+        .body(body)
+        .action("default", "Open ScopeDelta")
+        .timeout(notify_rust::Timeout::Milliseconds(10_000));
+    let Ok(handle) = notification.show() else {
+        return;
+    };
+    let app = app.clone();
+    std::thread::spawn(move || {
+        handle.wait_for_action(|action| {
+            if action != "default" {
+                return;
+            }
+            let selected = app.try_state::<Arc<RuntimeState>>().and_then(|state| {
+                state
+                    .preferences
+                    .lock()
+                    .ok()
+                    .and_then(|preferences| preferences.selected_origin.clone())
+            });
+            let Some(destination) = notification_destination(selected.as_deref(), &origin, &path)
+            else {
+                return;
+            };
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.navigate(destination);
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        });
+    });
 }
 
 fn updater_configuration() -> Option<(Url, &'static str)> {
@@ -692,6 +739,36 @@ mod tests {
             path: "https://evil.example".into(),
         };
         assert!(validate_notification_payload("cursor with spaces", &[invalid]).is_err());
+    }
+
+    #[test]
+    fn notification_activation_cannot_cross_deployments_or_route_boundaries() {
+        assert_eq!(
+            notification_destination(
+                Some("https://app.example.test"),
+                "https://app.example.test",
+                "/app/acme/inbox",
+            )
+            .unwrap()
+            .as_str(),
+            "https://app.example.test/app/acme/inbox"
+        );
+        assert!(
+            notification_destination(
+                Some("https://other.example.test"),
+                "https://app.example.test",
+                "/app/acme/inbox",
+            )
+            .is_none()
+        );
+        assert!(
+            notification_destination(
+                Some("https://app.example.test"),
+                "https://app.example.test",
+                "https://evil.example",
+            )
+            .is_none()
+        );
     }
 
     #[test]

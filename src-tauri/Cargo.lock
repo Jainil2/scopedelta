@@ -3527,6 +3527,7 @@ name = "scopedelta-desktop"
 version = "0.1.0"
 dependencies = [
  "httpmock",
+ "notify-rust",
  "open",
  "regex",
  "reqwest 0.12.28",

@@ -107,6 +107,8 @@ Suspension or participant revocation immediately removes future events.
 Event responses and native alerts are content-free. They contain only a
 bounded ID, generic category, creation timestamp, and allowlisted relative
 route. OS notification title/body text is fixed by the native app.
+Notification activation revalidates that route and opens it only if the event's
+deployment is still selected; a server switch makes an older alert inert.
 
 ## Update configuration and private release preparation
 

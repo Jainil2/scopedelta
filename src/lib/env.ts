@@ -60,6 +60,53 @@ export function getSmtpConfig(): SmtpConfig {
   return { host, port, secure, user, password, from };
 }
 
+export function getOperatorAlertConfig() {
+  const rawRecipient = process.env.OPERATOR_ALERT_TO?.trim();
+  const recipient = rawRecipient
+    ? z.string().email().parse(rawRecipient)
+    : null;
+  const managedUsageAllowance = Number(
+    process.env.OPERATOR_MANAGED_USAGE_ALLOWANCE?.trim() || "0",
+  );
+  if (
+    !Number.isSafeInteger(managedUsageAllowance) ||
+    managedUsageAllowance < 0 ||
+    managedUsageAllowance > 1_000_000_000
+  ) {
+    throw new Error("operator_alert_configuration_invalid");
+  }
+  return { recipient, managedUsageAllowance };
+}
+
+export function validateProductionConfiguration() {
+  if (process.env.NODE_ENV !== "production") return { production: false };
+  const appUrl = new URL(getAppUrl());
+  const loopback = ["localhost", "127.0.0.1", "::1"].includes(appUrl.hostname);
+  if (!loopback && appUrl.protocol !== "https:") {
+    throw new Error("production_app_url_insecure");
+  }
+  getAuthSecret();
+  const databaseUrl = new URL(getDatabaseUrl());
+  const databaseLoopback = ["localhost", "127.0.0.1", "::1"].includes(
+    databaseUrl.hostname,
+  );
+  if (
+    !databaseLoopback &&
+    !["require", "verify-ca", "verify-full"].includes(
+      databaseUrl.searchParams.get("sslmode") ?? "",
+    )
+  ) {
+    throw new Error("production_database_tls_required");
+  }
+  const alerts = getOperatorAlertConfig();
+  if (alerts.recipient) getSmtpConfig();
+  return {
+    production: true,
+    loopback,
+    alertTransport: alerts.recipient ? "smtp" : "disabled",
+  };
+}
+
 export type GitHubAppConfig = {
   appId: string;
   clientId: string;

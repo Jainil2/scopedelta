@@ -58,6 +58,7 @@ import { forbidden, notFound, PlatformError } from "@/lib/platform-errors";
 import { assertActiveProjectCapacity } from "@/server/billing";
 import type { UserActor } from "@/server/workspaces";
 import { recordWorkspaceProductSignal } from "@/server/self-service";
+import { consumeActionLimit } from "@/server/action-rate-limit";
 
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -476,6 +477,11 @@ export async function createImportPreview(
   input: ImportPreviewInput,
 ) {
   await requireWorkspaceAdmin(getDb(), actor, workspaceId);
+  await consumeActionLimit(
+    `import-preview:${workspaceId}:${actor.userId}`,
+    20,
+    60 * 60,
+  );
   await assertActiveClient(getDb(), workspaceId, input.options.clientId);
   await assertWorkspaceMember(
     getDb(),
@@ -870,6 +876,12 @@ export async function confirmImport(
   sessionId: string,
   input: ConfirmImportInput,
 ) {
+  await requireWorkspaceAdmin(getDb(), actor, workspaceId);
+  await consumeActionLimit(
+    `import-confirm:${workspaceId}:${actor.userId}`,
+    20,
+    60 * 60,
+  );
   const claim = await claimImportSession(
     actor,
     workspaceId,

@@ -128,8 +128,17 @@ function OnboardingRow({ step }: Readonly<{ step: WorkspaceOnboardingStep }>) {
 type LifecycleRequest = {
   id: string;
   intent: "closure" | "deletion";
-  state: "requested" | "canceled";
+  state: "requested" | "in_review" | "blocked" | "processed" | "canceled";
+  blockerCodes?: string[];
+  exportId?: string | null;
   requestedAt: string | Date;
+};
+
+type WorkspaceExport = {
+  id: string;
+  state: "building" | "ready" | "failed";
+  expiresAt: string;
+  parts: Array<{ partNumber: number; byteSize: number; sha256: string }>;
 };
 
 export function WorkspaceLifecyclePanel({
@@ -144,7 +153,67 @@ export function WorkspaceLifecyclePanel({
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
-  const open = requests.find((request) => request.state === "requested");
+  const [workspaceExport, setWorkspaceExport] =
+    useState<WorkspaceExport | null>(null);
+  const open = requests.find((request) =>
+    ["requested", "in_review", "blocked"].includes(request.state),
+  );
+  const processed = requests.find((request) => request.state === "processed");
+
+  async function createExport() {
+    if (pending) return;
+    setPending(true);
+    setMessage("");
+    try {
+      const result = await mutate<WorkspaceExport>(
+        `/api/v1/workspaces/${workspaceId}/exports`,
+        { method: "POST" },
+      );
+      setWorkspaceExport(result);
+      setMessage(
+        "Operational export created. Download every part before it expires.",
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not create the export.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function downloadPart(partNumber: number) {
+    if (!workspaceExport || pending) return;
+    setPending(true);
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/v1/workspaces/${workspaceId}/exports/${workspaceExport.id}/parts/${partNumber}`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        const result = (await response.json()) as ApiResult<never>;
+        throw new Error(
+          "error" in result ? result.error.message : "The download failed.",
+        );
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `scopedelta-${workspaceExport.id}-part-${partNumber}.tar.gz`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setMessage(`Export part ${partNumber} downloaded.`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not download the export part.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -209,16 +278,58 @@ export function WorkspaceLifecyclePanel({
         physical deletion policy.
       </p>
       <p>
-        <a href={`/api/v1/workspaces/${workspaceId}/exports/delivery-core`}>
-          Export core delivery data first
-        </a>
+        The comprehensive export is a 24-hour multipart operational export in
+        open formats. It is not a point-in-time legal archive. The existing core
+        delivery CSV remains a narrower admin export.
       </p>
+      <button
+        className="app-secondary-button"
+        type="button"
+        disabled={pending}
+        onClick={() => void createExport()}
+      >
+        {pending ? "Working…" : "Create comprehensive export"}
+      </button>
+      {workspaceExport ? (
+        <div className="actionable-empty-state">
+          <strong>
+            Export ready until{" "}
+            {new Date(workspaceExport.expiresAt).toLocaleString()}
+          </strong>
+          <p>
+            Save every part and verify each SHA-256 value from the manifest
+            metadata.
+          </p>
+          {workspaceExport.parts.map((part) => (
+            <button
+              className="app-secondary-button"
+              type="button"
+              disabled={pending}
+              key={part.partNumber}
+              onClick={() => void downloadPart(part.partNumber)}
+            >
+              Download part {part.partNumber} ({Math.ceil(part.byteSize / 1024)}{" "}
+              KB)
+            </button>
+          ))}
+        </div>
+      ) : null}
       {open ? (
         <div className="actionable-empty-state">
-          <strong>{open.intent} requested</strong>
+          <strong>
+            {open.intent} request: {open.state.replaceAll("_", " ")}
+          </strong>
           <p>
-            No destructive action has occurred. You may cancel this request.
+            No destructive action has occurred. Processing records operational
+            completion only; access and authoritative customer data remain
+            intact.
           </p>
+          {open.blockerCodes?.length ? (
+            <p>Current blockers: {open.blockerCodes.join(", ")}</p>
+          ) : null}
+          {open.exportId ? (
+            <p>Linked export evidence: {open.exportId}</p>
+          ) : null}
           <button
             className="app-secondary-button"
             type="button"
@@ -227,6 +338,17 @@ export function WorkspaceLifecyclePanel({
           >
             Cancel request
           </button>
+        </div>
+      ) : processed ? (
+        <div className="actionable-empty-state">
+          <strong>{processed.intent} request processed</strong>
+          <p>
+            This is non-destructive operational completion. The workspace
+            remains active and all authoritative data is intact.
+          </p>
+          {processed.exportId ? (
+            <p>Linked export evidence: {processed.exportId}</p>
+          ) : null}
         </div>
       ) : (
         <form className="platform-form" onSubmit={submit}>

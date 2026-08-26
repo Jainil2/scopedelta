@@ -58,7 +58,7 @@ test.afterAll(async () => {
   );
 });
 
-test("verified signup, workspace persistence, invitation, and role management", async ({
+test("GA journey: verified account, workspace administration, export, and lifecycle intent", async ({
   page,
   request,
   browser,
@@ -171,6 +171,15 @@ test("verified signup, workspace persistence, invitation, and role management", 
 
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page
+    .getByRole("button", { name: "Create comprehensive export" })
+    .click();
+  await expect(page.getByText(/Export ready until/)).toBeVisible();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: /Download part 1/ }).click();
+  await expect((await download).suggestedFilename()).toMatch(
+    /^scopedelta-.*-part-1\.tar\.gz$/,
+  );
+  await page
     .getByLabel(/Type the workspace slug to confirm/)
     .fill(workspaceSlug);
   await page.getByLabel(/reviewed the available export path/).check();
@@ -182,6 +191,14 @@ test("verified signup, workspace persistence, invitation, and role management", 
   await expect(lifecycleRegion.getByRole("status")).toContainText(
     "No workspace data was deleted",
   );
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/sc-012-export-lifecycle-desktop.png",
+      fullPage: true,
+    });
+  }
   await page.getByRole("button", { name: "Cancel request" }).click();
   await expect(lifecycleRegion.getByRole("status")).toContainText(
     "Lifecycle request canceled",

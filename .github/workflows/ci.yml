@@ -107,6 +107,12 @@ jobs:
       - name: Type-check
         run: pnpm typecheck
 
+      - name: Validate production configuration
+        if: github.event.action == 'labeled' && github.event.label.name == 'merge-candidate'
+        env:
+          NODE_ENV: production
+        run: pnpm production:validate
+
       - name: Unit tests
         run: pnpm test
 
@@ -165,6 +171,18 @@ jobs:
 
       - name: PostgreSQL integration tests
         run: pnpm test:integration
+
+      - name: GA representative scale proof
+        if: github.event.action == 'labeled' && github.event.label.name == 'merge-candidate'
+        env:
+          GA_PRESERVE_FIXTURE: "true"
+        run: pnpm test:ga
+
+      - name: PostgreSQL 17 backup and restore proof
+        if: github.event.action == 'labeled' && github.event.label.name == 'merge-candidate'
+        env:
+          GA_POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: bash scripts/verify-ga-restore.sh
 
   browser:
     name: Full browser journeys (${{ matrix.shard }}/2)

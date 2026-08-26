@@ -27,10 +27,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:ga": "vitest run --config vitest.ga.config.ts",
     "test:e2e": "playwright test",
     "ai:eval": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/ai-eval.ts",
     "billing:economics": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/billing-economics.ts",
-    "operations:signals": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/operations-signals.ts"
+    "operations:signals": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/operations-signals.ts",
+    "lifecycle:process": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/lifecycle-process.ts",
+    "operations:alerts": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/operations-alerts.ts",
+    "production:validate": "node --env-file-if-exists=.env.local --import tsx scripts/validate-production-config.ts"
   },
   "dependencies": {
     "better-auth": "^1.6.26",

@@ -17,6 +17,7 @@ import {
   implementationArtifacts,
   implementationArtifactSnapshots,
   milestones,
+  providerWebhookDeliveries,
   users,
   verificationRecords,
   workImplementationLinks,
@@ -46,6 +47,7 @@ import {
   linkImplementationEvidence,
   listEngineeringWorkspace,
   processGitHubWebhookDelivery,
+  reconcileEngineeringRepository,
   setDefectStatus,
   unlinkImplementationEvidence,
   upsertProviderEvidence,
@@ -1934,6 +1936,147 @@ describe("engineering and QA delivery evidence boundary", () => {
           String(input).endsWith("/pulls/1"),
         ),
       ).toBe(true);
+    } finally {
+      for (const key of envKeys) {
+        const value = previousEnv[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("preserves failed webhook evidence until repository reconciliation proves complete coverage", async () => {
+    const fixture = await createFixture("COVERAGE", "reconcile-coverage");
+    const repositoryId = await seedRepository(fixture);
+    const repositoryRows = await db
+      .select()
+      .from(engineeringRepositories)
+      .where(eq(engineeringRepositories.id, repositoryId));
+    await db.insert(providerWebhookDeliveries).values({
+      id: randomUUID(),
+      provider: "github",
+      deliveryId: "older-unreconciled-delivery",
+      eventName: "pull_request",
+      repositoryId,
+      state: "failed",
+      errorCode: "provider_unavailable",
+      processedAt: new Date(),
+    });
+
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const envKeys = [
+      "GITHUB_APP_ID",
+      "GITHUB_APP_SLUG",
+      "GITHUB_APP_CLIENT_ID",
+      "GITHUB_APP_CLIENT_SECRET",
+      "GITHUB_APP_PRIVATE_KEY",
+      "GITHUB_APP_WEBHOOK_SECRET",
+    ] as const;
+    const previousEnv = Object.fromEntries(
+      envKeys.map((key) => [key, process.env[key]]),
+    );
+    Object.assign(process.env, {
+      GITHUB_APP_ID: "12345",
+      GITHUB_APP_SLUG: "scopedelta-test",
+      GITHUB_APP_CLIENT_ID: "Iv1.test-client",
+      GITHUB_APP_CLIENT_SECRET: "test-client-secret",
+      GITHUB_APP_PRIVATE_KEY: privateKey.export({
+        type: "pkcs8",
+        format: "pem",
+      }),
+      GITHUB_APP_WEBHOOK_SECRET: "a-test-webhook-secret-long-enough",
+    });
+    let providerPullCount = 26;
+    const request = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/access_tokens")) {
+        return Response.json({ token: "installation-token" });
+      }
+      if (url.includes("/pulls?state=all")) {
+        return Response.json(
+          Array.from({ length: providerPullCount }, (_, index) => ({
+            id: index + 1,
+            number: index + 1,
+            html_url: `https://github.com/scope-delta-test/delivery/pull/${index + 1}`,
+            title: `Provider pull ${index + 1}`,
+            state: "open",
+            draft: false,
+            merged_at: null,
+            merge_commit_sha: null,
+            updated_at: new Date(Date.UTC(2026, 7, 13, 0, index)).toISOString(),
+            user: { id: index + 1, login: `engineer-${index + 1}` },
+            requested_reviewers: [],
+            requested_teams: [],
+            head: { ref: `pull-${index + 1}`, sha: `head-${index + 1}` },
+            base: { ref: "main" },
+          })),
+        );
+      }
+      if (/\/pulls\/\d+\/reviews\?/.test(url)) return Response.json([]);
+      if (url.includes("/check-runs?")) {
+        return Response.json({ total_count: 0, check_runs: [] });
+      }
+      if (/\/commits\/head-\d+\/status$/.test(url)) {
+        return Response.json({ state: "pending", total_count: 0 });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", request);
+
+    try {
+      await expect(
+        reconcileEngineeringRepository(
+          fixture.owner,
+          fixture.workspace.id,
+          fixture.project.id,
+          repositoryId,
+        ),
+      ).resolves.toEqual({ artifactCount: 25 });
+      await expect(
+        db
+          .select({
+            state: providerWebhookDeliveries.state,
+            errorCode: providerWebhookDeliveries.errorCode,
+          })
+          .from(providerWebhookDeliveries)
+          .where(
+            eq(
+              providerWebhookDeliveries.deliveryId,
+              "older-unreconciled-delivery",
+            ),
+          ),
+      ).resolves.toEqual([
+        { state: "failed", errorCode: "provider_unavailable" },
+      ]);
+      expect(
+        request.mock.calls.some(([input]) =>
+          String(input).includes("per_page=26"),
+        ),
+      ).toBe(true);
+
+      providerPullCount = 25;
+      await reconcileEngineeringRepository(
+        fixture.owner,
+        fixture.workspace.id,
+        fixture.project.id,
+        repositoryId,
+      );
+      await expect(
+        db
+          .select({
+            state: providerWebhookDeliveries.state,
+            errorCode: providerWebhookDeliveries.errorCode,
+          })
+          .from(providerWebhookDeliveries)
+          .where(
+            eq(
+              providerWebhookDeliveries.deliveryId,
+              "older-unreconciled-delivery",
+            ),
+          ),
+      ).resolves.toEqual([{ state: "processed", errorCode: null }]);
+      expect(repositoryRows[0]!.state).toBe("active");
     } finally {
       for (const key of envKeys) {
         const value = previousEnv[key];

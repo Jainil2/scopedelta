@@ -2,6 +2,23 @@
 
 SC-011B is a Local/LAN adoption path for workspace owners and admins. It does not call Jira, ScopeDelta Cloud, AI providers, or attachment URLs.
 
+SC-012 adds a separate owner-only comprehensive operational export. It does not
+change the narrower admin core-delivery CSV contract below.
+
+## Comprehensive owner export
+
+- `POST /api/v1/workspaces/{workspaceId}/exports` creates a 24-hour run.
+- `GET /api/v1/workspaces/{workspaceId}/exports/{exportId}` returns status,
+  hashes, sizes, and parts.
+- `POST /api/v1/workspaces/{workspaceId}/exports/{exportId}/parts/{partNumber}`
+  downloads one same-origin tar.gz part.
+
+Every part stays below 15 MB and contains a versioned manifest plus bounded
+NDJSON and original commercial source files. Retry returns the exact stored
+artifact. Secrets, sessions, credentials, token hashes, raw provider payloads,
+and unrelated identities are omitted. This is operational/open-format export,
+not a point-in-time legal archive. See `docs/DATA_LIFECYCLE.md`.
+
 ## Project templates
 
 Open **Adoption → Templates** to create a versioned project standard. A definition may contain:

@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: Context) {
         "Content-Type": "application/gzip",
         "Content-Disposition": `attachment; filename="scopedelta-${exportId}-part-${partNumber}.tar.gz"`,
         "Content-Length": String(result.byteSize),
-        Digest: `sha-256=:${Buffer.from(result.sha256, "hex").toString("base64")}:`,
+        "Content-Digest": `sha-256=:${Buffer.from(result.sha256, "hex").toString("base64")}:`,
         "X-ScopeDelta-Part-SHA256": result.sha256,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",

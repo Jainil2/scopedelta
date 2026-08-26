@@ -25,7 +25,7 @@ describe("workspace export part route", () => {
     });
   });
 
-  it("returns a bounded SHA-256 Digest header that verifies the response body", async () => {
+  it("returns a bounded SHA-256 Content-Digest header that verifies the response body", async () => {
     const artifact = Buffer.alloc(512 * 1024, 0xa5);
     const sha256 = createHash("sha256").update(artifact).digest("hex");
     mocks.downloadWorkspaceExportPart.mockResolvedValue({
@@ -47,10 +47,11 @@ describe("workspace export part route", () => {
     const body = Buffer.from(await response.arrayBuffer());
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("Digest")).toBe(
+    expect(response.headers.get("Content-Digest")).toBe(
       `sha-256=:${createHash("sha256").update(body).digest("base64")}:`,
     );
-    expect(response.headers.get("Digest")!.length).toBeLessThan(100);
+    expect(response.headers.get("Content-Digest")!.length).toBeLessThan(100);
+    expect(response.headers.get("Digest")).toBeNull();
     expect(response.headers.get("X-ScopeDelta-Part-SHA256")).toBe(sha256);
     expect(body.equals(artifact)).toBe(true);
   });

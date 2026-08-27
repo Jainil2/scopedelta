@@ -46,7 +46,9 @@ jobs:
 
       - name: Verify exact reviewed SHA
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "${{ inputs.git_sha }}"
+        env:
+          REQUESTED_SHA: ${{ inputs.git_sha }}
+        run: test "$(git rev-parse HEAD)" = "$REQUESTED_SHA"
 
       - name: Install Linux desktop prerequisites
         if: runner.os == 'Linux'
@@ -87,7 +89,7 @@ jobs:
         run: pnpm exec tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config src-tauri/tauri.release.conf.json
 
       - name: Generate SHA-256 manifest
-        run: node scripts/checksum-desktop-artifacts.mjs "src-tauri/target/${{ matrix.target }}/release/bundle"
+        run: node scripts/checksum-desktop-artifacts.mjs
 
       - name: Upload private signed artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

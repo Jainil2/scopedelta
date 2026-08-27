@@ -88,12 +88,14 @@ notifications.addEventListener("change", async () => {
       { enabled: notifications.checked },
     );
     notifications.checked = result.enabled;
-    status.textContent =
-      result.permission === "denied"
-        ? "Notifications are blocked by system settings. ScopeDelta will keep working normally."
-        : result.enabled
-          ? "Desktop notifications enabled."
-          : "Desktop notifications disabled.";
+    let notificationStatus = "Desktop notifications disabled.";
+    if (result.permission === "denied") {
+      notificationStatus =
+        "Notifications are blocked by system settings. ScopeDelta will keep working normally.";
+    } else if (result.enabled) {
+      notificationStatus = "Desktop notifications enabled.";
+    }
+    status.textContent = notificationStatus;
   } catch (error) {
     notifications.checked = !notifications.checked;
     status.textContent = messageFrom(error);

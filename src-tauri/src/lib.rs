@@ -3,8 +3,9 @@ mod security;
 use std::{
     collections::VecDeque,
     fs,
+    io::Write,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
     time::Duration,
 };
 
@@ -152,9 +153,72 @@ fn persist_preferences(state: &RuntimeState, preferences: &Preferences) -> Resul
     let temporary = state.settings_path.with_extension("json.tmp");
     let bytes = serde_json::to_vec(preferences)
         .map_err(|_| "Could not encode desktop preferences.".to_string())?;
-    fs::write(&temporary, bytes).map_err(|_| "Could not save desktop preferences.".to_string())?;
-    fs::rename(temporary, &state.settings_path)
+    let mut file = fs::File::create(&temporary)
+        .map_err(|_| "Could not save desktop preferences.".to_string())?;
+    if file
+        .write_all(&bytes)
+        .and_then(|()| file.sync_all())
+        .is_err()
+    {
+        drop(file);
+        let _ = fs::remove_file(&temporary);
+        return Err("Could not save desktop preferences.".to_string());
+    }
+    drop(file);
+    if replace_preferences_file(&temporary, &state.settings_path).is_err() {
+        let _ = fs::remove_file(&temporary);
+        return Err("Could not commit desktop preferences.".to_string());
+    }
+    sync_preferences_directory(parent)
         .map_err(|_| "Could not commit desktop preferences.".to_string())
+}
+
+#[cfg(windows)]
+fn replace_preferences_file(temporary: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::{iter, os::windows::ffi::OsStrExt};
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let temporary = temporary
+        .as_os_str()
+        .encode_wide()
+        .chain(iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(iter::once(0))
+        .collect::<Vec<_>>();
+    // SAFETY: both arguments are owned, NUL-terminated UTF-16 buffers that
+    // remain alive for the duration of this synchronous Windows API call.
+    let result = unsafe {
+        MoveFileExW(
+            temporary.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+fn replace_preferences_file(temporary: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::rename(temporary, destination)
+}
+
+#[cfg(unix)]
+fn sync_preferences_directory(parent: &Path) -> std::io::Result<()> {
+    fs::File::open(parent)?.sync_all()
+}
+
+#[cfg(not(unix))]
+fn sync_preferences_directory(_parent: &Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 fn local_asset_url() -> Url {
@@ -187,15 +251,14 @@ fn require_local_caller(window: &WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
-fn require_remote_caller(
+fn require_remote_caller<'a>(
     window: &WebviewWindow,
-    state: &RuntimeState,
-) -> Result<Preferences, String> {
+    state: &'a RuntimeState,
+) -> Result<MutexGuard<'a, Preferences>, String> {
     let preferences = state
         .preferences
         .lock()
-        .map_err(|_| "Desktop preferences are unavailable.".to_string())?
-        .clone();
+        .map_err(|_| "Desktop preferences are unavailable.".to_string())?;
     let selected = preferences
         .selected_origin
         .as_deref()
@@ -317,18 +380,16 @@ async fn select_server(
     let mut preferences = state
         .preferences
         .lock()
-        .map_err(|_| "Desktop preferences are unavailable.".to_string())?
-        .clone();
-    prepare_server_switch(&mut preferences, &canonical, || {
+        .map_err(|_| "Desktop preferences are unavailable.".to_string())?;
+    let mut next_preferences = preferences.clone();
+    prepare_server_switch(&mut next_preferences, &canonical, || {
         window
             .clear_all_browsing_data()
             .map_err(|_| "Could not clear browsing data before switching servers.".to_string())
     })?;
-    persist_preferences(&state, &preferences)?;
-    *state
-        .preferences
-        .lock()
-        .map_err(|_| "Desktop preferences are unavailable.".to_string())? = preferences;
+    persist_preferences(&state, &next_preferences)?;
+    *preferences = next_preferences;
+    drop(preferences);
     *state
         .pending_deep_link
         .lock()
@@ -363,18 +424,15 @@ fn set_notifications_enabled(
     let mut preferences = state
         .preferences
         .lock()
-        .map_err(|_| "Desktop preferences are unavailable.".to_string())?
-        .clone();
-    if final_enabled && !preferences.notifications_enabled {
-        preferences.notification_cursor = None;
-        preferences.seen_event_ids.clear();
+        .map_err(|_| "Desktop preferences are unavailable.".to_string())?;
+    let mut next_preferences = preferences.clone();
+    if final_enabled && !next_preferences.notifications_enabled {
+        next_preferences.notification_cursor = None;
+        next_preferences.seen_event_ids.clear();
     }
-    preferences.notifications_enabled = final_enabled;
-    persist_preferences(&state, &preferences)?;
-    *state
-        .preferences
-        .lock()
-        .map_err(|_| "Desktop preferences are unavailable.".to_string())? = preferences;
+    next_preferences.notifications_enabled = final_enabled;
+    persist_preferences(&state, &next_preferences)?;
+    *preferences = next_preferences;
     Ok(NotificationPreferenceResult {
         enabled: final_enabled,
         permission: match permission {
@@ -394,7 +452,7 @@ fn remote_notification_context(
     let preferences = require_remote_caller(&window, &state)?;
     Ok(RemoteNotificationContext {
         enabled: preferences.notifications_enabled,
-        cursor: preferences.notification_cursor,
+        cursor: preferences.notification_cursor.clone(),
     })
 }
 
@@ -407,10 +465,12 @@ fn remote_submit_notifications(
     events: Vec<NotificationEvent>,
 ) -> Result<(), String> {
     let mut preferences = require_remote_caller(&window, &state)?;
+    let mut next_preferences = preferences.clone();
+    let mut pending_notifications = Vec::new();
     validate_notification_payload(&cursor, &events)?;
-    if preferences.notifications_enabled {
+    if next_preferences.notifications_enabled {
         for event in events {
-            if preferences.seen_event_ids.contains(&event.id) {
+            if next_preferences.seen_event_ids.contains(&event.id) {
                 continue;
             }
             let body = match event.category {
@@ -419,21 +479,22 @@ fn remote_submit_notifications(
                 }
                 NotificationCategory::ClientActivity => "New client activity is ready to review.",
             };
-            if let Some(origin) = preferences.selected_origin.clone() {
-                show_native_notification(&app, body, origin, event.path);
+            if let Some(origin) = next_preferences.selected_origin.clone() {
+                pending_notifications.push((body, origin, event.path));
             }
-            preferences.seen_event_ids.push_back(event.id);
-            while preferences.seen_event_ids.len() > MAX_DEDUPE_IDS {
-                preferences.seen_event_ids.pop_front();
+            next_preferences.seen_event_ids.push_back(event.id);
+            while next_preferences.seen_event_ids.len() > MAX_DEDUPE_IDS {
+                next_preferences.seen_event_ids.pop_front();
             }
         }
     }
-    preferences.notification_cursor = Some(cursor);
-    persist_preferences(&state, &preferences)?;
-    *state
-        .preferences
-        .lock()
-        .map_err(|_| "Desktop preferences are unavailable.".to_string())? = preferences;
+    next_preferences.notification_cursor = Some(cursor);
+    persist_preferences(&state, &next_preferences)?;
+    *preferences = next_preferences;
+    drop(preferences);
+    for (body, origin, path) in pending_notifications {
+        show_native_notification(&app, body, origin, path);
+    }
     Ok(())
 }
 
@@ -804,6 +865,38 @@ mod tests {
             "http://attacker.example",
             false,
         ));
+    }
+
+    #[test]
+    fn preference_persistence_replaces_existing_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let settings_path = directory.path().join(SETTINGS_FILE);
+        let state = RuntimeState {
+            preferences: Mutex::new(Preferences::default()),
+            pending_deep_link: Mutex::new(None),
+            settings_path: settings_path.clone(),
+        };
+        let first = Preferences {
+            selected_origin: Some("https://first.example".into()),
+            ..Preferences::default()
+        };
+        persist_preferences(&state, &first).unwrap();
+        assert!(settings_path.exists());
+
+        let second = Preferences {
+            selected_origin: Some("https://second.example".into()),
+            notifications_enabled: true,
+            notification_cursor: Some("replacement-cursor".into()),
+            seen_event_ids: VecDeque::from(["replacement-event".into()]),
+        };
+        persist_preferences(&state, &second).unwrap();
+
+        let saved = load_preferences(&settings_path);
+        assert_eq!(saved.selected_origin, second.selected_origin);
+        assert!(saved.notifications_enabled);
+        assert_eq!(saved.notification_cursor, second.notification_cursor);
+        assert_eq!(saved.seen_event_ids, second.seen_event_ids);
+        assert!(!settings_path.with_extension("json.tmp").exists());
     }
 
     #[test]

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import type { WorkspaceRole } from "@/db/schema";
 import { SignOutButton } from "@/components/auth-forms";
+import { DesktopNotificationBridge } from "@/components/desktop-notification-bridge";
 
 type Workspace = {
   id: string;
@@ -23,6 +24,7 @@ export function AppShell({
 }>) {
   return (
     <div className="app-frame">
+      <DesktopNotificationBridge />
       <aside className="app-sidebar">
         <Link className="app-wordmark" href="/">
           <span className="app-brand-mark" aria-hidden="true">

@@ -198,6 +198,10 @@ expand/contract sequencing so old and new application versions can overlap.
 | `pnpm test:e2e`                     | Run Chromium flows against PostgreSQL and Mailpit.            |
 | `pnpm ai:eval`                      | Evaluate all three synthetic jobs on the configured provider. |
 | `pnpm build` / `pnpm start`         | Build and serve the production application.                   |
+| `pnpm desktop:dev`                  | Run the bundled selector and native Tauri shell.              |
+| `pnpm desktop:web:build`            | Build the trusted selector/preferences UI.                    |
+| `pnpm desktop:rust:test`            | Run native origin/deep-link/security tests.                   |
+| `pnpm desktop:build`                | Build private platform installers; publication is separate.   |
 
 ## Interfaces and repository conventions
 

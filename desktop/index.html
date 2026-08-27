@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>ScopeDelta Desktop</title>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <main class="shell" aria-labelledby="title">
+      <header class="brand">
+        <span class="mark" aria-hidden="true">Δ</span>
+        <span>ScopeDelta</span>
+        <span class="beta">Desktop beta</span>
+      </header>
+
+      <section class="content">
+        <p class="eyebrow">Connected workspace</p>
+        <h1 id="title">Choose where ScopeDelta lives.</h1>
+        <p class="lede">
+          The desktop app opens your existing deployment. Sign-in and project
+          data stay with that server.
+        </p>
+
+        <form id="server-form" novalidate>
+          <label for="origin">Server address</label>
+          <div class="field-row">
+            <input
+              id="origin"
+              name="origin"
+              type="url"
+              inputmode="url"
+              autocomplete="url"
+              spellcheck="false"
+              placeholder="https://app.scopedelta.com"
+              required
+            />
+            <button type="submit">Connect</button>
+          </div>
+          <p class="hint">
+            HTTPS is required. Local HTTP works in debug builds.
+          </p>
+        </form>
+
+        <div id="pending-link" class="pending" hidden>
+          <p class="eyebrow">Link from another deployment</p>
+          <p id="pending-copy"></p>
+          <button id="confirm-switch" type="button">Verify and switch</button>
+        </div>
+
+        <div id="preferences" class="preferences" hidden>
+          <div>
+            <p class="eyebrow">Preferences</p>
+            <h2>Desktop notifications</h2>
+            <p>Show generic activity alerts while this app is running.</p>
+          </div>
+          <label class="switch">
+            <input id="notifications" type="checkbox" />
+            <span aria-hidden="true"></span>
+            <span class="sr-only">Enable desktop notifications</span>
+          </label>
+        </div>
+
+        <div id="updates" class="preferences" hidden>
+          <div>
+            <p class="eyebrow">Signed updates</p>
+            <h2>Desktop client</h2>
+            <p>Check the configured ScopeDelta release channel.</p>
+          </div>
+          <button id="check-update" class="secondary" type="button">
+            Check for update
+          </button>
+        </div>
+
+        <output id="status" class="status" aria-live="polite"></output>
+      </section>
+
+      <footer>
+        <span>Sessions remain server-authoritative</span>
+        <span aria-hidden="true">•</span>
+        <span>No offline project copy</span>
+      </footer>
+    </main>
+  </body>
+</html>

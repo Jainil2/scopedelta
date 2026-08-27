@@ -4,7 +4,7 @@ This roadmap builds ScopeDelta as an AI-native client software delivery operatin
 
 The product is built layer by layer. Each layer must be useful, secure and production-quality before downstream layers rely on it. We are not attempting to clone every Jira/Linear/Plane/PSA feature before shipping differentiation.
 
-The runtime model is **one server-authoritative product core with multiple clients/deployments**: ScopeDelta Cloud, customer self-hosted/VPC, company LAN/private server, web client and a later first-party desktop client. Core Local/LAN capabilities must not require ScopeDelta Cloud.
+The runtime model is **one server-authoritative product core with multiple clients/deployments**: ScopeDelta Cloud, customer self-hosted/VPC, company LAN/private server, web client and a first-party desktop client. Core Local/LAN capabilities must not require ScopeDelta Cloud.
 
 ## Completed foundation
 
@@ -66,13 +66,18 @@ Layer-1 research: `docs/research/LAYER1_DELIVERY_CORE_RESEARCH_2026-08.md`.
 ### Outcome
 Give daily users a first-party Windows/macOS/Linux client without creating a second backend or requiring ScopeDelta Cloud.
 
-### Timing
-DX-001 is technically unblocked by Layer 1, but differentiated product layers remain higher priority unless customer evidence changes the order.
+### Status
+DX-001 is implemented as the cross-platform desktop beta. Signed/public release,
+notarization, paid certificates, stores, and artifact publication remain
+founder-gated operations.
 
 ### Boundary
 - reuse the same server/domain/API rules;
 - support ScopeDelta Cloud and customer-controlled HTTPS/LAN servers;
-- native notifications/deep links and bounded secure local cache;
+- bundled server selection/preferences, active-app native notifications,
+  validated deep links, single-instance focus, window state, and signed updates;
+- persist only canonical server origin, notification preference/cursor/dedupe
+  identifiers, and window state—no offline project cache or credentials;
 - no authoritative per-user project database;
 - no full offline peer-to-peer/CRDT collaboration initially.
 
@@ -447,7 +452,7 @@ Superseded planning issues #36/#37/#38 are closed and should not be implemented 
 Cross-cutting:
 
 - #28 quality/Sonar/secret-scanning follow-up remains **P1 and separate/non-blocking** unless it exposes a new unwaived security/reliability regression.
-- DX-001 desktop remains a later cross-cutting client track unless new evidence changes priority.
+- DX-001 / #18 desktop beta — **IMPLEMENTED FOR REVIEW**; public distribution remains founder-gated.
 - ARCH-001 maintains runtime topology.
 - RS-002 maintains feature/runtime/cost classification.
 - LIC-001 is the founder/legal gate before public core-source release.

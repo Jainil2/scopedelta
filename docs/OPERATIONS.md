@@ -182,10 +182,11 @@ Before merging the functionally approved exact head:
    the branch-protection-compatible final check.
 3. Require the full hosted gate to run `pnpm db:check` and apply the complete
    migration chain twice to a fresh disposable database.
-4. Require integration/browser tests against migrated PostgreSQL, plus the
-   production build, HTTP smoke, and container build.
-5. Confirm `Full merge gate`, Sonar, GitGuardian, and both fast checks are green
-   on the latest PR head. Any new commit invalidates the prior validation.
+4. Require integration tests against migrated PostgreSQL, plus the production
+   build, HTTP smoke, and container build. Run the optional manual Browser
+   action separately only when browser evidence is requested.
+5. Confirm `Full merge gate` and both fast checks are green on the latest PR
+   head. Any new commit invalidates the prior validation.
 6. For future non-additive changes, document the expand/backfill/contract
    releases and restoration implications in the PR.
 

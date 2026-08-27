@@ -34,7 +34,11 @@ Split only when at least one of these is true:
 - a useful customer outcome can ship materially earlier;
 - parallel execution would reduce elapsed time more than the integration/CI/review overhead it creates.
 
-Testing follows the same efficiency principle: focused tests during iteration, focused E2E while building a journey, and the complete migration/lint/typecheck/unit/integration/E2E/build/container gate when the PR is genuinely ready plus final pre-merge validation after completed review fixes. Quality is not reduced; redundant full-suite cycles are.
+Testing follows the same efficiency principle: focused tests during iteration
+and the complete automatic migration/lint/typecheck/unit/integration/build/
+container gate when the PR is genuinely ready plus final pre-merge validation
+after completed review fixes. Browser and desktop suites remain available as
+optional exact-SHA manual actions rather than running for every PR.
 
 `AGENTS.md` is the executable engineering policy for this rule.
 
@@ -270,7 +274,11 @@ The issue's provider spine, engineering mapping and QA/readiness sections are in
 
 ### Review and merge validation
 
-CEO product/security review uses the exact PR head plus focused migration, provider-state, authorization and browser evidence. Once no product/security blockers remain, ordinary feature scope freezes and the complete hosted migration/lint/typecheck/unit/integration/E2E/build/smoke/container gate runs once on the exact merge-candidate SHA.
+CEO product/security review uses the exact PR head plus focused migration,
+provider-state, authorization and, when warranted, browser evidence. Once no
+product/security blockers remain, ordinary feature scope freezes and the
+complete hosted migration/lint/typecheck/unit/integration/build/smoke/container
+gate runs once on the exact merge-candidate SHA.
 
 Do not build Git hosting or a CI/CD runner platform.
 
@@ -451,7 +459,9 @@ Superseded planning issues #36/#37/#38 are closed and should not be implemented 
 
 Cross-cutting:
 
-- #28 quality/Sonar/secret-scanning follow-up remains **P1 and separate/non-blocking** unless it exposes a new unwaived security/reliability regression.
+- #28 repository-owned quality and secret-handling follow-up remains **P1 and
+  separate/non-blocking** unless it exposes a new unwaived
+  security/reliability regression.
 - DX-001 / #18 desktop beta — **IMPLEMENTED FOR REVIEW**; public distribution remains founder-gated.
 - ARCH-001 maintains runtime topology.
 - RS-002 maintains feature/runtime/cost classification.

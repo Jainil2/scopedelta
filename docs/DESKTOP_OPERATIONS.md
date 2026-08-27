@@ -134,10 +134,13 @@ Run the `Prepare signed desktop release` workflow with an exact reviewed
 systems, writes SHA-256 manifests, and uploads private short-retention workflow
 artifacts. It does not create a GitHub release or publish an update manifest.
 
-Ordinary desktop PR checks build the selector, run Rust format/Clippy/tests,
-check the locked malicious-crate denylist, and run a RustSec advisory audit on
-the merge candidate. The merge-candidate matrix builds standard Windows,
-offline-WebView2 Windows, macOS universal, and Linux installer evidence.
+Run the manual `Desktop` workflow with an exact reviewed 40-character SHA when
+desktop evidence is wanted. Every invocation builds the selector, runs
+TypeScript and Rust format/lint/type/test checks, checks the locked malicious-
+crate denylist, runs the RustSec advisory audit and Windows preference test, and
+builds standard Windows, offline-WebView2 Windows, macOS universal, and Linux
+installer evidence. It never runs automatically for pull requests or merge
+candidates and is not a required merge check.
 
 ## Troubleshooting
 

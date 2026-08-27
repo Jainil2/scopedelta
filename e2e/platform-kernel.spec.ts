@@ -623,6 +623,9 @@ test("authenticated workspace exposes existing workflows through four WebMCP too
   await expect(
     page.getByRole("link", { name: /Agent-created delivery checkpoint/ }),
   ).toBeVisible();
+  const signOutButton = page.getByRole("button", { name: "Sign out" });
+  await expect(signOutButton).toBeInViewport();
+  await expect(signOutButton).toBeEnabled();
 });
 
 test("owner operates portfolio capacity and work-item time from the UI", async ({

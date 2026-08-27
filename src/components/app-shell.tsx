@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { WorkspaceRole } from "@/db/schema";
 import { SignOutButton } from "@/components/auth-forms";
 import { DesktopNotificationBridge } from "@/components/desktop-notification-bridge";
+import { WebMcpBridge } from "@/components/webmcp-bridge";
 
 type Workspace = {
   id: string;
@@ -14,11 +15,13 @@ type Workspace = {
 export function AppShell({
   current,
   workspaces,
+  userId,
   userName,
   children,
 }: Readonly<{
   current: Workspace;
   workspaces: readonly Workspace[];
+  userId: string;
   userName: string;
   children: React.ReactNode;
 }>) {
@@ -79,6 +82,7 @@ export function AppShell({
             <Link href={`/app/${current.slug}/settings/billing`}>Billing</Link>
           ) : null}
         </nav>
+        <WebMcpBridge workspaceId={current.id} userId={userId} />
         <div className="app-account">
           <span>{userName}</span>
           <SignOutButton />

@@ -21,6 +21,7 @@ export default async function WorkspaceLayout({
     <AppShell
       current={current}
       workspaces={available}
+      userId={session.user.id}
       userName={session.user.name}
     >
       {children}

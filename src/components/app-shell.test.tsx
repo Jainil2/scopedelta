@@ -2,8 +2,14 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+const navigation = vi.hoisted(() => ({ refresh: vi.fn() }));
+
 vi.mock("@/lib/auth-client", () => ({
   authClient: { signOut: vi.fn() },
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => navigation,
 }));
 
 import { AppShell } from "./app-shell";
@@ -33,6 +39,7 @@ describe("authenticated application shell", () => {
             role: "member",
           },
         ]}
+        userId="user-one"
         userName="Alex Rivera"
       >
         <h1>Workspace overview</h1>
@@ -67,5 +74,6 @@ describe("authenticated application shell", () => {
       "/app/northstar-delivery-a1b2c3d4/projects",
     );
     expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
+    expect(screen.getByText("Browser tools unavailable")).toBeVisible();
   });
 });

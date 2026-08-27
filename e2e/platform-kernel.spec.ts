@@ -481,6 +481,150 @@ test("client project, milestone, and backlog work through the production UI", as
   ).toBeAttached();
 });
 
+test("authenticated workspace exposes existing workflows through four WebMCP tools", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await page.addInitScript(() => {
+    type InjectedTool = {
+      name: string;
+      execute: (
+        input: Record<string, unknown>,
+        options: { signal: AbortSignal },
+      ) => Promise<unknown>;
+    };
+    const tools = new Map<string, InjectedTool>();
+    const browserWindow = window as typeof window & {
+      __webMcpTools?: Map<string, InjectedTool>;
+    };
+    browserWindow.__webMcpTools = tools;
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: async (
+          tool: InjectedTool,
+          options?: { signal?: AbortSignal },
+        ) => {
+          tools.set(tool.name, tool);
+          options?.signal?.addEventListener(
+            "abort",
+            () => {
+              if (tools.get(tool.name) === tool) tools.delete(tool.name);
+            },
+            { once: true },
+          );
+        },
+        getTools: async () => [...tools.values()],
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      },
+    });
+  });
+
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const email = `webmcp-${suffix}@example.test`;
+  const password = "test-password-123";
+  await signUpAndVerifyLocally(page, email, password, "/onboarding");
+  await page.getByLabel(/Workspace name/).fill("WebMCP Studio");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await page.getByText("New client").click();
+  await page.getByLabel("Client name").fill("Browser Tools Client");
+  await page.getByRole("button", { name: "Create client" }).click();
+  await expect(page.getByRole("status")).toHaveText("Client created.");
+
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
+  await page.getByText("New project").click();
+  await page.getByLabel("Project key").fill("WEB");
+  await page.getByLabel("Project name").fill("Browser tool delivery");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page.getByRole("status")).toHaveText("Project created.");
+  await page.getByRole("link", { name: /Browser tool delivery/ }).click();
+  await page.getByRole("link", { name: "Backlog" }).click();
+
+  await expect(page.getByText("4 browser tools active")).toBeVisible();
+  await expect(page.locator(".webmcp-tool-names")).toHaveText(
+    "list_my_work, search_work_items, get_commercial_drift, create_work_item",
+  );
+
+  const readResults = await page.evaluate(async () => {
+    const tools = (
+      window as typeof window & {
+        __webMcpTools: Map<
+          string,
+          {
+            execute: (
+              input: Record<string, unknown>,
+              options: { signal: AbortSignal },
+            ) => Promise<unknown>;
+          }
+        >;
+      }
+    ).__webMcpTools;
+    const execute = (name: string, input: Record<string, unknown>) =>
+      tools.get(name)!.execute(input, {
+        signal: new AbortController().signal,
+      });
+    return Promise.all([
+      execute("list_my_work", { limit: 10 }),
+      execute("search_work_items", {
+        project_key: "WEB",
+        query: "agent-created",
+      }),
+      execute("get_commercial_drift", { project_key: "WEB", limit: 5 }),
+    ]);
+  });
+  expect(readResults).toHaveLength(3);
+
+  const created = await page.evaluate(async () => {
+    const tool = (
+      window as typeof window & {
+        __webMcpTools: Map<
+          string,
+          {
+            execute: (
+              input: Record<string, unknown>,
+              options: { signal: AbortSignal },
+            ) => Promise<unknown>;
+          }
+        >;
+      }
+    ).__webMcpTools.get("create_work_item")!;
+    return tool.execute(
+      {
+        project_key: "WEB",
+        title: "Agent-created delivery checkpoint",
+        status: "ready",
+        priority: "high",
+        assign_to_me: true,
+      },
+      { signal: new AbortController().signal },
+    );
+  });
+  expect(created).toMatchObject({
+    identifier: "WEB-1",
+    project_key: "WEB",
+    ui_refresh_requested: true,
+  });
+
+  await expect(
+    page.getByText("Agent-created delivery checkpoint", { exact: true }),
+  ).toBeVisible();
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/webmcp-browser-tools.png",
+      fullPage: true,
+    });
+  }
+  await page.getByRole("link", { name: "My work", exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: /Agent-created delivery checkpoint/ }),
+  ).toBeVisible();
+});
+
 test("owner operates portfolio capacity and work-item time from the UI", async ({
   page,
 }) => {

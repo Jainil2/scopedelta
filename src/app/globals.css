@@ -4533,11 +4533,44 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-top: auto;
+  margin-top: 0;
   padding-top: 1rem;
   border-top: 1px solid rgb(255 253 245 / 24%);
   color: rgb(255 253 245 / 68%);
   font-size: 0.72rem;
+}
+
+.webmcp-status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.3rem 0.45rem;
+  align-items: center;
+  margin-top: auto;
+  padding: 0.85rem 0;
+  border-top: 1px solid rgb(255 253 245 / 16%);
+  color: rgb(255 253 245 / 55%);
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
+.webmcp-status-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: rgb(255 253 245 / 28%);
+}
+
+.webmcp-status[data-state="registering"] .webmcp-status-dot {
+  background: #e6bd62;
+}
+
+.webmcp-status[data-state="available"] .webmcp-status-dot {
+  background: #7bc899;
+}
+
+.webmcp-tool-names {
+  grid-column: 2;
+  overflow-wrap: anywhere;
 }
 
 .app-text-button {

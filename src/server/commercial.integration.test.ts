@@ -811,6 +811,18 @@ describe("commercial baseline domain boundary", () => {
   it("keeps full commercial evidence manager-only and rejects cross-project graph references", async () => {
     const { owner, member, outsider, workspace, project, work } =
       await createFixture();
+    await expect(
+      listCommercialDrift(member, workspace.id, project.id, {
+        page: 1,
+        pageSize: 5,
+      }),
+    ).rejects.toMatchObject({ code: "forbidden", status: 403 });
+    await expect(
+      listCommercialDrift(outsider, workspace.id, project.id, {
+        page: 1,
+        pageSize: 5,
+      }),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
     const source = await createCommercialSource(
       owner,
       workspace.id,
@@ -906,6 +918,51 @@ describe("commercial baseline domain boundary", () => {
       otherProject.id,
       workInput("Other project work"),
     );
+    const primaryDrift = await listCommercialDrift(
+      owner,
+      workspace.id,
+      project.id,
+      { page: 1, pageSize: 50 },
+    );
+    expect(primaryDrift.data.map((item) => item.id)).not.toContain(
+      otherWork.id,
+    );
+    await expect(
+      listCommercialDrift(owner, workspace.id, otherProject.id, {
+        page: 1,
+        pageSize: 50,
+      }),
+    ).resolves.toMatchObject({
+      data: [expect.objectContaining({ id: otherWork.id })],
+    });
+
+    const outsiderWorkspace = await createWorkspace(outsider, {
+      name: "Separate commercial tenant",
+    });
+    const outsiderClient = await createClient(outsider, outsiderWorkspace.id, {
+      name: "Separate client",
+      internalReference: null,
+      summary: null,
+    });
+    const outsiderProject = await createProject(
+      outsider,
+      outsiderWorkspace.id,
+      {
+        clientId: outsiderClient.id,
+        key: "SEP",
+        name: "Separate project",
+        summary: null,
+        leadUserId: outsider.userId,
+        startDate: null,
+        targetDate: null,
+      },
+    );
+    await expect(
+      listCommercialDrift(owner, workspace.id, outsiderProject.id, {
+        page: 1,
+        pageSize: 5,
+      }),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
     await expect(
       createCommercialBasisLink(
         owner,

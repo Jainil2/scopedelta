@@ -299,6 +299,40 @@ describe("ScopeDelta WebMCP execution adapters", () => {
     expect(result).toMatchObject({ result_count: 1, total_count: 1 });
   });
 
+  it("continues authorized project search past 100 substring matches", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) =>
+      project({
+        id: `wrong-${index}`,
+        key: `W${String(index).padStart(3, "0")}`,
+        name: `ACME matching project ${String(index).padStart(3, "0")}`,
+      }),
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ items: firstPage, pageInfo: { total: 101 } }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          items: [project({ id: "exact", key: "ACME" })],
+          pageInfo: { total: 101 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ items: [workItem()], pageInfo: { total: 1 } }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      execute("search_work_items", { project_key: "ACME", query: "launch" }),
+    ).resolves.toMatchObject({ result_count: 1 });
+
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("page=2");
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain(
+      "projects/exact/work-items",
+    );
+  });
+
   it("returns an explicit zero-result envelope", async () => {
     vi.stubGlobal(
       "fetch",

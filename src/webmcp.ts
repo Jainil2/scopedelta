@@ -731,23 +731,30 @@ async function resolveProject(
   signal?: AbortSignal,
 ) {
   const normalizedKey = projectKey.toUpperCase();
-  const query = queryString({
-    page: 1,
-    pageSize: 100,
-    query: normalizedKey,
-    lifecycle: "active",
-  });
-  const response = await apiRequest<{
-    items: ProjectSummary[];
-    pageInfo: PageInfo;
-  }>(`/api/v1/workspaces/${workspaceId}/projects?${query}`, { signal });
-  const project = response.items.find((item) => item.key === normalizedKey);
-  if (!project) {
-    throw new Error(
-      `No active authorized project matches project_key ${normalizedKey}. Check the key in ScopeDelta and retry.`,
-    );
+  const pageSize = 100;
+  for (let page = 1; ; page += 1) {
+    const query = queryString({
+      page,
+      pageSize,
+      query: normalizedKey,
+      lifecycle: "active",
+    });
+    const response = await apiRequest<{
+      items: ProjectSummary[];
+      pageInfo: PageInfo;
+    }>(`/api/v1/workspaces/${workspaceId}/projects?${query}`, { signal });
+    const project = response.items.find((item) => item.key === normalizedKey);
+    if (project) return project;
+    if (
+      response.items.length === 0 ||
+      page * pageSize >= response.pageInfo.total
+    ) {
+      break;
+    }
   }
-  return project;
+  throw new Error(
+    `No active authorized project matches project_key ${normalizedKey}. Check the key in ScopeDelta and retry.`,
+  );
 }
 
 async function apiRequest<T>(

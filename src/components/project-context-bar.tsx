@@ -37,7 +37,7 @@ export function ProjectContextBar({
   const secondary: ProjectLink[] = [
     ["Cycles", `${root}/cycles`],
     ["Brief", `${root}/brief`],
-    ["Client", `${root}/client`],
+    ["Client collaboration", `${root}/client`],
     ["Engineering & QA", `${root}/engineering`],
     ["AI intelligence", `${root}/ai`],
     ["Activity", `${root}/activity`],

@@ -358,7 +358,7 @@ export function ClientCollaborationWorkspace({
           aria-current="page"
           href={`/app/${workspaceSlug}/projects/${project.key}/client`}
         >
-          Client view
+          Client collaboration
         </Link>
         <Link href={`/app/${workspaceSlug}/projects/${project.key}/activity`}>
           Activity

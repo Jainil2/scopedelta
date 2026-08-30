@@ -1640,7 +1640,7 @@ test("client collaboration keeps one commercial truth across internal and extern
 
   await Promise.all([
     page.waitForURL(/\/app\/[^/]+\/projects\/[^/]+\/client$/),
-    page.getByRole("link", { name: "Client view" }).click(),
+    page.getByRole("link", { name: "Client collaboration" }).click(),
   ]);
   const clientManagementUrl = page.url();
   const workspaceSlug = new URL(clientManagementUrl).pathname.split("/")[2]!;

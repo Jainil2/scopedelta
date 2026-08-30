@@ -6,6 +6,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb, getPool } from "@/db";
 import {
   auditEvents,
+  cycles,
   memberships,
   projectMemberships,
   users,
@@ -261,6 +262,90 @@ describe("delivery-core domain boundary", () => {
     await expect(
       getProjectByKey(nonMember, workspace.id, "NOVA"),
     ).rejects.toMatchObject({ code: "not_found", status: 404 });
+  });
+
+  it("keeps the active cycle authoritative beyond the planned-cycle query bound", async () => {
+    const { owner, workspace, project } = await createFixture();
+    const activeCycleId = randomUUID();
+    await db.insert(cycles).values([
+      {
+        id: activeCycleId,
+        projectId: project.id,
+        sequence: 1,
+        name: "Authoritative active cycle",
+        startDate: "2026-08-01",
+        endDate: "2026-08-14",
+        lifecycle: "active",
+      },
+      ...Array.from({ length: 21 }, (_, index) => ({
+        id: randomUUID(),
+        projectId: project.id,
+        sequence: index + 2,
+        name: `Planned cycle ${index + 1}`,
+        startDate: "2026-09-01",
+        endDate: "2026-09-14",
+        lifecycle: "planned" as const,
+      })),
+      {
+        id: randomUUID(),
+        projectId: project.id,
+        sequence: 23,
+        name: "Completed history",
+        startDate: "2026-07-01",
+        endDate: "2026-07-14",
+        lifecycle: "completed",
+        completedAt: new Date("2026-07-14T12:00:00.000Z"),
+      },
+      {
+        id: randomUUID(),
+        projectId: project.id,
+        sequence: 24,
+        name: "Archived history",
+        startDate: "2026-06-01",
+        endDate: "2026-06-14",
+        lifecycle: "archived",
+        archivedAt: new Date("2026-06-14T12:00:00.000Z"),
+      },
+    ]);
+    const actorWorkspace = await getWorkspaceBySlug(owner, workspace.slug);
+    const actorProject = await getProjectByKey(
+      owner,
+      workspace.id,
+      project.key,
+    );
+
+    const activeResult = await getProjectCommandCenter(
+      owner,
+      actorWorkspace,
+      actorProject,
+    );
+    expect(activeResult.cycles).toEqual([
+      expect.objectContaining({
+        id: activeCycleId,
+        lifecycle: "active",
+        name: "Authoritative active cycle",
+      }),
+    ]);
+
+    await db
+      .update(cycles)
+      .set({
+        lifecycle: "completed",
+        completedAt: new Date("2026-08-14T12:00:00.000Z"),
+      })
+      .where(eq(cycles.id, activeCycleId));
+    const plannedResult = await getProjectCommandCenter(
+      owner,
+      actorWorkspace,
+      actorProject,
+    );
+    expect(plannedResult.cycles).toEqual([
+      expect.objectContaining({
+        lifecycle: "planned",
+        name: "Planned cycle 21",
+        sequence: 22,
+      }),
+    ]);
   });
 
   it("revokes project access with workspace membership while retaining historical assignment", async () => {

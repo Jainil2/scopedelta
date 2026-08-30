@@ -7,6 +7,7 @@ import {
   inArray,
   isNull,
   notInArray,
+  sql,
 } from "drizzle-orm";
 
 import { getDb } from "@/db";
@@ -108,8 +109,12 @@ export async function getProjectCommandCenter(
           inArray(cycles.lifecycle, ["planned", "active"]),
         ),
       )
-      .orderBy(desc(cycles.sequence), asc(cycles.id))
-      .limit(20),
+      .orderBy(
+        sql`case when ${cycles.lifecycle} = 'active' then 0 else 1 end`,
+        desc(cycles.sequence),
+        asc(cycles.id),
+      )
+      .limit(1),
     db
       .select({
         id: workItems.id,

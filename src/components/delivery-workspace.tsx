@@ -939,7 +939,7 @@ export function ProjectOverview({
             Open backlog
           </Link>
           <Link href={`/app/${workspaceSlug}/projects/${project.key}/client`}>
-            Client view
+            Client collaboration
           </Link>
         </div>
       </header>

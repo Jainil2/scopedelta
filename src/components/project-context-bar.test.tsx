@@ -46,6 +46,9 @@ describe("project context navigation", () => {
     expect(
       screen.getByRole("link", { name: "Engineering & QA" }),
     ).toHaveAttribute("href", "/app/northstar/projects/NOVA/engineering");
+    expect(
+      screen.getByRole("link", { name: "Client collaboration" }),
+    ).toHaveAttribute("href", "/app/northstar/projects/NOVA/client");
     window.addEventListener("click", (event) => event.preventDefault(), {
       capture: true,
       once: true,

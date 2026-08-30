@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
     root: process.cwd(),
   },
   async headers() {
+    const webMcpHeaders = [
+      { key: "Origin-Agent-Cluster", value: "?1" },
+      { key: "Permissions-Policy", value: "tools=(self)" },
+    ];
     const privateHeaders = [
       { key: "Cache-Control", value: "private, no-store" },
       {
@@ -17,6 +21,7 @@ const nextConfig: NextConfig = {
       { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
     ];
     return [
+      { source: "/:path*", headers: webMcpHeaders },
       { source: "/app/:path*", headers: privateHeaders },
       { source: "/client/:path*", headers: privateHeaders },
       { source: "/api/v1/:path*", headers: privateHeaders },

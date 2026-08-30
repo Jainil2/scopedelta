@@ -1,11 +1,15 @@
 name: Desktop
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: Exact 40-character commit SHA to test and package
+        required: true
+        type: string
 
 concurrency:
-  group: desktop-${{ github.event.pull_request.number }}-${{ contains(github.event.pull_request.labels.*.name, 'merge-candidate') && 'merge-candidate' || 'pr' }}
+  group: desktop-${{ inputs.git_sha }}
   cancel-in-progress: true
 
 permissions:
@@ -14,19 +18,23 @@ permissions:
 jobs:
   desktop-checks:
     name: Desktop Rust and TypeScript
-    if: github.event.action != 'labeled' || github.event.label.name == 'merge-candidate'
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     steps:
       - name: Check out exact candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ inputs.git_sha }}
 
       - name: Verify exact candidate
         env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
-        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          CANDIDATE_SHA: ${{ inputs.git_sha }}
+        run: |
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "git_sha must be a lowercase 40-character commit SHA." >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
 
       - name: Install Linux desktop prerequisites
         run: |
@@ -78,27 +86,30 @@ jobs:
         run: node scripts/check-rust-supply-chain.mjs
 
       - name: Audit Rust advisories
-        if: contains(github.event.pull_request.labels.*.name, 'merge-candidate')
         run: |
           cargo +1.98.0 install cargo-audit --version 0.22.0 --locked
           cargo +1.98.0 audit --file src-tauri/Cargo.lock
 
   windows-preference-test:
     name: Windows preference replacement
-    if: github.event.action != 'labeled' || github.event.label.name == 'merge-candidate'
     runs-on: windows-2025
     timeout-minutes: 35
     steps:
       - name: Check out exact candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ inputs.git_sha }}
 
       - name: Verify exact candidate
         shell: bash
         env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
-        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          CANDIDATE_SHA: ${{ inputs.git_sha }}
+        run: |
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "git_sha must be a lowercase 40-character commit SHA." >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
 
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal
@@ -123,7 +134,6 @@ jobs:
 
   desktop-bundles:
     name: Desktop bundle (${{ matrix.name }})
-    if: contains(github.event.pull_request.labels.*.name, 'merge-candidate')
     needs: desktop-checks
     timeout-minutes: 45
     strategy:
@@ -159,13 +169,18 @@ jobs:
       - name: Check out exact candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ inputs.git_sha }}
 
       - name: Verify exact candidate
         shell: bash
         env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
-        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          CANDIDATE_SHA: ${{ inputs.git_sha }}
+        run: |
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "git_sha must be a lowercase 40-character commit SHA." >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
 
       - name: Install Linux desktop prerequisites
         if: runner.os == 'Linux'
@@ -206,7 +221,7 @@ jobs:
       - name: Upload private build evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: scopedelta-desktop-${{ matrix.artifact }}-${{ github.event.pull_request.head.sha }}
+          name: scopedelta-desktop-${{ matrix.artifact }}-${{ inputs.git_sha }}
           path: ${{ matrix.bundlePath }}
           if-no-files-found: error
           retention-days: 14

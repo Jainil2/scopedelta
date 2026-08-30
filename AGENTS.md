@@ -44,9 +44,13 @@ Quality gates remain mandatory. Optimize **when** expensive validation runs rath
 
 1. Keep ordinary hosted PR validation focused on obvious breakage, not formatting, lint, coverage telemetry, or code-quality observability.
 2. Run the smallest relevant unit/integration tests for the code being changed.
-3. Use focused browser/E2E coverage for the journey currently under construction.
+3. Run focused browser/E2E coverage locally when the journey under construction
+   warrants it. The hosted Browser action is manual-only and must be requested
+   with an exact commit SHA.
 4. Run focused lint/typecheck/build checks when the touched boundary warrants them.
-5. Do not repeatedly run the complete hosted E2E + production build + smoke + Docker/container gate after every edit or review fix unless the specific change requires broad early confidence.
+5. Do not repeatedly run production build + smoke + Docker/container validation
+   after every edit or review fix unless the specific change requires broad
+   early confidence.
 6. Push a review candidate once focused regression evidence is strong enough for CEO/product review; **a full hosted gate is not a prerequisite for CEO review**.
 
 ### CEO/product review
@@ -59,11 +63,21 @@ Quality gates remain mandatory. Optimize **when** expensive validation runs rath
 ### Final merge gate
 
 1. When CEO reports **no remaining product/security blockers**, treat the PR as **functionally approved pending final merge gate** and freeze ordinary feature scope.
-2. Run the complete required hosted migration/lint/typecheck/unit/integration/E2E/build/smoke/container gate once on the exact merge-candidate head.
+2. Run the complete required hosted
+   migration/lint/typecheck/unit/integration/build/smoke/container gate once on
+   the exact merge-candidate head.
 3. Do not merge without that final gate passing.
 4. If the final gate exposes a real defect, fix it, run targeted regression first, then rerun the necessary final hosted gate on the new code head.
 5. Any source-code change after the final green gate must be revalidated before merge; do not rely on a green result from an older SHA.
-6. Do not weaken, skip, or suppress the final merge-quality gate merely to save time.
+6. Do not weaken, skip, or suppress the automatic final merge-quality gate
+   merely to save time.
+
+Browser and desktop workflows are optional manual evidence. They never run on
+pull-request or merge-candidate events and are not required for merge. Run them
+from GitHub Actions with an exact commit SHA only when the founder requests
+them or focused risk warrants the additional evidence. Every manual Desktop run
+executes the full checks, advisory audit, Windows preference test, and installer
+matrix.
 
 ### Final-gate failure handling
 

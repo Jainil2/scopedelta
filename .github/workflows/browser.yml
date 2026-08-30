@@ -99,11 +99,11 @@ jobs:
 
       - name: Install Chromium and system dependencies
         if: steps.chromium-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium # NOSONAR — pinned browser binary only
 
       - name: Install Chromium system dependencies
         if: steps.chromium-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+        run: pnpm exec playwright install-deps chromium # NOSONAR — runner system packages only
 
       - name: Browser tests
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/2

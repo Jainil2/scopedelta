@@ -3,9 +3,7 @@ import { notFound } from "next/navigation";
 import { BacklogWorkspace } from "@/components/delivery-workspace";
 import { workItemFilterSchema } from "@/lib/delivery-validation";
 import { parseInput } from "@/lib/platform-validation";
-import { requireSession } from "@/lib/session";
 import {
-  getProjectByKey,
   listCycles,
   listMilestones,
   listDependencies,
@@ -13,7 +11,7 @@ import {
   listProjectMembers,
   listWorkItems,
 } from "@/server/delivery";
-import { getWorkspaceBySlug } from "@/server/workspaces";
+import { getRequestProject } from "@/server/request-context";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -24,8 +22,6 @@ export default async function BacklogPage({
   params: Promise<{ workspaceSlug: string; projectKey: string }>;
   searchParams: Promise<SearchParams>;
 }>) {
-  const session = await requireSession();
-  const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug, projectKey } = await params;
   const raw = await searchParams;
   const scalar = Object.fromEntries(
@@ -33,7 +29,7 @@ export default async function BacklogPage({
       .filter(([, value]) => typeof value === "string" && value !== "")
       .map(([key, value]) => [key, value]),
   );
-  const data = await loadBacklog(actor, workspaceSlug, projectKey, scalar);
+  const data = await loadBacklog(workspaceSlug, projectKey, scalar);
   const { filters } = data;
   return (
     <BacklogWorkspace
@@ -53,18 +49,15 @@ export default async function BacklogPage({
 }
 
 async function loadBacklog(
-  actor: { userId: string; email: string },
   workspaceSlug: string,
   projectKey: string,
   scalar: Record<string, string | string[] | undefined>,
 ) {
   try {
     const filters = parseInput(workItemFilterSchema, scalar);
-    const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
-    const project = await getProjectByKey(
-      actor,
-      workspace.id,
-      projectKey.toUpperCase(),
+    const { actor, workspace, project } = await getRequestProject(
+      workspaceSlug,
+      projectKey,
     );
     const [result, members, milestones, cycles, labels, dependencies] =
       await Promise.all([

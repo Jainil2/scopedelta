@@ -424,7 +424,7 @@ export async function getProject(
   workspaceId: string,
   projectId: string,
 ) {
-  await getProjectAccess(getDb(), actor, workspaceId, projectId);
+  const access = await getProjectAccess(getDb(), actor, workspaceId, projectId);
   const rows = await getDb()
     .select({
       id: projects.id,
@@ -457,7 +457,12 @@ export async function getProject(
       and(eq(workItems.projectId, projectId), isNull(workItems.archivedAt)),
     )
     .groupBy(workItems.status);
-  return { ...rows[0], counts };
+  return {
+    ...rows[0],
+    counts,
+    workspaceRole: access.workspaceRole,
+    canManage: isProjectManager(access, actor.userId),
+  };
 }
 
 export async function updateProject(
@@ -2034,9 +2039,19 @@ export function assertProjectManager(
   },
   actorUserId: string,
 ) {
-  if (access.workspaceRole === "member" && access.leadUserId !== actorUserId) {
+  if (!isProjectManager(access, actorUserId)) {
     throw forbidden();
   }
+}
+
+export function isProjectManager(
+  access: {
+    workspaceRole: "owner" | "admin" | "member";
+    leadUserId: string;
+  },
+  actorUserId: string,
+) {
+  return access.workspaceRole !== "member" || access.leadUserId === actorUserId;
 }
 
 async function listCommercialBasisCounts(

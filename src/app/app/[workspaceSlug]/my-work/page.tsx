@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import { MyWorkWorkspace } from "@/components/planning-workspace";
 import { myWorkFilterSchema } from "@/lib/delivery-validation";
 import { parseInput } from "@/lib/platform-validation";
-import { requireSession } from "@/lib/session";
 import { listMyWork, listMyWorkFacets } from "@/server/delivery";
-import { getWorkspaceBySlug } from "@/server/workspaces";
+import {
+  getRequestIdentity,
+  getRequestWorkspace,
+} from "@/server/request-context";
 
 export default async function MyWorkPage({
   params,
@@ -14,10 +16,8 @@ export default async function MyWorkPage({
   params: Promise<{ workspaceSlug: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
-  const session = await requireSession();
-  const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug } = await params;
-  const data = await loadMyWork(actor, workspaceSlug, await searchParams);
+  const data = await loadMyWork(workspaceSlug, await searchParams);
   return (
     <MyWorkWorkspace
       workspaceId={data.workspace.id}
@@ -31,7 +31,6 @@ export default async function MyWorkPage({
 }
 
 async function loadMyWork(
-  actor: { userId: string; email: string },
   workspaceSlug: string,
   searchParams: Record<string, string | string[] | undefined>,
 ) {
@@ -45,7 +44,10 @@ async function loadMyWork(
         ),
       ),
     );
-    const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
+    const [{ actor }, workspace] = await Promise.all([
+      getRequestIdentity(),
+      getRequestWorkspace(workspaceSlug),
+    ]);
     const [result, facets] = await Promise.all([
       listMyWork(actor, workspace.id, filters),
       listMyWorkFacets(actor, workspace.id),

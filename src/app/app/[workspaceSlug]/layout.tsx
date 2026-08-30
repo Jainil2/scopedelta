@@ -2,8 +2,11 @@ import { notFound } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
 import { PlatformError } from "@/lib/platform-errors";
-import { requireSession } from "@/lib/session";
-import { getWorkspaceBySlug, listWorkspaces } from "@/server/workspaces";
+import {
+  getRequestIdentity,
+  getRequestWorkspace,
+  getRequestWorkspaces,
+} from "@/server/request-context";
 
 export default async function WorkspaceLayout({
   children,
@@ -12,10 +15,8 @@ export default async function WorkspaceLayout({
   children: React.ReactNode;
   params: Promise<{ workspaceSlug: string }>;
 }>) {
-  const session = await requireSession();
-  const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug } = await params;
-  const [current, available] = await loadWorkspace(actor, workspaceSlug);
+  const [{ session }, current, available] = await loadWorkspace(workspaceSlug);
 
   return (
     <AppShell
@@ -29,14 +30,12 @@ export default async function WorkspaceLayout({
   );
 }
 
-async function loadWorkspace(
-  actor: { userId: string; email: string },
-  workspaceSlug: string,
-) {
+async function loadWorkspace(workspaceSlug: string) {
   try {
     return await Promise.all([
-      getWorkspaceBySlug(actor, workspaceSlug),
-      listWorkspaces(actor),
+      getRequestIdentity(),
+      getRequestWorkspace(workspaceSlug),
+      getRequestWorkspaces(),
     ]);
   } catch (error) {
     if (error instanceof PlatformError && error.status === 404) notFound();

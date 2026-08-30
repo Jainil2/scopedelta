@@ -5,6 +5,14 @@ import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
 
 import { ActionableEmptyState } from "@/components/self-service-workspace";
+import {
+  AppButton,
+  AppField,
+  AppFormActions,
+  AppInput,
+  AppSelect,
+  AppTextarea,
+} from "@/components/app-form-controls";
 
 type Client = {
   id: string;
@@ -755,6 +763,9 @@ export function ProjectOverview({
   workspaceSlug,
   project,
   milestones,
+  cycles,
+  attention,
+  commercial,
   projectMembers,
   workspaceMembers,
   workspaceMemberPageInfo,
@@ -768,6 +779,34 @@ export function ProjectOverview({
     counts: Array<{ status: string; total: number }>;
   };
   milestones: Milestone[];
+  cycles: Cycle[];
+  attention: {
+    items: Array<
+      Pick<
+        WorkItem,
+        "id" | "identifier" | "title" | "status" | "priority" | "targetDate"
+      >
+    >;
+    pageInfo: PageInfo;
+  };
+  commercial: {
+    counts: Record<
+      | "commercially_unlinked"
+      | "needs_classification"
+      | "linked"
+      | "stale_basis"
+      | "support_internal",
+      number
+    >;
+    affectedTotal: number;
+    baseline: {
+      versionId: string;
+      versionNumber: number | null;
+      label: string;
+      state: string;
+      effectiveAt: string | Date | null;
+    } | null;
+  } | null;
   projectMembers: Member[];
   workspaceMembers: Member[];
   workspaceMemberPageInfo: WorkspaceMemberPageInfo;
@@ -777,6 +816,20 @@ export function ProjectOverview({
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
   const milestoneComposerRef = useRef<HTMLDetailsElement>(null);
+  const currentCycle =
+    cycles.find((cycle) => cycle.lifecycle === "active") ??
+    cycles.find((cycle) => cycle.lifecycle === "planned") ??
+    null;
+  const upcomingMilestone =
+    milestones.find((milestone) => milestone.status === "in_progress") ??
+    [...milestones]
+      .filter((milestone) => milestone.status === "planned")
+      .sort((left, right) =>
+        (left.targetDate ?? "9999-12-31").localeCompare(
+          right.targetDate ?? "9999-12-31",
+        ),
+      )[0] ??
+    null;
 
   async function createMilestone(formData: FormData) {
     const response = await apiRequest(
@@ -880,40 +933,162 @@ export function ProjectOverview({
           </div>
           <p>{project.summary || "No project summary added."}</p>
         </div>
-        <nav className="project-tabs" aria-label="Project">
-          <Link
-            aria-current="page"
-            href={`/app/${workspaceSlug}/projects/${project.key}`}
-          >
-            Overview
-          </Link>
+        <div className="command-center-actions">
+          <Link href={`/app/${workspaceSlug}/my-work`}>My work</Link>
           <Link href={`/app/${workspaceSlug}/projects/${project.key}/backlog`}>
-            Backlog
+            Open backlog
           </Link>
-          <Link href={`/app/${workspaceSlug}/projects/${project.key}/board`}>
-            Board
+          <Link href={`/app/${workspaceSlug}/projects/${project.key}/client`}>
+            Client view
           </Link>
-          <Link href={`/app/${workspaceSlug}/projects/${project.key}/cycles`}>
-            Cycles
-          </Link>
-          <Link href={`/app/${workspaceSlug}/projects/${project.key}/brief`}>
-            Brief
-          </Link>
-          <Link
-            href={`/app/${workspaceSlug}/projects/${project.key}/commercial`}
-          >
-            Commercial
-          </Link>
-          <Link
-            href={`/app/${workspaceSlug}/projects/${project.key}/engineering`}
-          >
-            Engineering &amp; QA
-          </Link>
-          <Link href={`/app/${workspaceSlug}/projects/${project.key}/activity`}>
-            Activity
-          </Link>
-        </nav>
+        </div>
       </header>
+      <section className="project-summary-strip" aria-label="Delivery status">
+        {workflow.map(([id, label]) => (
+          <div key={id}>
+            <strong>
+              {project.counts.find((count) => count.status === id)?.total ?? 0}
+            </strong>
+            <span>{label}</span>
+          </div>
+        ))}
+      </section>
+      {commercial ? (
+        <section
+          className="command-commercial"
+          aria-labelledby="commercial-signal-title"
+        >
+          <div className="command-commercial-heading">
+            <div>
+              <p className="eyebrow">Commercial delivery graph</p>
+              <h2 id="commercial-signal-title">Delivery drift</h2>
+              <p>
+                {commercial.baseline
+                  ? `${commercial.baseline.label} · ${commercial.baseline.state === "draft" || commercial.baseline.versionNumber === null ? "draft" : `version ${commercial.baseline.versionNumber}`}`
+                  : "No commercial baseline is active yet."}
+              </p>
+            </div>
+            <Link
+              href={`/app/${workspaceSlug}/projects/${project.key}/commercial`}
+            >
+              Inspect commercial evidence →
+            </Link>
+          </div>
+          <dl className="command-commercial-counts">
+            {[
+              ["commercially_unlinked", "Unlinked"],
+              ["stale_basis", "Stale basis"],
+              ["needs_classification", "Classify"],
+              ["linked", "Linked"],
+              ["support_internal", "Support / internal"],
+            ].map(([state, label]) => (
+              <div key={state}>
+                <dt>{label}</dt>
+                <dd>
+                  {commercial.counts[state as keyof typeof commercial.counts]}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null}
+      <div className="command-center-grid">
+        <section
+          className="command-attention"
+          aria-labelledby="attention-title"
+        >
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Assigned to you</p>
+              <h2 id="attention-title">Needs attention</h2>
+            </div>
+            <span>{attention.pageInfo.total} actionable</span>
+          </div>
+          <div className="command-attention-list">
+            {attention.items.map((item) => (
+              <Link
+                href={`/app/${workspaceSlug}/projects/${project.key}/work/${item.id}`}
+                key={item.id}
+              >
+                <span>
+                  <small>{item.identifier}</small>
+                  <strong>{item.title}</strong>
+                </span>
+                <span>
+                  <i className={`priority priority-${item.priority}`}>
+                    {item.priority}
+                  </i>
+                  <small>{item.status.replaceAll("_", " ")}</small>
+                </span>
+              </Link>
+            ))}
+            {!attention.items.length ? (
+              <p>No actionable project work is assigned to you.</p>
+            ) : null}
+          </div>
+        </section>
+        <section className="command-plan" aria-labelledby="plan-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Delivery horizon</p>
+              <h2 id="plan-title">Current plan</h2>
+            </div>
+          </div>
+          <dl>
+            <div>
+              <dt>Cycle</dt>
+              <dd>
+                {currentCycle ? (
+                  <Link
+                    href={`/app/${workspaceSlug}/projects/${project.key}/cycles`}
+                  >
+                    {currentCycle.name}
+                  </Link>
+                ) : (
+                  "No active or planned cycle"
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Milestone</dt>
+              <dd>
+                {upcomingMilestone
+                  ? `${upcomingMilestone.name}${upcomingMilestone.targetDate ? ` · ${upcomingMilestone.targetDate}` : ""}`
+                  : "No unfinished milestone"}
+              </dd>
+            </div>
+            <div>
+              <dt>Project target</dt>
+              <dd>{project.targetDate || "No target date"}</dd>
+            </div>
+          </dl>
+        </section>
+        <section className="command-team" aria-labelledby="team-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Project team</p>
+              <h2 id="team-title">People</h2>
+            </div>
+            <span>{projectMembers.length} members</span>
+          </div>
+          <p className="command-team-lead">
+            <span aria-hidden="true">{initials(project.leadName)}</span>
+            <strong>{project.leadName}</strong>
+            <small>Project lead</small>
+          </p>
+          <ul>
+            {projectMembers
+              .filter((member) => member.userId !== project.leadUserId)
+              .slice(0, 4)
+              .map((member) => (
+                <li key={member.userId}>
+                  <span aria-hidden="true">{initials(member.name)}</span>
+                  {member.name}
+                </li>
+              ))}
+          </ul>
+        </section>
+      </div>
       {canManage ? (
         <details className="project-editor">
           <summary>Edit project details</summary>
@@ -921,10 +1096,14 @@ export function ProjectOverview({
             action={editProject}
             className="delivery-form delivery-form-grid"
           >
-            <label className="form-span">
-              <span>Project name</span>
-              <input name="name" defaultValue={project.name} required />
-            </label>
+            <AppField
+              id="project-name"
+              label="Project name"
+              required
+              className="form-span"
+            >
+              <AppInput name="name" defaultValue={project.name} />
+            </AppField>
             <WorkspaceMemberPicker
               workspaceId={workspaceId}
               name="leadUserId"
@@ -936,47 +1115,41 @@ export function ProjectOverview({
               initialPageInfo={workspaceMemberPageInfo}
               defaultValue={project.leadUserId}
             />
-            <label>
-              <span>Start date</span>
-              <input
+            <AppField id="project-start-date" label="Start date">
+              <AppInput
                 name="startDate"
                 type="date"
                 defaultValue={project.startDate || ""}
               />
-            </label>
-            <label>
-              <span>Target date</span>
-              <input
+            </AppField>
+            <AppField id="project-target-date" label="Target date">
+              <AppInput
                 name="targetDate"
                 type="date"
                 defaultValue={project.targetDate || ""}
               />
-            </label>
-            <label className="form-span">
-              <span>Summary</span>
-              <textarea
+            </AppField>
+            <AppField
+              id="project-summary"
+              label="Summary"
+              hint="Describe the delivery outcome, not internal implementation detail."
+              className="form-span"
+            >
+              <AppTextarea
                 name="summary"
                 rows={4}
                 defaultValue={project.summary || ""}
               />
-            </label>
-            <button type="submit" disabled={pending}>
-              Save project
-            </button>
+            </AppField>
+            <AppFormActions>
+              <AppButton type="submit" disabled={pending} aria-busy={pending}>
+                {pending ? "Saving…" : "Save project"}
+              </AppButton>
+            </AppFormActions>
           </form>
         </details>
       ) : null}
       {message ? <output>{message}</output> : null}
-      <section className="project-summary-strip" aria-label="Project status">
-        {workflow.map(([id, label]) => (
-          <div key={id}>
-            <strong>
-              {project.counts.find((count) => count.status === id)?.total ?? 0}
-            </strong>
-            <span>{label}</span>
-          </div>
-        ))}
-      </section>
       <div className="project-columns">
         <section>
           <div className="section-heading">
@@ -1680,33 +1853,37 @@ export function WorkItemForm({
       action={action}
       className="delivery-form delivery-form-grid work-form"
     >
-      <label className="form-span">
-        <span>Title</span>
-        <input
-          name="title"
-          required
-          defaultValue={item?.title}
-          maxLength={240}
-        />
-      </label>
-      <label>
-        <span>Status</span>
-        <select name="status" defaultValue={item?.status || "backlog"}>
+      <AppField
+        id={item ? `work-title-${item.id}` : "work-title-new"}
+        label="Title"
+        required
+        className="form-span"
+      >
+        <AppInput name="title" defaultValue={item?.title} maxLength={240} />
+      </AppField>
+      <AppField
+        id={item ? `work-status-${item.id}` : "work-status-new"}
+        label="Status"
+      >
+        <AppSelect name="status" defaultValue={item?.status || "backlog"}>
           {workflow.map(([id, label]) => (
             <option value={id} key={id}>
               {label}
             </option>
           ))}
-        </select>
-      </label>
-      <label>
-        <span>Priority</span>
-        <select name="priority" defaultValue={item?.priority || "none"}>
+        </AppSelect>
+      </AppField>
+      <AppField
+        id={item ? `work-priority-${item.id}` : "work-priority-new"}
+        label="Priority"
+        hint="High and urgent work is emphasized in attention views."
+      >
+        <AppSelect name="priority" defaultValue={item?.priority || "none"}>
           {["none", "low", "medium", "high", "urgent"].map((value) => (
             <option key={value}>{value}</option>
           ))}
-        </select>
-      </label>
+        </AppSelect>
+      </AppField>
       <label>
         <span>Assignee</span>
         <select name="assigneeUserId" defaultValue={item?.assigneeUserId || ""}>
@@ -1770,24 +1947,28 @@ export function WorkItemForm({
             ))}
         </select>
       </label>
-      <label>
-        <span>Estimate points</span>
-        <input
+      <AppField
+        id={item ? `work-estimate-${item.id}` : "work-estimate-new"}
+        label="Estimate points"
+      >
+        <AppInput
           name="estimatePoints"
           type="number"
           min={1}
           max={100}
           defaultValue={item?.estimatePoints || ""}
         />
-      </label>
-      <label>
-        <span>Target date</span>
-        <input
+      </AppField>
+      <AppField
+        id={item ? `work-target-${item.id}` : "work-target-new"}
+        label="Target date"
+      >
+        <AppInput
           name="targetDate"
           type="date"
           defaultValue={item?.targetDate || ""}
         />
-      </label>
+      </AppField>
       {item || parents.length ? (
         <label className="form-span">
           <span>Parent work item</span>
@@ -1822,27 +2003,36 @@ export function WorkItemForm({
         ))}
         {!labels.length ? <span>No labels created.</span> : null}
       </fieldset>
-      <label className="form-span">
-        <span>Description</span>
-        <textarea
+      <AppField
+        id={item ? `work-description-${item.id}` : "work-description-new"}
+        label="Description"
+        className="form-span"
+      >
+        <AppTextarea
           name="description"
           rows={5}
           maxLength={10000}
           defaultValue={item?.description || ""}
         />
-      </label>
-      <label className="form-span">
-        <span>Acceptance criteria</span>
-        <textarea
+      </AppField>
+      <AppField
+        id={item ? `work-acceptance-${item.id}` : "work-acceptance-new"}
+        label="Acceptance criteria"
+        className="form-span"
+        hint="State the factual conditions that define completion."
+      >
+        <AppTextarea
           name="acceptanceCriteria"
           rows={5}
           maxLength={10000}
           defaultValue={item?.acceptanceCriteria || ""}
         />
-      </label>
-      <button type="submit" disabled={pending}>
-        {item ? "Save changes" : "Create work item"}
-      </button>
+      </AppField>
+      <AppFormActions>
+        <AppButton type="submit" disabled={pending}>
+          {item ? "Save changes" : "Create work item"}
+        </AppButton>
+      </AppFormActions>
     </form>
   );
 }
@@ -1950,6 +2140,15 @@ export function workItemPayload(formData: FormData) {
       .getAll("labelIds")
       .filter((value): value is string => typeof value === "string"),
   };
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 }
 
 function nullable(value: FormDataEntryValue | null) {

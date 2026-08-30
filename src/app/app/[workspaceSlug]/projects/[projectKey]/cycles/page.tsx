@@ -3,9 +3,8 @@ import { notFound } from "next/navigation";
 import { CyclesWorkspace } from "@/components/planning-workspace";
 import { cycleFilterSchema } from "@/lib/delivery-validation";
 import { parseInput } from "@/lib/platform-validation";
-import { requireSession } from "@/lib/session";
-import { getProjectByKey, listCycles } from "@/server/delivery";
-import { getWorkspaceBySlug } from "@/server/workspaces";
+import { listCycles } from "@/server/delivery";
+import { getRequestProject } from "@/server/request-context";
 
 export default async function CyclesPage({
   params,
@@ -14,15 +13,8 @@ export default async function CyclesPage({
   params: Promise<{ workspaceSlug: string; projectKey: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
-  const session = await requireSession();
-  const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug, projectKey } = await params;
-  const data = await loadCycles(
-    actor,
-    workspaceSlug,
-    projectKey,
-    await searchParams,
-  );
+  const data = await loadCycles(workspaceSlug, projectKey, await searchParams);
   return (
     <CyclesWorkspace
       workspaceId={data.workspace.id}
@@ -36,7 +28,6 @@ export default async function CyclesPage({
 }
 
 async function loadCycles(
-  actor: { userId: string; email: string },
   workspaceSlug: string,
   projectKey: string,
   searchParams: Record<string, string | string[] | undefined>,
@@ -46,11 +37,9 @@ async function loadCycles(
       page: scalar(searchParams.page),
       lifecycle: scalar(searchParams.lifecycle),
     });
-    const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
-    const project = await getProjectByKey(
-      actor,
-      workspace.id,
-      projectKey.toUpperCase(),
+    const { actor, workspace, project } = await getRequestProject(
+      workspaceSlug,
+      projectKey,
     );
     const result = await listCycles(actor, workspace.id, project.id, filters);
     return { workspace, project, result, filters };

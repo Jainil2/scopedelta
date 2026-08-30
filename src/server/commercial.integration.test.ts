@@ -26,6 +26,7 @@ import {
   createCommercialBasisLink,
   createCommercialScopeItem,
   createCommercialSource,
+  getCommercialDriftSnapshot,
   getCommercialSource,
   getWorkCommercialProvenance,
   listCommercialBasisOptions,
@@ -823,6 +824,12 @@ describe("commercial baseline domain boundary", () => {
         pageSize: 5,
       }),
     ).rejects.toMatchObject({ code: "not_found", status: 404 });
+    await expect(
+      getCommercialDriftSnapshot(member, workspace.id, project.id, 5),
+    ).rejects.toMatchObject({ code: "forbidden", status: 403 });
+    await expect(
+      getCommercialDriftSnapshot(outsider, workspace.id, project.id, 5),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
     const source = await createCommercialSource(
       owner,
       workspace.id,
@@ -997,6 +1004,77 @@ describe("commercial baseline domain boundary", () => {
       ),
     ).rejects.toMatchObject({ code: "not_entitled", status: 403 });
     expect(work.id).toBeTruthy();
+  });
+
+  it("returns one authorized drift snapshot matching all five detailed filters without source bodies", async () => {
+    const { owner, workspace, project, work } = await createFixture();
+    await updateWorkPurpose(owner, workspace.id, project.id, work.id, {
+      purpose: "client_delivery",
+    });
+    const unclassified = await createWorkItem(
+      owner,
+      workspace.id,
+      project.id,
+      workInput("Classify buyer enablement"),
+    );
+    const internal = await createWorkItem(
+      owner,
+      workspace.id,
+      project.id,
+      workInput("Internal release rehearsal"),
+    );
+    await updateWorkPurpose(owner, workspace.id, project.id, internal.id, {
+      purpose: "internal",
+    });
+    const privateBody = "Confidential signed commercial terms";
+    await createCommercialSource(owner, workspace.id, project.id, {
+      idempotencyKey: randomUUID(),
+      kind: "pasted_text",
+      name: "Private source",
+      mediaType: "text/plain",
+      contentBase64: Buffer.from(privateBody).toString("base64"),
+    });
+
+    const states = [
+      "linked",
+      "stale_basis",
+      "commercially_unlinked",
+      "needs_classification",
+      "support_internal",
+    ] as const;
+    const detailed = await Promise.all(
+      states.map(
+        async (state) =>
+          [
+            state,
+            await listCommercialDrift(owner, workspace.id, project.id, {
+              page: 1,
+              pageSize: 5,
+              state,
+            }),
+          ] as const,
+      ),
+    );
+    const snapshot = await getCommercialDriftSnapshot(
+      owner,
+      workspace.id,
+      project.id,
+      5,
+    );
+
+    expect(snapshot.counts).toEqual(
+      Object.fromEntries(
+        detailed.map(([state, result]) => [state, result.page.total]),
+      ),
+    );
+    expect(snapshot.affected.map((item) => item.id)).toEqual(
+      expect.arrayContaining([work.id, unclassified.id]),
+    );
+    expect(snapshot.affected).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: internal.id })]),
+    );
+    expect(JSON.stringify(snapshot)).not.toContain(privateBody);
+    expect(JSON.stringify(snapshot)).not.toContain("contentBase64");
   });
 
   it("keeps request and decision history while only current authorizing decisions cover active work", async () => {

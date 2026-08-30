@@ -1,73 +1,52 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ProjectOverview } from "@/components/delivery-workspace";
-import { requireSession } from "@/lib/session";
-import {
-  getProjectByKey,
-  listMilestones,
-  listProjectMembers,
-} from "@/server/delivery";
-import { getWorkspaceBySlug, listWorkspaceMembers } from "@/server/workspaces";
+import { getProjectCommandCenter } from "@/server/project-command-center";
+import { getRequestProject } from "@/server/request-context";
 
 export default async function ProjectPage({
   params,
 }: Readonly<{
   params: Promise<{ workspaceSlug: string; projectKey: string }>;
 }>) {
-  const session = await requireSession();
-  const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug, projectKey } = await params;
-  const data = await loadProject(actor, workspaceSlug, projectKey);
+  const data = await loadProject(workspaceSlug, projectKey);
   return (
-    <>
-      <Link
-        className="button button-light"
-        href={`/app/${workspaceSlug}/projects/${data.project.key}/client`}
-      >
-        Client view
-      </Link>
-      <ProjectOverview
-        workspaceId={data.workspace.id}
-        workspaceSlug={workspaceSlug}
-        project={data.project}
-        milestones={data.milestones}
-        projectMembers={data.projectDirectory.members}
-        workspaceMembers={data.workspaceDirectory.members}
-        workspaceMemberPageInfo={data.workspaceDirectory.memberPage}
-        canManage={data.projectDirectory.canManage}
-      />
-    </>
+    <ProjectOverview
+      workspaceId={data.workspace.id}
+      workspaceSlug={workspaceSlug}
+      project={data.project}
+      milestones={data.commandCenter.milestones}
+      cycles={data.commandCenter.cycles}
+      attention={data.commandCenter.attention}
+      commercial={data.commandCenter.commercial}
+      projectMembers={data.commandCenter.projectDirectory.members}
+      workspaceMembers={data.commandCenter.workspaceDirectory.members}
+      workspaceMemberPageInfo={data.commandCenter.workspaceDirectory.memberPage}
+      canManage={data.commandCenter.canManage}
+    />
   );
 }
 
 async function loadProject(
-  actor: { userId: string; email: string },
   workspaceSlug: string,
   projectKey: string,
 ) {
   try {
-    const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
-    const project = await getProjectByKey(
-      actor,
-      workspace.id,
-      projectKey.toUpperCase(),
+    const { actor, workspace, project } = await getRequestProject(
+      workspaceSlug,
+      projectKey,
     );
-    const [milestones, projectDirectory, workspaceDirectory] =
-      await Promise.all([
-        listMilestones(actor, workspace.id, project.id),
-        listProjectMembers(actor, workspace.id, project.id),
-        listWorkspaceMembers(actor, workspace.id, {
-          status: "active",
-          pageSize: 25,
-        }),
-      ]);
-    return {
+    const commandCenter = await getProjectCommandCenter(
+      actor,
       workspace,
       project,
-      milestones,
-      projectDirectory,
-      workspaceDirectory,
+    );
+    return {
+      actor,
+      workspace,
+      project,
+      commandCenter,
     };
   } catch {
     notFound();

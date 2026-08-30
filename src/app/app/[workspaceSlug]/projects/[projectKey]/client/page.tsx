@@ -1,29 +1,24 @@
 import { notFound } from "next/navigation";
 
 import { ClientCollaborationWorkspace } from "@/components/client-collaboration-workspace";
-import { requireSession } from "@/lib/session";
 import {
   getClientProjectPreview,
   listClientParticipants,
 } from "@/server/client-collaboration";
 import { listCommercialRequests } from "@/server/commercial-change-control";
-import { getProjectByKey, listMilestones } from "@/server/delivery";
-import { getWorkspaceBySlug } from "@/server/workspaces";
+import { listMilestones } from "@/server/delivery";
+import { getRequestProject } from "@/server/request-context";
 
 export default async function InternalClientCollaborationPage({
   params,
 }: Readonly<{
   params: Promise<{ workspaceSlug: string; projectKey: string }>;
 }>) {
-  const session = await requireSession();
-  const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug, projectKey } = await params;
   const pageData = await (async () => {
-    const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
-    const project = await getProjectByKey(
-      actor,
-      workspace.id,
-      projectKey.toUpperCase(),
+    const { actor, workspace, project } = await getRequestProject(
+      workspaceSlug,
+      projectKey,
     );
     const [preview, directory, milestones, ledger] = await Promise.all([
       getClientProjectPreview(actor, workspace.id, project.id),

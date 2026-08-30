@@ -306,6 +306,27 @@ test("client project, milestone, and backlog work through the production UI", as
   await expect(page.getByRole("status")).toHaveText("Project created.");
   await page.getByRole("link", { name: /Customer portal rebuild/ }).click();
 
+  await expect(
+    page.getByRole("region", { name: "Project context" }),
+  ).toContainText("Acme Labs");
+  await expect(
+    page.getByRole("heading", { name: "Needs attention" }),
+  ).toBeVisible();
+  await expect(page.getByText("No active or planned cycle")).toBeVisible();
+  await expect(page.getByText("No unfinished milestone")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Delivery drift" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await openProjectMore(page);
+  await expect(page.getByRole("link", { name: "Activity" })).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+
   await page.getByText("New milestone").click();
   const milestoneForm = page.locator("form").filter({
     has: page.getByRole("button", { name: "Create milestone" }),
@@ -314,7 +335,7 @@ test("client project, milestone, and backlog work through the production UI", as
   await milestoneForm.getByLabel("Target date").fill("2026-11-20");
   await milestoneForm.getByRole("button", { name: "Create milestone" }).click();
   await expect(page.getByRole("status")).toHaveText("Milestone created.");
-  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByRole("link", { name: "Backlog", exact: true }).click();
 
   await page.getByText("New work item").click();
   const createForm = page.locator("form.work-form").filter({
@@ -345,6 +366,7 @@ test("client project, milestone, and backlog work through the production UI", as
     page.getByRole("heading", { name: "In progress" }),
   ).toBeVisible();
 
+  await openProjectMore(page);
   await page.getByRole("link", { name: "Cycles" }).click();
   await expect(
     page.getByRole("heading", { name: "No open cycles" }),
@@ -541,7 +563,7 @@ test("authenticated workspace exposes existing workflows through four WebMCP too
   await page.getByRole("button", { name: "Create project" }).click();
   await expect(page.getByRole("status")).toHaveText("Project created.");
   await page.getByRole("link", { name: /Browser tool delivery/ }).click();
-  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByRole("link", { name: "Backlog", exact: true }).click();
 
   await expect(page.getByText("4 browser tools active")).toBeVisible();
   await expect(page.locator(".webmcp-tool-names")).toHaveText(
@@ -611,6 +633,28 @@ test("authenticated workspace exposes existing workflows through four WebMCP too
   await expect(
     page.getByText("Agent-created delivery checkpoint", { exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("region", { name: "Project context" })
+    .getByRole("link", { name: "Overview", exact: true })
+    .click();
+  await expect(
+    page.getByRole("link", { name: /Agent-created delivery checkpoint/ }),
+  ).toBeVisible();
+  if (process.env.UPDATE_SCREENSHOTS === "1") {
+    await removeDevIndicator(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({
+      path: "docs/screenshots/hack-002-command-center.png",
+      fullPage: true,
+    });
+  }
+  await page.getByRole("link", { name: "Backlog", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Backlog", level: 1 }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Agent-created delivery checkpoint", { exact: true }),
+  ).toBeVisible();
   if (process.env.UPDATE_SCREENSHOTS === "1") {
     await removeDevIndicator(page);
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -618,8 +662,15 @@ test("authenticated workspace exposes existing workflows through four WebMCP too
       path: "docs/screenshots/webmcp-browser-tools.png",
       fullPage: true,
     });
+    await page.screenshot({
+      path: "docs/screenshots/hack-002-created-work.png",
+      fullPage: true,
+    });
   }
-  await page.getByRole("link", { name: "My work", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Workspace" })
+    .getByRole("link", { name: "My work", exact: true })
+    .click();
   await expect(
     page.getByRole("link", { name: /Agent-created delivery checkpoint/ }),
   ).toBeVisible();
@@ -2737,6 +2788,13 @@ async function removeDevIndicator(page: Page) {
   await page
     .locator("nextjs-portal")
     .evaluateAll((elements) => elements.forEach((element) => element.remove()));
+}
+
+async function openProjectMore(page: Page) {
+  const menu = page.locator("details.project-more-menu");
+  if (!(await menu.evaluate((element) => element.hasAttribute("open")))) {
+    await menu.locator("summary").click();
+  }
 }
 
 function isoDateOffset(value: string, days: number) {

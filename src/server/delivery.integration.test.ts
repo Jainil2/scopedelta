@@ -18,6 +18,7 @@ import {
   createProject,
   createWorkItem,
   getProject,
+  getProjectByKey,
   getWorkItem,
   listCycles,
   listMyWork,
@@ -28,7 +29,8 @@ import {
   updateProject,
   updateWorkItem,
 } from "@/server/delivery";
-import { createWorkspace } from "@/server/workspaces";
+import { getProjectCommandCenter } from "@/server/project-command-center";
+import { createWorkspace, getWorkspaceBySlug } from "@/server/workspaces";
 
 const databaseUrl =
   process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
@@ -163,6 +165,102 @@ describe("delivery-core domain boundary", () => {
       ),
     ).rejects.toMatchObject({ code: "not_found", status: 404 });
     expect(entitlements.assertAllowed).not.toHaveBeenCalled();
+  });
+
+  it("builds the command center for owner, admin, lead, and project member without widening access", async () => {
+    const owner = await createUser("owner@example.test", "Owner");
+    const admin = await createUser("admin@example.test", "Admin");
+    const lead = await createUser("lead@example.test", "Lead");
+    const member = await createUser("member@example.test", "Member");
+    const nonMember = await createUser("nonmember@example.test", "Non-member");
+    const workspace = await createWorkspace(owner, { name: "Command Center" });
+    await db.insert(memberships).values([
+      {
+        id: randomUUID(),
+        workspaceId: workspace.id,
+        userId: admin.userId,
+        role: "admin",
+      },
+      {
+        id: randomUUID(),
+        workspaceId: workspace.id,
+        userId: lead.userId,
+        role: "member",
+      },
+      {
+        id: randomUUID(),
+        workspaceId: workspace.id,
+        userId: member.userId,
+        role: "member",
+      },
+      {
+        id: randomUUID(),
+        workspaceId: workspace.id,
+        userId: nonMember.userId,
+        role: "member",
+      },
+    ]);
+    const client = await createClient(owner, workspace.id, {
+      name: "Nova Wholesale",
+      internalReference: "NOVA",
+      summary: null,
+    });
+    const created = await createProject(owner, workspace.id, {
+      clientId: client.id,
+      key: "NOVA",
+      name: "Wholesale portal",
+      summary: null,
+      leadUserId: lead.userId,
+      startDate: null,
+      targetDate: null,
+    });
+    await db.insert(projectMemberships).values({
+      projectId: created.id,
+      workspaceId: workspace.id,
+      userId: member.userId,
+      addedByUserId: owner.userId,
+    });
+    await createWorkItem(member, workspace.id, created.id, {
+      title: "Confirm wholesale change-order review",
+      description: null,
+      acceptanceCriteria: null,
+      status: "ready",
+      priority: "high",
+      assigneeUserId: member.userId,
+      estimatePoints: null,
+      targetDate: null,
+      milestoneId: null,
+      parentId: null,
+      labelIds: [],
+    });
+
+    for (const [actor, expectedManager] of [
+      [owner, true],
+      [admin, true],
+      [lead, true],
+      [member, false],
+    ] as const) {
+      const actorWorkspace = await getWorkspaceBySlug(actor, workspace.slug);
+      const actorProject = await getProjectByKey(actor, workspace.id, "NOVA");
+      const result = await getProjectCommandCenter(
+        actor,
+        actorWorkspace,
+        actorProject,
+      );
+      expect(result.canManage).toBe(expectedManager);
+      expect(result.commercial === null).toBe(!expectedManager);
+      if (actor.userId === member.userId) {
+        expect(result.attention.items).toEqual([
+          expect.objectContaining({
+            identifier: "NOVA-1",
+            title: "Confirm wholesale change-order review",
+          }),
+        ]);
+      }
+    }
+    await expect(
+      getProjectByKey(nonMember, workspace.id, "NOVA"),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
   });
 
   it("revokes project access with workspace membership while retaining historical assignment", async () => {

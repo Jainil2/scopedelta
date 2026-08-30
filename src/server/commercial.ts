@@ -1306,6 +1306,13 @@ export async function listCommercialDrift(
   filters: CommercialDriftFilters,
 ) {
   await getCommercialManagerAccess(getDb(), actor, workspaceId, projectId);
+  return queryCommercialDrift(projectId, filters);
+}
+
+async function queryCommercialDrift(
+  projectId: string,
+  filters: CommercialDriftFilters,
+) {
   const currentBaselineBasis = sql`exists (
     select 1
     from ${commercialScopeItems} current_scope
@@ -1457,6 +1464,91 @@ export async function listCommercialDrift(
       total: totals[0]?.total ?? 0,
       pages: Math.max(1, Math.ceil((totals[0]?.total ?? 0) / filters.pageSize)),
     },
+  };
+}
+
+const COMMERCIAL_DRIFT_STATES = [
+  "commercially_unlinked",
+  "needs_classification",
+  "linked",
+  "stale_basis",
+  "support_internal",
+] as const;
+
+const AFFECTED_COMMERCIAL_DRIFT_STATES = new Set<
+  (typeof COMMERCIAL_DRIFT_STATES)[number]
+>(["commercially_unlinked", "needs_classification", "stale_basis"]);
+
+export async function getCommercialDriftSnapshot(
+  actor: UserActor,
+  workspaceId: string,
+  projectId: string,
+  limit = 5,
+) {
+  await getCommercialManagerAccess(getDb(), actor, workspaceId, projectId);
+  return getCommercialDriftSnapshotForProject(projectId, limit);
+}
+
+/** Internal read-model helper. Callers must resolve manager access first. */
+export async function getCommercialDriftSnapshotForProject(
+  projectId: string,
+  limit = 5,
+) {
+  const boundedLimit = Math.min(5, Math.max(1, limit));
+  const [pages, baselineRows] = await Promise.all([
+    Promise.all(
+      COMMERCIAL_DRIFT_STATES.map(async (state) => {
+        const page = await queryCommercialDrift(projectId, {
+          page: 1,
+          pageSize: AFFECTED_COMMERCIAL_DRIFT_STATES.has(state)
+            ? boundedLimit
+            : 1,
+          state,
+        });
+        return [state, page] as const;
+      }),
+    ),
+    getDb()
+      .select({
+        versionId: commercialBaselineVersions.id,
+        versionNumber: commercialBaselineVersions.versionNumber,
+        label: commercialBaselineVersions.label,
+        state: commercialBaselineVersions.state,
+        effectiveAt: commercialBaselineVersions.effectiveAt,
+      })
+      .from(commercialBaselineVersions)
+      .where(eq(commercialBaselineVersions.projectId, projectId))
+      .orderBy(
+        sql`case ${commercialBaselineVersions.state} when 'draft' then 0 when 'effective' then 1 else 2 end`,
+        desc(commercialBaselineVersions.createdAt),
+      )
+      .limit(1),
+  ]);
+  const byState = new Map(pages);
+  const counts = Object.fromEntries(
+    COMMERCIAL_DRIFT_STATES.map((state) => [
+      state,
+      byState.get(state)?.page.total ?? 0,
+    ]),
+  ) as Record<(typeof COMMERCIAL_DRIFT_STATES)[number], number>;
+  const affected = pages
+    .filter(([state]) => AFFECTED_COMMERCIAL_DRIFT_STATES.has(state))
+    .flatMap(([, page]) => page.data)
+    .sort(
+      (left, right) =>
+        new Date(right.updatedAt).getTime() -
+        new Date(left.updatedAt).getTime(),
+    )
+    .slice(0, boundedLimit);
+
+  return {
+    counts,
+    affected,
+    affectedTotal: [...AFFECTED_COMMERCIAL_DRIFT_STATES].reduce(
+      (total, state) => total + counts[state],
+      0,
+    ),
+    baseline: baselineRows[0] ?? null,
   };
 }
 

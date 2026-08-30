@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { z } from "zod";
 
 import { getDb } from "@/db";
 import {
@@ -51,6 +52,15 @@ export const WEBMCP_DEMO_PROJECT_KEY = "NOVA";
 const DEMO_OWNER_EMAIL = "webmcp-demo-owner@scopedelta.test";
 const DEMO_OWNER_NAME = "WebMCP Demo Owner";
 const DEMO_JUDGE_NAME = "WebMCP Challenge Judge";
+const INCOMPLETE_DEMO_WORKSPACE_SLUG =
+  /^scopedelta-webmcp-judge-demo-[0-9a-f]{8}$/;
+const demoJudgeEmailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .email()
+  .max(254)
+  .refine((value) => value.endsWith(".test") && value !== DEMO_OWNER_EMAIL);
 const BASE_WORK_TITLES = [
   "Deliver weekly order audit export",
   "Implement account-based checkout",
@@ -117,13 +127,16 @@ export function readWebMcpDemoConfig(
       "Set the explicit WebMCP demo enable marker before running this command.",
     );
   }
-  const judgeEmail = environment.WEBMCP_DEMO_JUDGE_EMAIL?.trim().toLowerCase();
-  if (!judgeEmail || !judgeEmail.endsWith(".test")) {
+  const judgeEmailResult = demoJudgeEmailSchema.safeParse(
+    environment.WEBMCP_DEMO_JUDGE_EMAIL ?? "",
+  );
+  if (!judgeEmailResult.success) {
     throw demoError(
       "invalid_judge_email",
       "The judge identity must use a private synthetic .test email address.",
     );
   }
+  const judgeEmail = judgeEmailResult.data;
   const judgePassword = environment.WEBMCP_DEMO_JUDGE_PASSWORD ?? "";
   if (judgePassword.length < 16 || judgePassword.length > 128) {
     throw demoError(
@@ -174,7 +187,15 @@ async function seedWebMcpDemo(
 ): Promise<Omit<WebMcpDemoResult, "command">> {
   const existing = await findDemoWorkspace();
   if (existing) {
-    return requirePristine(await verifyWebMcpDemo(config));
+    if (existing.slug === WEBMCP_DEMO_WORKSPACE_SLUG) {
+      return requirePristine(await verifyWebMcpDemo(config));
+    }
+    const identities = await assertIncompleteDemoWorkspaceIsolation(
+      existing,
+      config,
+    );
+    await deleteDemoWorkspace(existing.id);
+    await assertFixtureUsersHaveNoOtherWorkspace(identities);
   }
 
   const identities = await ensureFixtureIdentities(config);
@@ -183,10 +204,6 @@ async function seedWebMcpDemo(
   const workspace = await createWorkspace(owner, {
     name: WEBMCP_DEMO_WORKSPACE_NAME,
   });
-  await getDb()
-    .update(workspaces)
-    .set({ slug: WEBMCP_DEMO_WORKSPACE_SLUG, updatedAt: new Date() })
-    .where(eq(workspaces.id, workspace.id));
   await getDb().insert(memberships).values({
     id: randomUUID(),
     workspaceId: workspace.id,
@@ -436,6 +453,10 @@ async function seedWebMcpDemo(
     amendment.id,
     {},
   );
+  await getDb()
+    .update(workspaces)
+    .set({ slug: WEBMCP_DEMO_WORKSPACE_SLUG, updatedAt: new Date() })
+    .where(eq(workspaces.id, workspace.id));
   return requirePristine(await verifyWebMcpDemo(config));
 }
 
@@ -499,29 +520,7 @@ async function verifyWebMcpDemo(
     .from(users)
     .where(eq(users.id, identities.judgeUserId))
     .limit(1);
-  const judgeAccount = await getDb()
-    .select({ password: accounts.password })
-    .from(accounts)
-    .where(
-      and(
-        eq(accounts.userId, identities.judgeUserId),
-        eq(accounts.providerId, "credential"),
-      ),
-    )
-    .limit(1);
-  const judgeCredentialVerified = Boolean(
-    judgeAccount[0]?.password &&
-    (await verifyPassword({
-      hash: judgeAccount[0].password,
-      password: config.judgePassword,
-    })),
-  );
-  if (!judgeCredentialVerified) {
-    throw demoError(
-      "invalid_judge_credential",
-      "The reserved judge credential does not verify.",
-    );
-  }
+  await assertJudgeCredential(config, identities.judgeUserId);
   const pristine =
     baseItemsPresent &&
     assigned.pageInfo.total === BASE_WORK_TITLES.length &&
@@ -543,17 +542,30 @@ async function verifyWebMcpDemo(
 async function resetWebMcpDemo(config: DemoConfig) {
   const workspace = await findDemoWorkspace();
   if (!workspace) return;
+  const identities =
+    workspace.slug === WEBMCP_DEMO_WORKSPACE_SLUG
+      ? await loadVerifiedDemoIdentities(config)
+      : await assertIncompleteDemoWorkspaceIsolation(workspace, config);
+  await deleteDemoWorkspace(workspace.id);
+  await assertFixtureUsersHaveNoOtherWorkspace(identities);
+}
+
+async function loadVerifiedDemoIdentities(config: DemoConfig) {
   await verifyWebMcpDemo(config);
+  return loadFixtureIdentities(config);
+}
+
+async function deleteDemoWorkspace(workspaceId: string) {
   await getDb().transaction(async (transaction) => {
     await transaction
       .delete(workspaceLifecycleRequests)
-      .where(eq(workspaceLifecycleRequests.workspaceId, workspace.id));
+      .where(eq(workspaceLifecycleRequests.workspaceId, workspaceId));
     await transaction
       .delete(workspaceExportRuns)
-      .where(eq(workspaceExportRuns.workspaceId, workspace.id));
+      .where(eq(workspaceExportRuns.workspaceId, workspaceId));
     await transaction
       .delete(aiActionExecutions)
-      .where(eq(aiActionExecutions.workspaceId, workspace.id));
+      .where(eq(aiActionExecutions.workspaceId, workspaceId));
     await transaction.execute(
       sql`lock table audit_events in access exclusive mode`,
     );
@@ -561,18 +573,16 @@ async function resetWebMcpDemo(config: DemoConfig) {
       sql`alter table audit_events disable trigger audit_events_immutable`,
     );
     await transaction.execute(
-      sql`delete from audit_events where workspace_id = ${workspace.id}`,
+      sql`delete from audit_events where workspace_id = ${workspaceId}`,
     );
     await transaction.execute(
       sql`alter table audit_events enable trigger audit_events_immutable`,
     );
     await transaction
       .delete(operatorIncidents)
-      .where(eq(operatorIncidents.workspaceId, workspace.id));
-    await transaction.delete(workspaces).where(eq(workspaces.id, workspace.id));
+      .where(eq(operatorIncidents.workspaceId, workspaceId));
+    await transaction.delete(workspaces).where(eq(workspaces.id, workspaceId));
   });
-  const identities = await loadFixtureIdentities(config);
-  await assertFixtureUsersHaveNoOtherWorkspace(identities);
 }
 
 async function ensureFixtureIdentities(config: DemoConfig) {
@@ -778,9 +788,83 @@ async function assertDemoWorkspaceIsolation(
   }
 }
 
+async function assertIncompleteDemoWorkspaceIsolation(
+  workspace: { id: string; name: string; slug: string },
+  config: DemoConfig,
+) {
+  if (
+    workspace.name !== WEBMCP_DEMO_WORKSPACE_NAME ||
+    !INCOMPLETE_DEMO_WORKSPACE_SLUG.test(workspace.slug)
+  ) {
+    throw demoError(
+      "invalid_workspace_marker",
+      "The incomplete demo workspace marker does not match.",
+    );
+  }
+  const identities = await loadFixtureIdentities(config);
+  await assertJudgeCredential(config, identities.judgeUserId);
+  await assertFixtureUsersHaveNoOtherWorkspace(identities, workspace.id);
+  const rows = await getDb()
+    .select({
+      userId: memberships.userId,
+      role: memberships.role,
+      email: users.email,
+    })
+    .from(memberships)
+    .innerJoin(users, eq(users.id, memberships.userId))
+    .where(eq(memberships.workspaceId, workspace.id));
+  const expectedOwner = (row: (typeof rows)[number]) =>
+    row.userId === identities.ownerUserId &&
+    row.role === "owner" &&
+    row.email === DEMO_OWNER_EMAIL;
+  const expectedJudge = (row: (typeof rows)[number]) =>
+    row.userId === identities.judgeUserId &&
+    row.role === "member" &&
+    row.email === config.judgeEmail;
+  if (
+    rows.length < 1 ||
+    rows.length > 2 ||
+    rows.filter(expectedOwner).length !== 1 ||
+    rows.filter(expectedJudge).length > 1 ||
+    rows.some((row) => !expectedOwner(row) && !expectedJudge(row))
+  ) {
+    throw demoError(
+      "invalid_workspace_members",
+      "The incomplete demo workspace contains unexpected members or roles.",
+    );
+  }
+  return identities;
+}
+
+async function assertJudgeCredential(config: DemoConfig, judgeUserId: string) {
+  const judgeAccount = await getDb()
+    .select({ password: accounts.password })
+    .from(accounts)
+    .where(
+      and(
+        eq(accounts.userId, judgeUserId),
+        eq(accounts.providerId, "credential"),
+      ),
+    )
+    .limit(1);
+  const verified = Boolean(
+    judgeAccount[0]?.password &&
+    (await verifyPassword({
+      hash: judgeAccount[0].password,
+      password: config.judgePassword,
+    })),
+  );
+  if (!verified) {
+    throw demoError(
+      "invalid_judge_credential",
+      "The reserved judge credential does not verify.",
+    );
+  }
+}
+
 async function findDemoWorkspace() {
   const rows = await getDb()
-    .select({ id: workspaces.id, name: workspaces.name })
+    .select({ id: workspaces.id, name: workspaces.name, slug: workspaces.slug })
     .from(workspaces)
     .where(
       or(

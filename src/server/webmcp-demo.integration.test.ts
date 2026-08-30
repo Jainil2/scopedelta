@@ -189,6 +189,91 @@ describe("WebMCP judge demo provisioning", () => {
     });
   });
 
+  it("recovers an isolated fixture left incomplete before slug promotion", async () => {
+    await runWebMcpDemoCommand("seed", environment);
+    const workspace = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.slug, WEBMCP_DEMO_WORKSPACE_SLUG))
+      .limit(1);
+    const originalWorkspaceId = workspace[0]!.id;
+    await db
+      .update(workspaces)
+      .set({ slug: "scopedelta-webmcp-judge-demo-deadbeef" })
+      .where(eq(workspaces.id, originalWorkspaceId));
+    await db
+      .delete(memberships)
+      .where(
+        eq(
+          memberships.userId,
+          (
+            await db
+              .select({ id: users.id })
+              .from(users)
+              .where(eq(users.email, judgeEmail))
+              .limit(1)
+          )[0]!.id,
+        ),
+      );
+
+    const recovered = await runWebMcpDemoCommand("seed", environment);
+    const reseededWorkspace = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.slug, WEBMCP_DEMO_WORKSPACE_SLUG))
+      .limit(1);
+
+    expect(recovered).toMatchObject({
+      command: "seed",
+      assigned_work_count: 5,
+      pristine: true,
+      drift_counts: {
+        linked: 1,
+        stale_basis: 1,
+        commercially_unlinked: 1,
+        needs_classification: 1,
+        support_internal: 1,
+      },
+    });
+    expect(reseededWorkspace[0]?.id).not.toBe(originalWorkspaceId);
+  });
+
+  it("refuses automatic recovery when an incomplete fixture has an unexpected member", async () => {
+    await runWebMcpDemoCommand("seed", environment);
+    const workspace = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.slug, WEBMCP_DEMO_WORKSPACE_SLUG))
+      .limit(1);
+    await db
+      .update(workspaces)
+      .set({ slug: "scopedelta-webmcp-judge-demo-deadbeef" })
+      .where(eq(workspaces.id, workspace[0]!.id));
+    const unexpectedUserId = randomUUID();
+    await db.insert(users).values({
+      id: unexpectedUserId,
+      name: "Unexpected fixture user",
+      email: `unexpected-recovery-${randomUUID()}@challenge.test`,
+      emailVerified: true,
+    });
+    await db.insert(memberships).values({
+      id: randomUUID(),
+      workspaceId: workspace[0]!.id,
+      userId: unexpectedUserId,
+      role: "member",
+    });
+
+    await expect(
+      runWebMcpDemoCommand("seed", environment),
+    ).rejects.toMatchObject({ code: "invalid_workspace_members" });
+    expect(
+      await db
+        .select({ id: workspaces.id })
+        .from(workspaces)
+        .where(eq(workspaces.id, workspace[0]!.id)),
+    ).toHaveLength(1);
+  });
+
   it("refuses reset when the reserved workspace membership marker is not isolated", async () => {
     await runWebMcpDemoCommand("seed", environment);
     const workspace = await db

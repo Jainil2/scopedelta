@@ -47,7 +47,7 @@ Reset refuses to run unless the exact workspace name and slug, fixed fixture ide
 
 ### Deterministic NOVA scenario
 
-The seed uses ordinary ScopeDelta domain services for the client, project, milestone, cycle, work, commercial sources, baselines, scope revisions, activation, and basis links. Direct database access is limited to fixture identities, the Better Auth credential, membership bootstrap, reserved slug, verification queries, and guarded deletion.
+The seed uses ordinary ScopeDelta domain services for the client, project, milestone, cycle, work, commercial sources, baselines, scope revisions, activation, and basis links. Direct database access is limited to fixture identities, the Better Auth credential, membership bootstrap, reserved slug, verification queries, and guarded deletion. The reserved slug is promoted only after all fixture writes succeed. If provisioning stops earlier, a later seed can delete and recreate only an exact generated-slug fixture whose synthetic identities, credential, ownership, membership subset, and workspace isolation checks still pass; unexpected members or markers are refused.
 
 | Synthetic record | Deterministic value         |
 | ---------------- | --------------------------- |

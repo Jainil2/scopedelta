@@ -25,12 +25,36 @@ describe("WebMCP demo command safeguards", () => {
       judgeEmail: validJudgeEmail,
       judgePassword: validJudgeInput,
     });
+    expect(
+      readWebMcpDemoConfig({
+        ...validEnvironment,
+        WEBMCP_DEMO_JUDGE_EMAIL: `  ${validJudgeEmail.toUpperCase()}  `,
+      }).judgeEmail,
+    ).toBe(validJudgeEmail);
   });
 
   it.each([
     [{ ...validEnvironment, WEBMCP_DEMO_ENABLE: "yes" }, "demo_disabled"],
     [
       { ...validEnvironment, WEBMCP_DEMO_JUDGE_EMAIL: "judge@example.com" },
+      "invalid_judge_email",
+    ],
+    [
+      { ...validEnvironment, WEBMCP_DEMO_JUDGE_EMAIL: "not-an-email.test" },
+      "invalid_judge_email",
+    ],
+    [
+      {
+        ...validEnvironment,
+        WEBMCP_DEMO_JUDGE_EMAIL: "webmcp-demo-owner@scopedelta.test",
+      },
+      "invalid_judge_email",
+    ],
+    [
+      {
+        ...validEnvironment,
+        WEBMCP_DEMO_JUDGE_EMAIL: `${"a".repeat(250)}@x.test`,
+      },
       "invalid_judge_email",
     ],
     [

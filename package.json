@@ -43,6 +43,7 @@
     "operations:signals": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/operations-signals.ts",
     "lifecycle:process": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/lifecycle-process.ts",
     "operations:alerts": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/operations-alerts.ts",
+    "webmcp:demo": "node --conditions=react-server --env-file-if-exists=.env.local --import tsx scripts/webmcp-demo.ts",
     "production:validate": "node --env-file-if-exists=.env.local --import tsx scripts/validate-production-config.ts"
   },
   "dependencies": {

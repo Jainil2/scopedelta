@@ -1,5 +1,117 @@
 # WEBMCP-001 — Existing ScopeDelta Workflows as Browser Tools
 
+## HACK-001 judge-ready deployment
+
+The judging URL is [https://scopedelta.netlify.app](https://scopedelta.netlify.app). HACK-001 starts from the post-PR-#59 `main` SHA `f18eb4a049b420904dcd22363f950104492f9e46` and adds deterministic demo operations and evidence only. It does not add a migration, HTTP API, authentication bypass, provider integration, fifth tool, or tool contract change.
+
+The isolated synthetic fixture is reserved by both markers:
+
+- Workspace: `ScopeDelta WebMCP Judge Demo`
+- Workspace slug: `webmcp-judge-demo`
+- Credentialless owner: a fixed synthetic `.test` identity
+- Judge: a private, verified `.test` credential identity with workspace role `member` and project-lead responsibility for `NOVA`
+
+The private judge email and password must never be printed, committed, copied into screenshots, or added to issues or pull requests.
+
+### Seed, verify, and reset
+
+Supply the existing target database connection and existing 32+ character `BETTER_AUTH_SECRET` through the normal protected environment, then set the following values in the process environment or an untracked `.env.local`:
+
+```dotenv
+WEBMCP_DEMO_ENABLE=webmcp-challenge-2026
+WEBMCP_DEMO_JUDGE_EMAIL=<private-judge-address-ending-in-.test>
+WEBMCP_DEMO_JUDGE_PASSWORD=<private-16-to-128-character-password>
+```
+
+Run the idempotent seed and secret-free verification:
+
+```bash
+pnpm webmcp:demo seed
+pnpm webmcp:demo verify
+```
+
+Successful output contains only the command, reserved workspace/project markers, verified role/credential booleans, assigned-work count, category counts, and pristine-state booleans. It never contains the email, password, password hash, cookie, token, or database identifier.
+
+Reset is destructive only to the exact guarded fixture and immediately reseeds it. It requires one additional confirmation marker:
+
+```dotenv
+WEBMCP_DEMO_RESET_CONFIRM=reset-webmcp-judge-demo
+```
+
+```bash
+pnpm webmcp:demo reset
+pnpm webmcp:demo verify
+```
+
+Reset refuses to run unless the exact workspace name and slug, fixed fixture identities, owner/member roles, two-member workspace boundary, judge email, judge credential, and absence of unrelated workspace memberships all match. The scoped deletion runs in one transaction. Because audit rows are intentionally immutable, reset takes an exclusive audit-table lock, temporarily disables only the immutability trigger, deletes audit rows for the guarded workspace, reenables the trigger, deletes the workspace, and commits; any failure rolls the entire operation back. Fixture identities remain available for the immediate reseed.
+
+### Deterministic NOVA scenario
+
+The seed uses ordinary ScopeDelta domain services for the client, project, milestone, cycle, work, commercial sources, baselines, scope revisions, activation, and basis links. Direct database access is limited to fixture identities, the Better Auth credential, membership bootstrap, reserved slug, verification queries, and guarded deletion.
+
+| Synthetic record | Deterministic value         |
+| ---------------- | --------------------------- |
+| Client           | `Northstar Retail`          |
+| Project          | `NOVA — Checkout Recovery`  |
+| Milestone        | `September Checkout Launch` |
+| Cycle            | `Judge Demo Cycle`          |
+| Judge assignment | All five base work items    |
+
+The pristine drift ledger contains exactly one item in each factual category:
+
+| Category                | Work item                             | Basis construction                                                                                                         |
+| ----------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `linked`                | `Deliver weekly order audit export`   | Linked to an unchanged scope revision in the effective baseline.                                                           |
+| `stale_basis`           | `Implement account-based checkout`    | Linked to the first effective baseline; a later real amendment revises checkout to include SSO and approval audit history. |
+| `commercially_unlinked` | `Add wholesale discount rules`        | Classified as client delivery with no commercial basis link.                                                               |
+| `needs_classification`  | `Investigate checkout analytics gaps` | Retains the normal unclassified work purpose.                                                                              |
+| `support_internal`      | `Refresh launch rollback runbook`     | Classified as delivery support.                                                                                            |
+
+The amendment also retires the carried-forward legacy dashboard scope. No classification is edited to manufacture stale basis.
+
+### Exact natural-language judge prompts
+
+Run each prompt in a fresh ChatGPT in-app-browser session and in Chrome 149 or newer with WebMCP testing enabled:
+
+1. “What assigned work needs my attention?”
+2. “In project NOVA, find the wholesale discount work.”
+3. “Why is delivery drifting from the current commercial agreement in NOVA? Give me the factual category counts and affected work.”
+4. “In NOVA, create a high-priority work item titled ‘Confirm wholesale change-order review’ and assign it to me.”
+
+Expected tool selection is `list_my_work`, `search_work_items`, `get_commercial_drift`, and `create_work_item`, respectively. Preserve the existing names and schemas. If and only if a fresh-session selection failure is reproduced, add the corresponding disambiguating “Use when…” sentence to that existing tool description and rerun the focused WebMCP suite. Do not add a fifth tool.
+
+After prompt 4, confirm `Confirm wholesale change-order review` appears in the ordinary backlog/My Work UI. A second execution must not be used to compensate for an ambiguous write; search first. Reset before repeating the recorded demo.
+
+### Exact-SHA live evidence checklist
+
+Record the following in the HACK-001 pull request for the final deployed SHA without including private credentials or database IDs:
+
+- Deployed commit SHA and Netlify production-deploy result.
+- HTTPS response containing `Origin-Agent-Cluster: ?1` and `Permissions-Policy: tools=(self)`.
+- Exactly four active tools before and after refresh, with no duplicate registrations.
+- Prompt-to-tool mapping for all four fresh-session prompts.
+- One item in each of the five NOVA drift categories before the write.
+- Created work item visible through the tool response and ordinary UI.
+- Unsupported-browser UI remains usable and reports browser tools unavailable.
+- Cold and warm observations for sign-in-to-first-result, drift result, and creation-to-visible-UI paths.
+- Repository-safe screenshots of the four-tool inspector, commercial drift ledger, and created item. Crop or redact all browser/account chrome that could reveal the private judge identity.
+
+At the recorded baseline SHA, the live sign-in response was verified on August 30, 2026 to include both required headers. Final-candidate tool-selection, mutation, screenshots, performance, and post-merge production evidence must be recorded against the later exact SHA rather than inferred from this baseline check.
+
+Local repository-safe evidence from the HACK-001 fixture:
+
+![The deterministic NOVA drift ledger contains all five factual categories](screenshots/hack-001-commercial-drift.png)
+
+![The requested high-priority follow-up appears in the ordinary NOVA backlog](screenshots/hack-001-created-item.png)
+
+The existing four-tool registration capture remains at `docs/screenshots/webmcp-browser-tools.png`. Replace or supplement it with the exact deployed NOVA session when Chrome 149+ final-candidate evidence is recorded.
+
+### Challenge provenance and limitations
+
+The challenge entry combines ScopeDelta’s pre-existing delivery/commercial domain with the WebMCP adapter delivered by WEBMCP-001 and the deterministic judge operations delivered by HACK-001. Existing domain services remain authoritative. The seeded data is wholly synthetic and isolated from customer workspaces.
+
+WebMCP remains an emerging browser capability. Unsupported browsers get the normal ScopeDelta UI without tools. Natural-language selection is agent/browser-dependent and must be demonstrated in fresh sessions. Drift is factual and advisory; it is not a legal, contractual, or monetary conclusion. Devpost registration, eligibility attestation, private credential entry, public demo video, final submission, public-repository status, and license/legal clearance remain founder actions. [LIC-001](https://github.com/Jainil2/scopedelta/issues/19) remains a blocker; HACK-001 does not publish the repository or add/change its license.
+
 ## Inventory
 
 This inventory was published as the first implementation comment on [issue #55](https://github.com/Jainil2/scopedelta/issues/55#issuecomment-5436230533) before WebMCP code was added.

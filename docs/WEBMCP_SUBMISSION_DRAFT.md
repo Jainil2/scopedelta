@@ -80,16 +80,16 @@ commit.
 
 ### Exact release and deployment
 
-| Evidence                         | Result                                                                                                                                                  |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Approved starting `main`         | `b47d15dbcf972782830c72c4d555195b8368b984`                                                                                                              |
-| Deployed production SHA          | `b47d15dbcf972782830c72c4d555195b8368b984`                                                                                                              |
-| Production URL                   | `https://scopedelta.netlify.app`                                                                                                                        |
-| Unique deploy URL                | `https://6a954849b662aa4e25e32663--scopedelta.netlify.app`                                                                                              |
-| Netlify deploy identifier        | `6a954849b662aa4e25e32663`                                                                                                                              |
-| Production deploy run            | [GitHub Actions run 33377453605](https://github.com/Jainil2/scopedelta/actions/runs/33377453605), successful on the exact SHA above                     |
-| Build observation                | Production build and deploy succeeded; Netlify's public-root Lighthouse run reported performance 98, accessibility 98, best practices 100, and SEO 100. |
-| HACK-003 release-preparation SHA | Pending until this documentation/release-tooling PR is committed. It does not change the four WebMCP contracts or product behavior.                     |
+| Evidence                          | Result                                                                                                                                                    |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Approved application-behavior SHA | `b47d15dbcf972782830c72c4d555195b8368b984`                                                                                                                |
+| Initial exact production SHA      | `b47d15dbcf972782830c72c4d555195b8368b984`                                                                                                                |
+| Production URL                    | `https://scopedelta.netlify.app`                                                                                                                          |
+| Unique deploy URL                 | `https://6a954849b662aa4e25e32663--scopedelta.netlify.app`                                                                                                |
+| Netlify deploy identifier         | `6a954849b662aa4e25e32663`                                                                                                                                |
+| Production deploy run             | [GitHub Actions run 33377453605](https://github.com/Jainil2/scopedelta/actions/runs/33377453605), successful on the exact SHA above                       |
+| Build observation                 | Production build and deploy succeeded; Netlify's public-root Lighthouse run reported performance 98, accessibility 98, best practices 100, and SEO 100.   |
+| HACK-003 release-preparation SHA  | The linked PR head and exact-SHA workflow run are authoritative, avoiding a self-referential hash in this file. This PR does not change product behavior. |
 
 ### Verified observations
 

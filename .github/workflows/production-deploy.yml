@@ -78,14 +78,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: >-
           pnpm exec netlify dev:exec --context production
-          node -e 'console.log(JSON.stringify({
-          ai_enabled: process.env.AI_ENABLED === "true",
-          ai_provider: process.env.AI_PROVIDER || null,
-          ai_model: process.env.AI_MODEL || null,
-          gemini_key_configured: Boolean(process.env.GEMINI_API_KEY),
-          webmcp_demo_enabled: process.env.WEBMCP_DEMO_ENABLE === "webmcp-challenge-2026",
-          judge_credential_configured: Boolean(process.env.WEBMCP_DEMO_JUDGE_EMAIL) && Boolean(process.env.WEBMCP_DEMO_JUDGE_PASSWORD)
-          }))'
+          node scripts/release-environment-readiness.mjs
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}

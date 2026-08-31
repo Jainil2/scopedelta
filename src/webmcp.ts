@@ -30,18 +30,12 @@ const WORK_ITEM_PRIORITIES = [
   "high",
   "urgent",
 ] as const;
-const DRIFT_STATES = [
-  "commercially_unlinked",
-  "needs_classification",
-  "stale_basis",
-  "linked",
-  "support_internal",
-] as const;
-const AFFECTED_DRIFT_STATES = new Set<(typeof DRIFT_STATES)[number]>([
-  "commercially_unlinked",
-  "needs_classification",
-  "stale_basis",
-]);
+type DriftState =
+  | "commercially_unlinked"
+  | "needs_classification"
+  | "stale_basis"
+  | "linked"
+  | "support_internal";
 const MAX_TOOL_OUTPUT_CHARACTERS = 1_500;
 const REGISTRY_KEY = Symbol.for("scopedelta.webmcp.registry");
 
@@ -124,13 +118,14 @@ type DriftItem = {
   purpose: string;
   basisCount: number;
   staleBasisCount: number;
-  state: (typeof DRIFT_STATES)[number];
+  state: DriftState;
   updatedAt: string;
 };
 
-type DriftPage = {
-  data: DriftItem[];
-  page: { total: number };
+type DriftSnapshot = {
+  counts: Record<DriftState, number>;
+  affected: DriftItem[];
+  affectedTotal: number;
 };
 
 type Projection<T> = { value: T; textTruncated: boolean };
@@ -463,31 +458,13 @@ export function createScopeDeltaWebMcpTools(
           input.project_key,
           options?.signal,
         );
-        const pages = await Promise.all(
-          DRIFT_STATES.map(async (state) => {
-            const query = queryString({
-              page: 1,
-              pageSize: AFFECTED_DRIFT_STATES.has(state) ? input.limit : 1,
-              state,
-            });
-            const page = await apiRequest<DriftPage>(
-              `/api/v1/workspaces/${config.workspaceId}/projects/${project.id}/commercial/drift?${query}`,
-              { signal: options?.signal },
-            );
-            return [state, page] as const;
-          }),
+        const snapshot = await apiRequest<DriftSnapshot>(
+          `/api/v1/workspaces/${config.workspaceId}/projects/${project.id}/commercial/drift-summary?${queryString({ limit: input.limit })}`,
+          { signal: options?.signal },
         );
-        const byState = new Map(pages);
-        const affected = pages
-          .filter(([state]) => AFFECTED_DRIFT_STATES.has(state))
-          .flatMap(([, page]) => page.data)
-          .sort(
-            (left, right) =>
-              new Date(right.updatedAt).getTime() -
-              new Date(left.updatedAt).getTime(),
-          )
-          .slice(0, input.limit)
-          .map((item) => projectDriftItem(item, project));
+        const affected = snapshot.affected.map((item) =>
+          projectDriftItem(item, project),
+        );
         return boundedResultEnvelope(
           {
             project: {
@@ -498,18 +475,10 @@ export function createScopeDeltaWebMcpTools(
             criteria: { project_key: project.key, limit: input.limit },
             advisory_only: true,
             contractual_verdict_provided: false,
-            counts: Object.fromEntries(
-              DRIFT_STATES.map((state) => [
-                state,
-                byState.get(state)?.page.total ?? 0,
-              ]),
-            ),
+            counts: snapshot.counts,
           },
           affected,
-          [...AFFECTED_DRIFT_STATES].reduce(
-            (total, state) => total + (byState.get(state)?.page.total ?? 0),
-            0,
-          ),
+          snapshot.affectedTotal,
           "affected",
         );
       },

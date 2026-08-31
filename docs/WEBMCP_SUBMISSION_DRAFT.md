@@ -34,6 +34,8 @@ The NOVA demo makes the core value legible in under three minutes. A real baseli
 ### Quality and polish
 
 - A purpose-built synthetic project produces one result in each drift category.
+- A role-aware NOVA command center opens on client, lead, team, delivery horizon, baseline, drift, and assigned attention work before any tool is invoked.
+- Persistent grouped navigation, immediate loading feedback, native authenticated form controls, keyboard focus, and narrow-screen overflow checks keep the judge journey coherent.
 - Human-readable project key `NOVA` avoids exposing opaque IDs to the model.
 - Unsupported browsers retain the complete normal product experience.
 - The submission provides exact prompts, reproducible reset, repository-safe evidence, and exact-SHA checks.
@@ -57,16 +59,16 @@ The NOVA demo makes the core value legible in under three minutes. A real baseli
 
 Target duration: **2:45**, leaving fifteen seconds below the limit.
 
-| Time      | Screen and narration                                                                                                                                                                                                                             |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0:00–0:15 | Title over NOVA workspace. “Agencies do not just need task tracking. They need to know when delivery no longer matches the agreement.”                                                                                                           |
-| 0:15–0:30 | Show the four active browser tools. State that they reuse the signed-in session and existing authorization/domain services.                                                                                                                      |
-| 0:30–0:50 | Ask prompt 1. Briefly show the five assigned NOVA items.                                                                                                                                                                                         |
-| 0:50–1:10 | Ask prompt 2. Highlight `Add wholesale discount rules` and its project context.                                                                                                                                                                  |
-| 1:10–1:55 | Ask prompt 3. Center the response and ordinary drift ledger: one linked, stale basis, commercially unlinked, needs classification, and support/internal. Explain that stale basis comes from an effective baseline followed by a real amendment. |
-| 1:55–2:25 | Ask prompt 4. Show the returned created item, then the same high-priority assigned item in the normal backlog/My Work UI.                                                                                                                        |
-| 2:25–2:38 | Refresh. Show exactly four tools with no duplicates. Mention unsupported browsers keep the normal UI.                                                                                                                                            |
-| 2:38–2:45 | Closing: “ScopeDelta keeps delivery tied to the agreement—through the tools teams and agents already use.”                                                                                                                                       |
+| Time      | Screen and narration                                                                                                                                                                                                                              |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0:00–0:18 | Open on the NOVA command center: client, lead, team, active cycle, launch milestone, current baseline, all five drift counts, and assigned attention. “Agencies need to know when delivery no longer matches the agreement.”                      |
+| 0:18–0:32 | Show the four active browser tools. State that they reuse the signed-in session and existing authorization/domain services.                                                                                                                       |
+| 0:32–0:52 | Ask prompt 1. Briefly show the five assigned NOVA items and the matching command-center attention list.                                                                                                                                           |
+| 0:52–1:12 | Ask prompt 2. Highlight `Add wholesale discount rules` and its project context.                                                                                                                                                                   |
+| 1:12–1:55 | Ask prompt 3. Center the response and ordinary drift ledger: one linked, stale basis, commercially unlinked, needs classification, and support/internal. Explain that one internal summary request shares the authoritative classification logic. |
+| 1:55–2:25 | Ask prompt 4. Show the returned created item, then the same high-priority assigned item in Backlog, My Work, and the refreshed command-center attention list.                                                                                     |
+| 2:25–2:38 | Use the persistent project bar to return to Overview, then refresh. Show exactly four tools with no duplicates and mention that ordinary members do not see Commercial.                                                                           |
+| 2:38–2:45 | Closing: “ScopeDelta keeps delivery tied to the agreement—through the tools teams and agents already use.”                                                                                                                                        |
 
 Avoid showing sign-in entry, account menus, cookies, network request headers, database IDs, private email, or password in the video. Use tight crops and repository-safe screenshots.
 
@@ -82,7 +84,7 @@ Complete this block only from the deployed exact merge-candidate SHA:
 - Fresh-session prompt mapping: `<four observed selections>`
 - Visible mutation: `<ordinary UI location>`
 - Unsupported-browser behavior: `<observation>`
-- Cold/warm performance: `<observations>`
+- Cold/warm performance: `<exact deployed overview, Backlog/My Work, Commercial, drift-tool, and create-to-visible observations; warm target ≤1.5 s and feedback target ~200 ms>`
 - Repository-safe screenshots: `<paths>`
 - Final hosted gate: `<exact SHA and result>`
 - Post-merge production verification: `<merged SHA and observation>`

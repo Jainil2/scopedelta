@@ -1,5 +1,26 @@
 # WEBMCP-001 — Existing ScopeDelta Workflows as Browser Tools
 
+## HACK-002 judge-facing workflow
+
+HACK-002 adds a role-aware project command center and coherent project navigation without changing the four WebMCP names, schemas, authorization rules, fixture semantics, or commercial meaning. The persistent project bar identifies the client, project, lead, lifecycle, and active surface; Overview, Backlog, Board, and manager-only Commercial remain primary, while Cycles, Brief, Client, Engineering & QA, AI, and Activity live in a keyboard-accessible secondary menu. Workspace navigation is grouped into Home, Delivery, Collaboration, and Workspace administration with active-route semantics and a compact narrow-screen menu.
+
+The NOVA opening shot is now the project command center. It shows assigned attention work, delivery-state counts, current cycle and nearest unfinished milestone, lead and member presence, current baseline context, and the authoritative five-category drift snapshot. Ordinary members receive the same delivery command center without commercial facts or controls. Project editing, milestones, membership, and lifecycle controls remain below the operational summary in restrained disclosures.
+
+Authenticated workspace and project route segments include accessible loading fallbacks. Project links also announce immediate pending navigation so feedback is available before a delayed server response. Request-scoped React `cache()` wrappers reuse session actor, workspace, and project resolution across layouts and every project page; no cross-request tenant data cache is used.
+
+### Combined drift summary
+
+`GET /api/v1/workspaces/:workspaceId/projects/:projectId/commercial/drift-summary?limit=1..5` returns exact counts for `linked`, `stale_basis`, `commercially_unlinked`, `needs_classification`, and `support_internal`, newest affected work from only the unlinked/unclassified/stale categories, and lightweight current-baseline context. It preserves the owner/admin/project-lead boundary and never returns commercial source bodies.
+
+`get_commercial_drift` now performs one authorized project lookup and one drift-summary request instead of five drift HTTP requests. Its model-visible envelope is unchanged. The Commercial page and command center use the same snapshot; the existing paginated drift route remains the detailed ledger.
+
+Local review-candidate evidence on August 30, 2026:
+
+- TypeScript, production build, and 173 unit/component tests passed.
+- Focused delivery and commercial integration suites passed, including owner/admin/lead/member/non-member command-center access and five-filter snapshot parity.
+- Production-mode Chromium delivery navigation passed in 18.6 seconds end to end; the four-tool WebMCP create/read journey passed in 7.6 seconds end to end.
+- The initial public sign-in baseline was 1.620 seconds cold and 1.145–1.478 seconds warm. Exact authenticated cold/warm route transitions, under-200 ms feedback observations, and deployed ≤1.5 second warm targets must be recorded against the final deployed SHA; local suite duration is not presented as route latency.
+
 ## HACK-001 judge-ready deployment
 
 The judging URL is [https://scopedelta.netlify.app](https://scopedelta.netlify.app). HACK-001 starts from the post-PR-#59 `main` SHA `f18eb4a049b420904dcd22363f950104492f9e46` and adds deterministic demo operations and evidence only. It does not add a migration, HTTP API, authentication bypass, provider integration, fifth tool, or tool contract change.
@@ -100,9 +121,11 @@ At the recorded baseline SHA, the live sign-in response was verified on August 3
 
 Local repository-safe evidence from the HACK-001 fixture:
 
+![The HACK-002 command center brings delivery identity, attention, plan, people, baseline and drift into one judge-facing surface](screenshots/hack-002-command-center.png)
+
 ![The deterministic NOVA drift ledger contains all five factual categories](screenshots/hack-001-commercial-drift.png)
 
-![The requested high-priority follow-up appears in the ordinary NOVA backlog](screenshots/hack-001-created-item.png)
+![WebMCP-created work appears in the ordinary authenticated backlog](screenshots/hack-002-created-work.png)
 
 The existing four-tool registration capture remains at `docs/screenshots/webmcp-browser-tools.png`. Replace or supplement it with the exact deployed NOVA session when Chrome 149+ final-candidate evidence is recorded.
 
@@ -132,7 +155,7 @@ The authenticated workspace shell exposes exactly four imperative WebMCP tools. 
 | ---------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `list_my_work`         | `GET /api/v1/workspaces/:workspaceId/my-work`                                                        | Assigned actionable work with stable identifiers, bounded titles, project/client context, delivery state, dates, purpose, and factual basis counts. |
 | `search_work_items`    | Authorized project lookup, then `GET /api/v1/workspaces/:workspaceId/projects/:projectId/work-items` | A compact subset of existing project work-item facts.                                                                                               |
-| `get_commercial_drift` | Authorized project lookup, then the existing drift GET once for each of the five drift states        | Category totals and the most recently updated affected items. The result is explicitly advisory and provides no contractual or monetary verdict.    |
+| `get_commercial_drift` | Authorized project lookup, then one `GET .../commercial/drift-summary?limit=1..5` request            | Category totals and the most recently updated affected items. The result is explicitly advisory and provides no contractual or monetary verdict.    |
 | `create_work_item`     | Authorized project lookup, then existing work-item POST                                              | Stable created identifier, title, project key, status, priority, and whether UI refresh was requested.                                              |
 
 All inputs use strict object schemas with described properties, required fields, existing status/priority enums, and `additionalProperties: false`. Read tools are marked read-only and untrusted; the write is marked untrusted but not read-only. Outputs omit descriptions, comments, commercial source text, and opaque relationship IDs. Serialized read results are limited to 1,500 characters by bounding text and accepting projected records only while the complete envelope remains within budget.

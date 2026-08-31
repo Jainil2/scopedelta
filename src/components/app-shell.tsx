@@ -4,6 +4,7 @@ import type { WorkspaceRole } from "@/db/schema";
 import { SignOutButton } from "@/components/auth-forms";
 import { DesktopNotificationBridge } from "@/components/desktop-notification-bridge";
 import { WebMcpBridge } from "@/components/webmcp-bridge";
+import { WorkspaceNavigation } from "@/components/workspace-navigation";
 
 type Workspace = {
   id: string;
@@ -59,29 +60,7 @@ export function AppShell({
             </nav>
           </details>
         </div>
-        <nav className="app-navigation" aria-label="Workspace">
-          <Link href={`/app/${current.slug}`}>Overview</Link>
-          <Link href={`/app/${current.slug}/clients`}>Clients</Link>
-          <Link href={`/app/${current.slug}/projects`}>Projects</Link>
-          <Link href={`/app/${current.slug}/my-work`}>My work</Link>
-          <Link href={`/app/${current.slug}/operations`}>Operations</Link>
-          <Link href={`/app/${current.slug}/inbox`}>Inbox</Link>
-          <Link href={`/app/${current.slug}/settings`}>Settings</Link>
-          <Link href={`/app/${current.slug}/settings/members`}>Members</Link>
-          {current.role !== "member" ? (
-            <>
-              <Link href={`/app/${current.slug}/settings/getting-started`}>
-                Getting started
-              </Link>
-              <Link href={`/app/${current.slug}/settings/adoption`}>
-                Adoption
-              </Link>
-            </>
-          ) : null}
-          {current.role === "owner" ? (
-            <Link href={`/app/${current.slug}/settings/billing`}>Billing</Link>
-          ) : null}
-        </nav>
+        <WorkspaceNavigation workspaceSlug={current.slug} role={current.role} />
         <WebMcpBridge workspaceId={current.id} userId={userId} />
         <div className="app-account">
           <span>{userName}</span>

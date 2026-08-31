@@ -13,6 +13,14 @@ import {
 } from "react";
 
 import { apiRequest, type Project } from "@/components/delivery-workspace";
+import {
+  AppButton,
+  AppField,
+  AppFormActions,
+  AppInput,
+  AppSelect,
+  AppTextarea,
+} from "@/components/app-form-controls";
 import { ProjectTabs } from "@/components/planning-workspace";
 
 type Source = {
@@ -458,32 +466,37 @@ export function CommercialWorkspace({
                     file
                   </label>
                 </fieldset>
-                <label>
-                  Source name
-                  <input
+                <AppField id="commercial-source-name" label="Source name">
+                  <AppInput
                     name="pasteName"
                     maxLength={160}
                     defaultValue="Pasted commercial source"
                   />
-                </label>
-                <label>
-                  Commercial text
-                  <textarea
+                </AppField>
+                <AppField
+                  id="commercial-source-text"
+                  label="Commercial text"
+                  hint="Preserved as private evidence and never returned in drift summaries."
+                >
+                  <AppTextarea
                     name="pastedText"
                     rows={8}
                     maxLength={500000}
                     placeholder="Paste the agreed SOW, proposal or contract extract"
                   />
-                </label>
-                <label>
-                  PDF or DOCX
-                  <input
+                </AppField>
+                <AppField id="commercial-source-file" label="PDF or DOCX">
+                  <AppInput
                     name="sourceFile"
                     type="file"
                     accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
                   />
-                </label>
-                <button disabled={pending}>Preserve source</button>
+                </AppField>
+                <AppFormActions>
+                  <AppButton disabled={pending} aria-busy={pending}>
+                    {pending ? "Preserving…" : "Preserve source"}
+                  </AppButton>
+                </AppFormActions>
               </form>
             </details>
             <div className="commercial-source-list">
@@ -1209,23 +1222,21 @@ export function WorkCommercialPanel({
       {canManage ? (
         <div className="work-commercial-controls">
           <form onSubmit={classify}>
-            <label>
-              Work purpose
-              <select name="purpose" defaultValue={provenance.purpose}>
+            <AppField id="commercial-work-purpose" label="Work purpose">
+              <AppSelect name="purpose" defaultValue={provenance.purpose}>
                 <option value="unclassified">Unclassified</option>
                 <option value="client_delivery">Client delivery</option>
                 <option value="delivery_support">Delivery support</option>
                 <option value="internal">Internal</option>
-              </select>
-            </label>
-            <button type="submit" disabled={pending}>
-              Update classification
-            </button>
+              </AppSelect>
+            </AppField>
+            <AppButton type="submit" disabled={pending} aria-busy={pending}>
+              {pending ? "Updating…" : "Update classification"}
+            </AppButton>
           </form>
           <form onSubmit={link}>
-            <label>
-              Commercial basis
-              <select name="basis" required defaultValue="">
+            <AppField id="commercial-basis" label="Commercial basis" required>
+              <AppSelect name="basis" defaultValue="">
                 <option value="" disabled>
                   Choose scope or decision
                 </option>
@@ -1247,11 +1258,15 @@ export function WorkCommercialPanel({
                       : `${option.kind} · ${option.title}`}
                   </option>
                 ))}
-              </select>
-            </label>
-            <button type="submit" disabled={pending || !options.length}>
-              Link commercial basis
-            </button>
+              </AppSelect>
+            </AppField>
+            <AppButton
+              type="submit"
+              disabled={pending || !options.length}
+              aria-busy={pending}
+            >
+              {pending ? "Linking…" : "Link commercial basis"}
+            </AppButton>
           </form>
         </div>
       ) : null}

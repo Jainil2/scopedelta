@@ -7,7 +7,6 @@ import { TimeEntryForm } from "@/components/operations-forms";
 import { paginationSchema } from "@/lib/delivery-validation";
 import { dateInTimeZone } from "@/lib/operations";
 import { parseInput } from "@/lib/platform-validation";
-import { requireSession } from "@/lib/session";
 import {
   getSubscription,
   listActivity,
@@ -18,9 +17,9 @@ import {
   getWorkCommercialProvenance,
   listCommercialBasisOptions,
 } from "@/server/commercial";
-import { getProjectByKey, getWorkItem } from "@/server/delivery";
+import { getWorkItem } from "@/server/delivery";
 import { getDeliveryEvidenceTrace } from "@/server/engineering-delivery";
-import { getWorkspaceBySlug } from "@/server/workspaces";
+import { getRequestProject } from "@/server/request-context";
 
 type SearchParamValue = string | string[] | undefined;
 
@@ -35,11 +34,8 @@ export default async function WorkCollaborationPage({
   }>;
   searchParams: Promise<Record<string, SearchParamValue>>;
 }>) {
-  const session = await requireSession();
-  const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug, projectKey, workItemId } = await params;
   const data = await loadWorkCollaboration(
-    actor,
     workspaceSlug,
     projectKey,
     workItemId,
@@ -48,7 +44,7 @@ export default async function WorkCollaborationPage({
   return (
     <WorkCollaborationWorkspace
       key={`${data.comments.page.number}:${data.activity.page.number}`}
-      actorUserId={actor.userId}
+      actorUserId={data.actor.userId}
       workspaceId={data.workspace.id}
       workspaceSlug={workspaceSlug}
       project={data.project}
@@ -103,7 +99,6 @@ export default async function WorkCollaborationPage({
 }
 
 async function loadWorkCollaboration(
-  actor: { userId: string; email: string },
   workspaceSlug: string,
   projectKey: string,
   workItemId: string,
@@ -118,14 +113,11 @@ async function loadWorkCollaboration(
       page: scalar(searchParams.activityPage),
       pageSize: 50,
     });
-    const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
-    const project = await getProjectByKey(
-      actor,
-      workspace.id,
-      projectKey.toUpperCase(),
+    const { actor, workspace, project } = await getRequestProject(
+      workspaceSlug,
+      projectKey,
     );
-    const canManageCommercial =
-      workspace.role !== "member" || project.leadUserId === actor.userId;
+    const canManageCommercial = project.canManage;
     const [
       workItem,
       comments,
@@ -161,6 +153,7 @@ async function loadWorkCollaboration(
       getDeliveryEvidenceTrace(actor, workspace.id, project.id, workItemId),
     ]);
     return {
+      actor,
       workspace,
       project,
       workItem,

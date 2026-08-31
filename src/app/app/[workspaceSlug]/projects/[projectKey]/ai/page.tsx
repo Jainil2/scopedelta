@@ -1,15 +1,10 @@
 import { notFound } from "next/navigation";
 
 import { AiDeliveryWorkspace } from "@/components/ai-delivery-workspace";
-import { requireSession } from "@/lib/session";
 import { listAiJobs } from "@/server/ai/jobs";
 import { listCommercialRequests } from "@/server/commercial-change-control";
-import {
-  getProjectByKey,
-  listMilestones,
-  listWorkItems,
-} from "@/server/delivery";
-import { getWorkspaceBySlug } from "@/server/workspaces";
+import { listMilestones, listWorkItems } from "@/server/delivery";
+import { getRequestProject } from "@/server/request-context";
 
 export default async function AiDeliveryPage({
   params,
@@ -18,17 +13,13 @@ export default async function AiDeliveryPage({
   params: Promise<{ workspaceSlug: string; projectKey: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
-  const session = await requireSession();
-  const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug, projectKey } = await params;
   const query = await searchParams;
   let pageData;
   try {
-    const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
-    const project = await getProjectByKey(
-      actor,
-      workspace.id,
-      projectKey.toUpperCase(),
+    const { actor, workspace, project } = await getRequestProject(
+      workspaceSlug,
+      projectKey,
     );
     const [jobs, milestones, work, requests] = await Promise.all([
       listAiJobs(actor, workspace.id, project.id),

@@ -357,27 +357,25 @@ describe("ScopeDelta WebMCP execution adapters", () => {
     });
   });
 
-  it("queries all drift categories and returns advisory totals plus recent affected work", async () => {
+  it("queries the combined drift summary and returns advisory totals plus recent affected work", async () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url.includes("/projects?")) {
         return Promise.resolve(
           jsonResponse({ items: [project()], pageInfo: { total: 1 } }),
         );
       }
-      const state = new URL(url, "https://scope.test").searchParams.get(
-        "state",
-      )!;
       return Promise.resolve(
         jsonResponse({
-          data: state === "commercially_unlinked" ? [driftItem(state)] : [],
-          page: {
-            total:
-              state === "linked"
-                ? 4
-                : state === "commercially_unlinked"
-                  ? 2
-                  : 0,
+          counts: {
+            linked: 4,
+            stale_basis: 0,
+            commercially_unlinked: 2,
+            needs_classification: 0,
+            support_internal: 0,
           },
+          affected: [driftItem("commercially_unlinked")],
+          affectedTotal: 2,
+          baseline: null,
         }),
       );
     });
@@ -388,7 +386,10 @@ describe("ScopeDelta WebMCP execution adapters", () => {
       limit: 3,
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
+      "/commercial/drift-summary?limit=3",
+    );
     expect(result).toMatchObject({
       advisory_only: true,
       contractual_verdict_provided: false,

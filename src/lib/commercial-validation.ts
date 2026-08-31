@@ -285,6 +285,10 @@ export const commercialDriftFiltersSchema = z.object({
     .optional(),
 });
 
+export const commercialDriftSummaryFiltersSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(5).default(5),
+});
+
 export type CreateCommercialSourceInput = z.output<
   typeof createCommercialSourceSchema
 >;

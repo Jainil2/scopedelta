@@ -3,16 +3,14 @@ import { notFound } from "next/navigation";
 import { BoardWorkspace } from "@/components/planning-workspace";
 import { workItemFilterSchema } from "@/lib/delivery-validation";
 import { parseInput } from "@/lib/platform-validation";
-import { requireSession } from "@/lib/session";
 import {
-  getProjectByKey,
   listCycles,
   listMilestones,
   listProjectLabels,
   listProjectMembers,
   listWorkItems,
 } from "@/server/delivery";
-import { getWorkspaceBySlug } from "@/server/workspaces";
+import { getRequestProject } from "@/server/request-context";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -23,11 +21,9 @@ export default async function BoardPage({
   params: Promise<{ workspaceSlug: string; projectKey: string }>;
   searchParams: Promise<SearchParams>;
 }>) {
-  const session = await requireSession();
-  const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug, projectKey } = await params;
   const scalar = scalarSearch(await searchParams);
-  const data = await loadBoard(actor, workspaceSlug, projectKey, scalar);
+  const data = await loadBoard(workspaceSlug, projectKey, scalar);
   return (
     <BoardWorkspace
       workspaceId={data.workspace.id}
@@ -45,7 +41,6 @@ export default async function BoardPage({
 }
 
 async function loadBoard(
-  actor: { userId: string; email: string },
   workspaceSlug: string,
   projectKey: string,
   scalar: Record<string, string>,
@@ -55,11 +50,9 @@ async function loadBoard(
       ...scalar,
       pageSize: scalar.pageSize || 100,
     });
-    const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
-    const project = await getProjectByKey(
-      actor,
-      workspace.id,
-      projectKey.toUpperCase(),
+    const { actor, workspace, project } = await getRequestProject(
+      workspaceSlug,
+      projectKey,
     );
     const [result, members, milestones, cycles, labels] = await Promise.all([
       listWorkItems(actor, workspace.id, project.id, filters),

@@ -3,10 +3,8 @@ import { notFound } from "next/navigation";
 import { ActivityWorkspace } from "@/components/collaboration-workspace";
 import { paginationSchema } from "@/lib/delivery-validation";
 import { parseInput } from "@/lib/platform-validation";
-import { requireSession } from "@/lib/session";
 import { listActivity } from "@/server/collaboration";
-import { getProjectByKey } from "@/server/delivery";
-import { getWorkspaceBySlug } from "@/server/workspaces";
+import { getRequestProject } from "@/server/request-context";
 
 export default async function ProjectActivityPage({
   params,
@@ -15,11 +13,8 @@ export default async function ProjectActivityPage({
   params: Promise<{ workspaceSlug: string; projectKey: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
-  const session = await requireSession();
-  const actor = { userId: session.user.id, email: session.user.email };
   const { workspaceSlug, projectKey } = await params;
   const data = await loadActivity(
-    actor,
     workspaceSlug,
     projectKey,
     await searchParams,
@@ -36,7 +31,6 @@ export default async function ProjectActivityPage({
 }
 
 async function loadActivity(
-  actor: { userId: string; email: string },
   workspaceSlug: string,
   projectKey: string,
   searchParams: Record<string, string | string[] | undefined>,
@@ -47,11 +41,9 @@ async function loadActivity(
         typeof searchParams.page === "string" ? searchParams.page : undefined,
       pageSize: 50,
     });
-    const workspace = await getWorkspaceBySlug(actor, workspaceSlug);
-    const project = await getProjectByKey(
-      actor,
-      workspace.id,
-      projectKey.toUpperCase(),
+    const { actor, workspace, project } = await getRequestProject(
+      workspaceSlug,
+      projectKey,
     );
     const activity = await listActivity(
       actor,

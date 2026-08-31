@@ -503,50 +503,19 @@ test("client project, milestone, and backlog work through the production UI", as
   ).toBeAttached();
 });
 
-test("authenticated workspace exposes existing workflows through four WebMCP tools", async ({
+test("judge project lead and ordinary member keep one role-aware four-tool journey", async ({
   page,
+  browser,
 }) => {
   test.setTimeout(90_000);
-  await page.addInitScript(() => {
-    type InjectedTool = {
-      name: string;
-      execute: (
-        input: Record<string, unknown>,
-        options: { signal: AbortSignal },
-      ) => Promise<unknown>;
-    };
-    const tools = new Map<string, InjectedTool>();
-    const browserWindow = window as typeof window & {
-      __webMcpTools?: Map<string, InjectedTool>;
-    };
-    browserWindow.__webMcpTools = tools;
-    Object.defineProperty(document, "modelContext", {
-      configurable: true,
-      value: {
-        registerTool: async (
-          tool: InjectedTool,
-          options?: { signal?: AbortSignal },
-        ) => {
-          tools.set(tool.name, tool);
-          options?.signal?.addEventListener(
-            "abort",
-            () => {
-              if (tools.get(tool.name) === tool) tools.delete(tool.name);
-            },
-            { once: true },
-          );
-        },
-        getTools: async () => [...tools.values()],
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-      },
-    });
-  });
+  await installWebMcpModelContext(page);
 
   const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-  const email = `webmcp-${suffix}@example.test`;
+  const ownerEmail = `webmcp-owner-${suffix}@example.test`;
+  const leadEmail = `webmcp-lead-${suffix}@example.test`;
+  const memberEmail = `webmcp-member-${suffix}@example.test`;
   const password = "test-password-123";
-  await signUpAndVerifyLocally(page, email, password, "/onboarding");
+  await signUpAndVerifyLocally(page, ownerEmail, password, "/onboarding");
   await page.getByLabel(/Workspace name/).fill("WebMCP Studio");
   await page.getByRole("button", { name: "Create workspace" }).click();
 
@@ -563,14 +532,43 @@ test("authenticated workspace exposes existing workflows through four WebMCP too
   await page.getByRole("button", { name: "Create project" }).click();
   await expect(page.getByRole("status")).toHaveText("Project created.");
   await page.getByRole("link", { name: /Browser tool delivery/ }).click();
-  await page.getByRole("link", { name: "Backlog", exact: true }).click();
+  const workspaceSlug = new URL(page.url()).pathname.split("/")[2]!;
 
-  await expect(page.getByText("4 browser tools active")).toBeVisible();
-  await expect(page.locator(".webmcp-tool-names")).toHaveText(
-    "list_my_work, search_work_items, get_commercial_drift, create_work_item",
+  const leadContext = await browser.newContext();
+  const leadPage = await leadContext.newPage();
+  await installWebMcpModelContext(leadPage);
+  await signUpAndVerifyLocally(leadPage, leadEmail, password, "/onboarding");
+  const memberContext = await browser.newContext();
+  const memberPage = await memberContext.newPage();
+  await installWebMcpModelContext(memberPage);
+  await signUpAndVerifyLocally(
+    memberPage,
+    memberEmail,
+    password,
+    "/onboarding",
   );
+  await seedProjectPersonas({
+    workspaceSlug,
+    projectKey: "WEB",
+    ownerEmail,
+    leadEmail,
+    memberEmail,
+  });
 
-  const readResults = await page.evaluate(async () => {
+  const projectRoot = `/app/${workspaceSlug}/projects/WEB`;
+  await leadPage.goto(projectRoot);
+  await expect(
+    leadPage.getByRole("region", { name: "Project context" }),
+  ).toContainText("Lead Project Lead Test");
+  await expect(
+    leadPage.getByRole("link", { name: "Commercial", exact: true }),
+  ).toBeVisible();
+  await expect(leadPage.getByText("Edit project details")).toBeVisible();
+  await leadPage.getByRole("link", { name: "Backlog", exact: true }).click();
+
+  await expectFourBrowserTools(leadPage);
+
+  const readResults = await leadPage.evaluate(async () => {
     const tools = (
       window as typeof window & {
         __webMcpTools: Map<
@@ -599,7 +597,7 @@ test("authenticated workspace exposes existing workflows through four WebMCP too
   });
   expect(readResults).toHaveLength(3);
 
-  const created = await page.evaluate(async () => {
+  const created = await leadPage.evaluate(async () => {
     const tool = (
       window as typeof window & {
         __webMcpTools: Map<
@@ -631,52 +629,142 @@ test("authenticated workspace exposes existing workflows through four WebMCP too
   });
 
   await expect(
-    page.getByText("Agent-created delivery checkpoint", { exact: true }),
+    leadPage.getByText("Agent-created delivery checkpoint", { exact: true }),
   ).toBeVisible();
-  await page
+  await leadPage
     .getByRole("region", { name: "Project context" })
     .getByRole("link", { name: "Overview", exact: true })
     .click();
   await expect(
-    page.getByRole("link", { name: /Agent-created delivery checkpoint/ }),
+    leadPage.getByRole("link", { name: /Agent-created delivery checkpoint/ }),
   ).toBeVisible();
+  await expectFourBrowserTools(leadPage);
+  await leadPage.getByRole("link", { name: "Commercial", exact: true }).click();
+  await expect(
+    leadPage.getByRole("heading", { name: "Commercial", level: 1 }),
+  ).toBeVisible();
+  await openProjectMore(leadPage);
+  await leadPage.getByRole("link", { name: "Engineering & QA" }).click();
+  await expect(
+    leadPage.getByRole("heading", { name: "Engineering & QA evidence" }),
+  ).toBeVisible();
+  await openProjectMore(leadPage);
+  await leadPage.getByRole("link", { name: "Client collaboration" }).click();
+  await expect(
+    leadPage.getByRole("heading", { name: "Client collaboration" }),
+  ).toBeVisible();
+  await openProjectMore(leadPage);
+  await leadPage.getByRole("link", { name: "Activity" }).click();
+  await expect(
+    leadPage.getByRole("heading", { name: "Project activity" }),
+  ).toBeVisible();
+  await leadPage.reload();
+  await expectFourBrowserTools(leadPage);
+
+  await leadPage.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await leadPage.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await expectBasicAccessibility(leadPage);
+
+  await memberPage.goto(projectRoot);
+  await expect(
+    memberPage.getByRole("region", { name: "Project context" }),
+  ).toContainText("Lead Project Lead Test");
+  await expect(
+    memberPage.getByText("Ordinary Member Test", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    memberPage.getByRole("link", { name: "Commercial", exact: true }),
+  ).toHaveCount(0);
+  await expect(memberPage.getByText("Edit project details")).toHaveCount(0);
+  await expectFourBrowserTools(memberPage);
+  const memberCommercialError = await memberPage.evaluate(async () => {
+    const tool = (
+      window as typeof window & {
+        __webMcpTools: Map<
+          string,
+          {
+            execute: (
+              input: Record<string, unknown>,
+              options: { signal: AbortSignal },
+            ) => Promise<unknown>;
+          }
+        >;
+      }
+    ).__webMcpTools.get("get_commercial_drift")!;
+    try {
+      await tool.execute(
+        { project_key: "WEB", limit: 5 },
+        { signal: new AbortController().signal },
+      );
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  });
+  expect(memberCommercialError).toBe(
+    "The requested workspace or project is unavailable to this user. Check project_key and current access before retrying.",
+  );
+  await openProjectMore(memberPage);
+  const memberProjectNavigation = memberPage.getByRole("navigation", {
+    name: "Project",
+  });
+  await expect(
+    memberProjectNavigation.getByRole("link", { name: "Engineering & QA" }),
+  ).toBeVisible();
+  await expect(
+    memberProjectNavigation.getByRole("link", {
+      name: "Client collaboration",
+    }),
+  ).toBeVisible();
+  await expect(
+    memberProjectNavigation.getByRole("link", { name: "Activity" }),
+  ).toBeVisible();
+
   if (process.env.UPDATE_SCREENSHOTS === "1") {
-    await removeDevIndicator(page);
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.screenshot({
+    await removeDevIndicator(leadPage);
+    await leadPage.setViewportSize({ width: 1440, height: 1000 });
+    await leadPage.goto(projectRoot);
+    await leadPage.screenshot({
       path: "docs/screenshots/hack-002-command-center.png",
       fullPage: true,
     });
   }
-  await page.getByRole("link", { name: "Backlog", exact: true }).click();
+  await leadPage.getByRole("link", { name: "Backlog", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Backlog", level: 1 }),
+    leadPage.getByRole("heading", { name: "Backlog", level: 1 }),
   ).toBeVisible();
   await expect(
-    page.getByText("Agent-created delivery checkpoint", { exact: true }),
+    leadPage.getByText("Agent-created delivery checkpoint", { exact: true }),
   ).toBeVisible();
   if (process.env.UPDATE_SCREENSHOTS === "1") {
-    await removeDevIndicator(page);
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.screenshot({
+    await removeDevIndicator(leadPage);
+    await leadPage.setViewportSize({ width: 1440, height: 1000 });
+    await leadPage.screenshot({
       path: "docs/screenshots/webmcp-browser-tools.png",
       fullPage: true,
     });
-    await page.screenshot({
+    await leadPage.screenshot({
       path: "docs/screenshots/hack-002-created-work.png",
       fullPage: true,
     });
   }
-  await page
+  await leadPage
     .getByRole("navigation", { name: "Workspace" })
     .getByRole("link", { name: "My work", exact: true })
     .click();
   await expect(
-    page.getByRole("link", { name: /Agent-created delivery checkpoint/ }),
+    leadPage.getByRole("link", { name: /Agent-created delivery checkpoint/ }),
   ).toBeVisible();
-  const signOutButton = page.getByRole("button", { name: "Sign out" });
+  const signOutButton = leadPage.getByRole("button", { name: "Sign out" });
   await expect(signOutButton).toBeInViewport();
   await expect(signOutButton).toBeEnabled();
+  await expectFourBrowserTools(leadPage);
+  await memberContext.close();
+  await leadContext.close();
 });
 
 test("owner operates portfolio capacity and work-item time from the UI", async ({
@@ -2345,6 +2433,149 @@ function aiFixtureResult(kind?: string, evidenceKey = "ev_request_001") {
       },
     ],
   };
+}
+
+async function installWebMcpModelContext(page: Page) {
+  await page.addInitScript(() => {
+    type InjectedTool = {
+      name: string;
+      execute: (
+        input: Record<string, unknown>,
+        options: { signal: AbortSignal },
+      ) => Promise<unknown>;
+    };
+    const tools = new Map<string, InjectedTool>();
+    const browserWindow = window as typeof window & {
+      __webMcpTools?: Map<string, InjectedTool>;
+    };
+    browserWindow.__webMcpTools = tools;
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: async (
+          tool: InjectedTool,
+          options?: { signal?: AbortSignal },
+        ) => {
+          tools.set(tool.name, tool);
+          options?.signal?.addEventListener(
+            "abort",
+            () => {
+              if (tools.get(tool.name) === tool) tools.delete(tool.name);
+            },
+            { once: true },
+          );
+        },
+        getTools: async () => [...tools.values()],
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      },
+    });
+  });
+}
+
+async function expectFourBrowserTools(page: Page) {
+  const expected = [
+    "list_my_work",
+    "search_work_items",
+    "get_commercial_drift",
+    "create_work_item",
+  ];
+  await expect(page.getByText("4 browser tools active")).toBeVisible();
+  await expect(page.locator(".webmcp-tool-names")).toHaveText(
+    expected.join(", "),
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() => [
+        ...(
+          window as typeof window & {
+            __webMcpTools: Map<string, unknown>;
+          }
+        ).__webMcpTools.keys(),
+      ]),
+    )
+    .toEqual(expected);
+}
+
+async function seedProjectPersonas({
+  workspaceSlug,
+  projectKey,
+  ownerEmail,
+  leadEmail,
+  memberEmail,
+}: {
+  workspaceSlug: string;
+  projectKey: string;
+  ownerEmail: string;
+  leadEmail: string;
+  memberEmail: string;
+}) {
+  await withTestDatabase(async (pool) => {
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        `update users
+         set name = case email
+           when $1 then 'Project Lead Test'
+           when $2 then 'Ordinary Member Test'
+           else name
+         end
+         where email in ($1, $2)`,
+        [leadEmail, memberEmail],
+      );
+      const target = await client.query<{
+        workspace_id: string;
+        project_id: string;
+        owner_id: string;
+        lead_id: string;
+        member_id: string;
+      }>(
+        `select workspaces.id as workspace_id,
+                projects.id as project_id,
+                owner.id as owner_id,
+                project_lead.id as lead_id,
+                ordinary_member.id as member_id
+         from workspaces
+         inner join projects
+           on projects.workspace_id = workspaces.id and projects.key = $2
+         inner join users owner on owner.email = $3
+         inner join users project_lead on project_lead.email = $4
+         inner join users ordinary_member on ordinary_member.email = $5
+         where workspaces.slug = $1`,
+        [workspaceSlug, projectKey, ownerEmail, leadEmail, memberEmail],
+      );
+      const actor = target.rows[0];
+      if (!actor) throw new Error("Synthetic project personas were not found.");
+      await client.query(
+        `insert into memberships (workspace_id, user_id, role)
+         values ($1, $2, 'member'), ($1, $3, 'member')`,
+        [actor.workspace_id, actor.lead_id, actor.member_id],
+      );
+      await client.query(
+        `insert into project_memberships
+           (project_id, workspace_id, user_id, added_by_user_id)
+         values ($1, $2, $3, $5), ($1, $2, $4, $5)`,
+        [
+          actor.project_id,
+          actor.workspace_id,
+          actor.lead_id,
+          actor.member_id,
+          actor.owner_id,
+        ],
+      );
+      await client.query(
+        "update projects set lead_user_id = $1 where id = $2",
+        [actor.lead_id, actor.project_id],
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
 }
 
 async function signUpAndVerify(

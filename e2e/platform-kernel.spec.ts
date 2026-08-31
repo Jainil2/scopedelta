@@ -667,6 +667,16 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+  await openProjectMore(leadPage);
+  const narrowEngineeringLink = leadPage.getByRole("link", {
+    name: "Engineering & QA",
+  });
+  await expect(narrowEngineeringLink).toBeVisible();
+  await expect(narrowEngineeringLink).toBeInViewport();
+  await narrowEngineeringLink.click();
+  await expect(
+    leadPage.getByRole("heading", { name: "Engineering & QA evidence" }),
+  ).toBeVisible();
   await expectBasicAccessibility(leadPage);
 
   await memberPage.goto(projectRoot);
@@ -716,12 +726,21 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
     memberProjectNavigation.getByRole("link", { name: "Engineering & QA" }),
   ).toBeVisible();
   await expect(
-    memberProjectNavigation.getByRole("link", {
-      name: "Client collaboration",
-    }),
-  ).toBeVisible();
+    memberProjectNavigation.getByRole("link", { name: "Client collaboration" }),
+  ).toHaveCount(0);
   await expect(
     memberProjectNavigation.getByRole("link", { name: "Activity" }),
+  ).toBeVisible();
+  await memberProjectNavigation
+    .getByRole("link", { name: "Engineering & QA" })
+    .click();
+  await expect(
+    memberPage.getByRole("heading", { name: "Engineering & QA evidence" }),
+  ).toBeVisible();
+  await openProjectMore(memberPage);
+  await memberProjectNavigation.getByRole("link", { name: "Activity" }).click();
+  await expect(
+    memberPage.getByRole("heading", { name: "Project activity" }),
   ).toBeVisible();
 
   if (process.env.UPDATE_SCREENSHOTS === "1") {
@@ -2445,10 +2464,13 @@ async function installWebMcpModelContext(page: Page) {
       ) => Promise<unknown>;
     };
     const tools = new Map<string, InjectedTool>();
+    const registrationCalls: string[] = [];
     const browserWindow = window as typeof window & {
       __webMcpTools?: Map<string, InjectedTool>;
+      __webMcpRegistrationCalls?: string[];
     };
     browserWindow.__webMcpTools = tools;
+    browserWindow.__webMcpRegistrationCalls = registrationCalls;
     Object.defineProperty(document, "modelContext", {
       configurable: true,
       value: {
@@ -2456,6 +2478,7 @@ async function installWebMcpModelContext(page: Page) {
           tool: InjectedTool,
           options?: { signal?: AbortSignal },
         ) => {
+          registrationCalls.push(tool.name);
           tools.set(tool.name, tool);
           options?.signal?.addEventListener(
             "abort",
@@ -2486,15 +2509,18 @@ async function expectFourBrowserTools(page: Page) {
   );
   await expect
     .poll(() =>
-      page.evaluate(() => [
-        ...(
-          window as typeof window & {
-            __webMcpTools: Map<string, unknown>;
-          }
-        ).__webMcpTools.keys(),
-      ]),
+      page.evaluate(() => {
+        const browserWindow = window as typeof window & {
+          __webMcpTools: Map<string, unknown>;
+          __webMcpRegistrationCalls: string[];
+        };
+        return {
+          activeTools: [...browserWindow.__webMcpTools.keys()],
+          registrationCalls: [...browserWindow.__webMcpRegistrationCalls],
+        };
+      }),
     )
-    .toEqual(expected);
+    .toEqual({ activeTools: expected, registrationCalls: expected });
 }
 
 async function seedProjectPersonas({

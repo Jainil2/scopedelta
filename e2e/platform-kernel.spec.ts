@@ -590,7 +590,7 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
       execute("list_my_work", { limit: 10 }),
       execute("search_work_items", {
         project_key: "WEB",
-        query: "agent-created",
+        query: "wholesale change-order review",
       }),
       execute("get_commercial_drift", { project_key: "WEB", limit: 5 }),
     ]);
@@ -614,7 +614,7 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
     return tool.execute(
       {
         project_key: "WEB",
-        title: "Agent-created delivery checkpoint",
+        title: "Confirm wholesale change-order review",
         status: "ready",
         priority: "high",
         assign_to_me: true,
@@ -629,14 +629,18 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
   });
 
   await expect(
-    leadPage.getByText("Agent-created delivery checkpoint", { exact: true }),
+    leadPage.getByText("Confirm wholesale change-order review", {
+      exact: true,
+    }),
   ).toBeVisible();
   await leadPage
     .getByRole("region", { name: "Project context" })
     .getByRole("link", { name: "Overview", exact: true })
     .click();
   await expect(
-    leadPage.getByRole("link", { name: /Agent-created delivery checkpoint/ }),
+    leadPage.getByRole("link", {
+      name: /Confirm wholesale change-order review/,
+    }),
   ).toBeVisible();
   await expectFourBrowserTools(leadPage);
   await leadPage.getByRole("link", { name: "Commercial", exact: true }).click();
@@ -757,7 +761,9 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
     leadPage.getByRole("heading", { name: "Backlog", level: 1 }),
   ).toBeVisible();
   await expect(
-    leadPage.getByText("Agent-created delivery checkpoint", { exact: true }),
+    leadPage.getByText("Confirm wholesale change-order review", {
+      exact: true,
+    }),
   ).toBeVisible();
   if (process.env.UPDATE_SCREENSHOTS === "1") {
     await removeDevIndicator(leadPage);
@@ -776,7 +782,9 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
     .getByRole("link", { name: "My work", exact: true })
     .click();
   await expect(
-    leadPage.getByRole("link", { name: /Agent-created delivery checkpoint/ }),
+    leadPage.getByRole("link", {
+      name: /Confirm wholesale change-order review/,
+    }),
   ).toBeVisible();
   const signOutButton = leadPage.getByRole("button", { name: "Sign out" });
   await expect(signOutButton).toBeInViewport();

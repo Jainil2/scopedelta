@@ -72,22 +72,109 @@ Target duration: **2:45**, leaving fifteen seconds below the limit.
 
 Avoid showing sign-in entry, account menus, cookies, network request headers, database IDs, private email, or password in the video. Use tight crops and repository-safe screenshots.
 
-## Final evidence block
+## Final release evidence
 
-Complete this block only from the deployed exact merge-candidate SHA:
+Last updated: **2026-08-31**. This is the durable HACK-003 release record. Do
+not replace pending entries with assumptions or evidence from a different
+commit.
 
-- Production URL: `https://scopedelta.netlify.app`
-- Commit SHA: `<exact deployed SHA>`
-- Production deploy/run: `<public-safe link or result>`
-- Required headers: `<observed values>`
-- Four tools before/after refresh: `<observed names/count>`
-- Fresh-session prompt mapping: `<four observed selections>`
-- Visible mutation: `<ordinary UI location>`
-- Unsupported-browser behavior: `<observation>`
-- Cold/warm performance: `<exact deployed overview, Backlog/My Work, Commercial, drift-tool, and create-to-visible observations; warm target ≤1.5 s and feedback target ~200 ms>`
-- Repository-safe screenshots: `<paths>`
-- Final hosted gate: `<exact SHA and result>`
-- Post-merge production verification: `<merged SHA and observation>`
+### Exact release and deployment
+
+| Evidence                         | Result                                                                                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Approved starting `main`         | `b47d15dbcf972782830c72c4d555195b8368b984`                                                                                                              |
+| Deployed production SHA          | `b47d15dbcf972782830c72c4d555195b8368b984`                                                                                                              |
+| Production URL                   | `https://scopedelta.netlify.app`                                                                                                                        |
+| Unique deploy URL                | `https://6a954849b662aa4e25e32663--scopedelta.netlify.app`                                                                                              |
+| Netlify deploy identifier        | `6a954849b662aa4e25e32663`                                                                                                                              |
+| Production deploy run            | [GitHub Actions run 33377453605](https://github.com/Jainil2/scopedelta/actions/runs/33377453605), successful on the exact SHA above                     |
+| Build observation                | Production build and deploy succeeded; Netlify's public-root Lighthouse run reported performance 98, accessibility 98, best practices 100, and SEO 100. |
+| HACK-003 release-preparation SHA | Pending until this documentation/release-tooling PR is committed. It does not change the four WebMCP contracts or product behavior.                     |
+
+### Verified observations
+
+- A fresh unauthenticated request to `/sign-in` returned `200` with
+  `Origin-Agent-Cluster: ?1` and `Permissions-Policy: tools=(self)` on the
+  deployed SHA.
+- Source and automated contract inventory still contain exactly these four
+  names, in this order: `list_my_work`, `search_work_items`,
+  `get_commercial_drift`, and `create_work_item`. No fifth tool or alternate
+  agent endpoint was added.
+- The production deployment run checked out and logged the exact deployed SHA
+  before applying migrations and deploying.
+- A fresh unauthenticated in-app-browser session loaded the normal public
+  ScopeDelta experience. It had no access to the protected judge session, as
+  expected.
+- Chrome with the required connected WebMCP extension was not available to the
+  HACK-003 execution session. Do not claim Chrome prompt-selection evidence
+  from unit tests or a mocked model context.
+
+### Protected fresh-session proof — pending
+
+The following evidence requires the protected `.test` judge credential and a
+compatible browser session. Neither is present in the repository, local
+environment, or GitHub repository secrets, and they must not be reconstructed
+or printed in logs.
+
+| Required proof                       | Status and exact completion evidence                                                                                                                  |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deterministic NOVA reset/seed/verify | Pending protected runtime access. Use the manual production workflow with `webmcp_demo_command=reset`; it invokes the existing guarded HACK-001 path. |
+| Ordinary Better Auth sign-in         | Pending protected judge credential. No bypass is permitted.                                                                                           |
+| Four tools before/after refresh      | Pending fresh authenticated compatible-browser capture.                                                                                               |
+| Natural-language prompt mapping      | Pending the four prompts in the table above in ChatGPT's in-app browser, then Chrome if available.                                                    |
+| Commercial drift/UI correlation      | Pending deployed authenticated observation; expected pristine fixture is one item in each of the five factual categories.                             |
+| Visible mutation                     | Pending proof in ordinary Backlog, Overview attention, and My Work after `Confirm wholesale change-order review` is created.                          |
+| Expired/re-authenticated session     | Pending compatible-browser negative proof; must not report tool success after authorization expires.                                                  |
+| Authenticated unsupported-browser UI | Pending sign-in in a browser without WebMCP; normal UI must remain usable.                                                                            |
+| Cold/warm production measurements    | Pending exact timings for Overview, Backlog/My Work, Commercial, drift read, and create-to-visible. Record cold separately from warm.                 |
+| Immediate pending feedback           | Pending deployed observation; click feedback target remains roughly 200 ms.                                                                           |
+
+### Optional Gemini status
+
+- The existing implementation path is `src/server/ai/provider.ts` plus
+  `src/lib/env.ts`; Gemini remains optional and separate from all four WebMCP
+  tools.
+- No `GEMINI_API_KEY`, `AI_ENABLED`, `AI_PROVIDER`, or `AI_MODEL` value is
+  available to this checkout or through GitHub repository secrets.
+- The manual production workflow reports only bounded readiness booleans plus
+  provider/model, never the key. If it reports a configured Gemini environment,
+  run one existing AI job against synthetic NOVA data and record provider,
+  model, duration, and bounded result classification here.
+- Current result: **FOUNDER INPUT REQUIRED — protected Gemini key/runtime
+  configuration. Non-blocking to the WebMCP release.**
+
+### Exact-SHA production procedure
+
+The production workflow accepts an exact 40-character commit SHA and fails if
+the checkout differs. For the final approved candidate, dispatch
+`production-deploy.yml` with that SHA and choose `reset` for
+`webmcp_demo_command`. The workflow deploys the SHA, reports only non-secret
+runtime readiness, then uses `pnpm webmcp:demo reset`, whose existing guards
+verify the reserved workspace boundary, ordinary Better Auth credential, base
+work, and drift counts.
+
+After the guarded result reports `pristine: true`, perform the fresh browser
+sequence once and record the observations above before recording the video.
+
+### Release gates and external artifacts
+
+- Final hosted merge gate: pending exact HACK-003 merge-candidate SHA and
+  CEO/product confirmation that no blocker remains.
+- Publication-readiness snapshot: `Jainil2/scopedelta` is still private and
+  GitHub reports no detected license, as LIC-001 requires. A bounded tracked-file
+  scan found no Gemini/OpenAI-key or credential-bearing PostgreSQL URL pattern.
+  GitHub secret scanning is disabled for this private repository and `gitleaks`
+  is not installed in the release environment, so this is not a full-history
+  clearance. Run an approved full-history secret/private-data scan before any
+  publication action.
+- Repository-safe screenshots: pending final compatible-browser proof. Keep
+  credentials, account menus, cookies, request headers, and database IDs out of
+  captures.
+- Public repository URL and public repository SHA: **FOUNDER-GATED — pending
+  LIC-001 / #19.**
+- Public video URL: **FOUNDER/MANUAL — pending.**
+- Devpost status: **FOUNDER/MANUAL — pending.**
+- Post-merge production verification: pending merged SHA and final observation.
 
 ## Founder submission checklist
 

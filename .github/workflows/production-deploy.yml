@@ -5,6 +5,20 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      git_sha:
+        description: Exact 40-character commit SHA to deploy
+        required: true
+        type: string
+      webmcp_demo_command:
+        description: Guarded NOVA fixture action after the exact-SHA deploy
+        required: true
+        default: none
+        type: choice
+        options:
+          - none
+          - verify
+          - reset
 
 permissions:
   contents: read
@@ -18,10 +32,22 @@ jobs:
     name: Migrate and deploy
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      RELEASE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.git_sha || github.sha }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+
+      - name: Verify exact release commit
+        run: |
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "git_sha must be a lowercase 40-character commit SHA." >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
 
       - name: Set up pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
@@ -41,9 +67,35 @@ jobs:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
 
       - name: Build and deploy to Netlify
-        run: pnpm exec netlify deploy --prod --context production --message "GitHub ${GITHUB_SHA}"
+        run: pnpm exec netlify deploy --prod --context production --message "GitHub ${RELEASE_SHA}"
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
           SCOPEDELTA_DEPLOY_ORCHESTRATED: "true"
           NEXT_TELEMETRY_DISABLED: "1"
+
+      - name: Report protected release environment readiness
+        if: github.event_name == 'workflow_dispatch'
+        run: >-
+          pnpm exec netlify dev:exec --context production
+          node -e 'console.log(JSON.stringify({
+          ai_enabled: process.env.AI_ENABLED === "true",
+          ai_provider: process.env.AI_PROVIDER || null,
+          ai_model: process.env.AI_MODEL || null,
+          gemini_key_configured: Boolean(process.env.GEMINI_API_KEY),
+          webmcp_demo_enabled: process.env.WEBMCP_DEMO_ENABLE === "webmcp-challenge-2026",
+          judge_credential_configured: Boolean(process.env.WEBMCP_DEMO_JUDGE_EMAIL) && Boolean(process.env.WEBMCP_DEMO_JUDGE_PASSWORD)
+          }))'
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+      - name: Run guarded NOVA fixture action
+        if: github.event_name == 'workflow_dispatch' && inputs.webmcp_demo_command != 'none'
+        run: >-
+          pnpm exec netlify dev:exec --context production
+          pnpm webmcp:demo ${{ inputs.webmcp_demo_command }}
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          WEBMCP_DEMO_RESET_CONFIRM: ${{ inputs.webmcp_demo_command == 'reset' && 'reset-webmcp-judge-demo' || '' }}

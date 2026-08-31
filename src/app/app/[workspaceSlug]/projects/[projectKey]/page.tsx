@@ -28,10 +28,7 @@ export default async function ProjectPage({
   );
 }
 
-async function loadProject(
-  workspaceSlug: string,
-  projectKey: string,
-) {
+async function loadProject(workspaceSlug: string, projectKey: string) {
   try {
     const { actor, workspace, project } = await getRequestProject(
       workspaceSlug,

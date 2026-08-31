@@ -42,8 +42,7 @@ export default async function CommercialPage({
       initialOverview={data.overview}
       drift={data.drift}
       driftSummary={{
-        commerciallyUnlinked:
-          data.snapshot.counts.commercially_unlinked,
+        commerciallyUnlinked: data.snapshot.counts.commercially_unlinked,
         needsClassification: data.snapshot.counts.needs_classification,
         linked: data.snapshot.counts.linked,
         staleBasis: data.snapshot.counts.stale_basis,
@@ -107,21 +106,15 @@ async function loadCommercial(
       workspaceSlug,
       projectKey,
     );
-    const [
-      overview,
-      drift,
-      snapshot,
-      requests,
-      history,
-      exposure,
-    ] = await Promise.all([
-      listCommercialOverview(actor, workspace.id, project.id),
-      listCommercialDrift(actor, workspace.id, project.id, filters),
-      getCommercialDriftSnapshot(actor, workspace.id, project.id, 5),
-      listCommercialRequests(actor, workspace.id, project.id, requestFilters),
-      listCommercialHistory(actor, workspace.id, project.id, historyFilters),
-      getProjectCommercialExposure(actor, workspace.id, project.id),
-    ]);
+    const [overview, drift, snapshot, requests, history, exposure] =
+      await Promise.all([
+        listCommercialOverview(actor, workspace.id, project.id),
+        listCommercialDrift(actor, workspace.id, project.id, filters),
+        getCommercialDriftSnapshot(actor, workspace.id, project.id, 5),
+        listCommercialRequests(actor, workspace.id, project.id, requestFilters),
+        listCommercialHistory(actor, workspace.id, project.id, historyFilters),
+        getProjectCommercialExposure(actor, workspace.id, project.id),
+      ]);
     return {
       workspace,
       project,

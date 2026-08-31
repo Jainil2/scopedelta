@@ -80,16 +80,17 @@ commit.
 
 ### Exact release and deployment
 
-| Evidence                          | Result                                                                                                                                                    |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Approved application-behavior SHA | `b47d15dbcf972782830c72c4d555195b8368b984`                                                                                                                |
-| Initial exact production SHA      | `b47d15dbcf972782830c72c4d555195b8368b984`                                                                                                                |
-| Production URL                    | `https://scopedelta.netlify.app`                                                                                                                          |
-| Unique deploy URL                 | `https://6a954849b662aa4e25e32663--scopedelta.netlify.app`                                                                                                |
-| Netlify deploy identifier         | `6a954849b662aa4e25e32663`                                                                                                                                |
-| Production deploy run             | [GitHub Actions run 33377453605](https://github.com/Jainil2/scopedelta/actions/runs/33377453605), successful on the exact SHA above                       |
-| Build observation                 | Production build and deploy succeeded; Netlify's public-root Lighthouse run reported performance 98, accessibility 98, best practices 100, and SEO 100.   |
-| HACK-003 release-preparation SHA  | The linked PR head and exact-SHA workflow run are authoritative, avoiding a self-referential hash in this file. This PR does not change product behavior. |
+| Evidence                          | Result                                                                                                                                                                                                                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Approved application-behavior SHA | `b47d15dbcf972782830c72c4d555195b8368b984`                                                                                                                                                                                                                                            |
+| Initial exact production SHA      | `b47d15dbcf972782830c72c4d555195b8368b984`                                                                                                                                                                                                                                            |
+| Production URL                    | `https://scopedelta.netlify.app`                                                                                                                                                                                                                                                      |
+| Unique deploy URL                 | `https://6a954849b662aa4e25e32663--scopedelta.netlify.app`                                                                                                                                                                                                                            |
+| Netlify deploy identifier         | `6a954849b662aa4e25e32663`                                                                                                                                                                                                                                                            |
+| Production deploy run             | [GitHub Actions run 33377453605](https://github.com/Jainil2/scopedelta/actions/runs/33377453605), successful on the exact SHA above                                                                                                                                                   |
+| Build observation                 | Production build and deploy succeeded; Netlify's public-root Lighthouse run reported performance 98, accessibility 98, best practices 100, and SEO 100.                                                                                                                               |
+| HACK-003 release-preparation SHA  | The linked PR head and exact-SHA workflow run are authoritative, avoiding a self-referential hash in this file. This PR does not change product behavior.                                                                                                                             |
+| Protected configuration probe     | [Run 33380208891](https://github.com/Jainil2/scopedelta/actions/runs/33380208891) deployed exact SHA `6f76bb2aec2ac423fa7316227813a38649faaa9f` as Netlify deploy `6a95504f1e9f209a3ab042d3`; its post-deploy reset failed closed because the protected demo configuration is absent. |
 
 ### Verified observations
 
@@ -112,36 +113,41 @@ commit.
 ### Protected fresh-session proof — pending
 
 The following evidence requires the protected `.test` judge credential and a
-compatible browser session. Neither is present in the repository, local
-environment, or GitHub repository secrets, and they must not be reconstructed
-or printed in logs.
+compatible browser session. The exact-SHA production readiness probe confirmed
+that the Netlify environment currently has neither the demo enable marker nor
+the judge credential. They are also absent from the repository, local
+environment, and GitHub repository secrets and must not be reconstructed or
+printed in logs.
 
-| Required proof                       | Status and exact completion evidence                                                                                                                  |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deterministic NOVA reset/seed/verify | Pending protected runtime access. Use the manual production workflow with `webmcp_demo_command=reset`; it invokes the existing guarded HACK-001 path. |
-| Ordinary Better Auth sign-in         | Pending protected judge credential. No bypass is permitted.                                                                                           |
-| Four tools before/after refresh      | Pending fresh authenticated compatible-browser capture.                                                                                               |
-| Natural-language prompt mapping      | Pending the four prompts in the table above in ChatGPT's in-app browser, then Chrome if available.                                                    |
-| Commercial drift/UI correlation      | Pending deployed authenticated observation; expected pristine fixture is one item in each of the five factual categories.                             |
-| Visible mutation                     | Pending proof in ordinary Backlog, Overview attention, and My Work after `Confirm wholesale change-order review` is created.                          |
-| Expired/re-authenticated session     | Pending compatible-browser negative proof; must not report tool success after authorization expires.                                                  |
-| Authenticated unsupported-browser UI | Pending sign-in in a browser without WebMCP; normal UI must remain usable.                                                                            |
-| Cold/warm production measurements    | Pending exact timings for Overview, Backlog/My Work, Commercial, drift read, and create-to-visible. Record cold separately from warm.                 |
-| Immediate pending feedback           | Pending deployed observation; click feedback target remains roughly 200 ms.                                                                           |
+| Required proof                       | Status and exact completion evidence                                                                                                                                                                              |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deterministic NOVA reset/seed/verify | Blocked on protected Netlify demo configuration. Run 33380208891 invoked the guarded path, which failed closed with `demo_disabled` before mutation. After configuration, rerun with `webmcp_demo_command=reset`. |
+| Ordinary Better Auth sign-in         | Pending protected judge credential. No bypass is permitted.                                                                                                                                                       |
+| Four tools before/after refresh      | Pending fresh authenticated compatible-browser capture.                                                                                                                                                           |
+| Natural-language prompt mapping      | Pending the four prompts in the table above in ChatGPT's in-app browser, then Chrome if available.                                                                                                                |
+| Commercial drift/UI correlation      | Pending deployed authenticated observation; expected pristine fixture is one item in each of the five factual categories.                                                                                         |
+| Visible mutation                     | Pending proof in ordinary Backlog, Overview attention, and My Work after `Confirm wholesale change-order review` is created.                                                                                      |
+| Expired/re-authenticated session     | Pending compatible-browser negative proof; must not report tool success after authorization expires.                                                                                                              |
+| Authenticated unsupported-browser UI | Pending sign-in in a browser without WebMCP; normal UI must remain usable.                                                                                                                                        |
+| Cold/warm production measurements    | Pending exact timings for Overview, Backlog/My Work, Commercial, drift read, and create-to-visible. Record cold separately from warm.                                                                             |
+| Immediate pending feedback           | Pending deployed observation; click feedback target remains roughly 200 ms.                                                                                                                                       |
 
 ### Optional Gemini status
 
 - The existing implementation path is `src/server/ai/provider.ts` plus
   `src/lib/env.ts`; Gemini remains optional and separate from all four WebMCP
   tools.
-- No `GEMINI_API_KEY`, `AI_ENABLED`, `AI_PROVIDER`, or `AI_MODEL` value is
-  available to this checkout or through GitHub repository secrets.
-- The manual production workflow reports only bounded readiness booleans plus
-  provider/model, never the key. If it reports a configured Gemini environment,
-  run one existing AI job against synthetic NOVA data and record provider,
-  model, duration, and bounded result classification here.
-- Current result: **FOUNDER INPUT REQUIRED — protected Gemini key/runtime
-  configuration. Non-blocking to the WebMCP release.**
+- No Gemini or AI configuration value is available to this checkout or through
+  GitHub repository secrets. The exact-SHA Netlify readiness probe reports only
+  bounded configuration facts, never the key.
+- Run 33380208891 reported `gemini_key_configured: true`, but
+  `ai_enabled: false` with provider and model unset. An existing AI job cannot
+  execute safely until the deployment is explicitly configured with
+  `AI_ENABLED=true`, `AI_PROVIDER=gemini`, and a currently available
+  `AI_MODEL`.
+- Current result: **FOUNDER INPUT REQUIRED — protected Gemini runtime
+  enablement/model selection. The configured key was never read or logged.
+  Non-blocking to the WebMCP release.**
 
 ### Exact-SHA production procedure
 

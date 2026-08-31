@@ -18,7 +18,7 @@ export default async function ProjectLayout({
       <ProjectContextBar
         workspaceSlug={workspaceSlug}
         project={project}
-        canViewCommercial={project.canManage}
+        canManageProject={project.canManage}
       />
       <div className="project-page-slot">{children}</div>
     </div>

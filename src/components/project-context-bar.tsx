@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 type ProjectLink = readonly [label: string, path: string];
 
 export function ProjectContextBar({
   workspaceSlug,
   project,
-  canViewCommercial,
+  canManageProject,
 }: Readonly<{
   workspaceSlug: string;
   project: {
@@ -19,10 +19,11 @@ export function ProjectContextBar({
     leadName: string;
     lifecycle: string;
   };
-  canViewCommercial: boolean;
+  canManageProject: boolean;
 }>) {
   const pathname = usePathname();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const moreMenu = useRef<HTMLDetailsElement>(null);
   const root = `/app/${workspaceSlug}/projects/${project.key}`;
   const navigating =
     pendingHref !== null && !projectPathActive(pathname, pendingHref, root);
@@ -30,14 +31,16 @@ export function ProjectContextBar({
     ["Overview", root],
     ["Backlog", `${root}/backlog`],
     ["Board", `${root}/board`],
-    ...(canViewCommercial
+    ...(canManageProject
       ? ([["Commercial", `${root}/commercial`]] as ProjectLink[])
       : []),
   ];
   const secondary: ProjectLink[] = [
     ["Cycles", `${root}/cycles`],
     ["Brief", `${root}/brief`],
-    ["Client collaboration", `${root}/client`],
+    ...(canManageProject
+      ? ([["Client collaboration", `${root}/client`]] as ProjectLink[])
+      : []),
     ["Engineering & QA", `${root}/engineering`],
     ["AI intelligence", `${root}/ai`],
     ["Activity", `${root}/activity`],
@@ -71,7 +74,7 @@ export function ProjectContextBar({
             {label}
           </Link>
         ))}
-        <details className="project-more-menu">
+        <details className="project-more-menu" ref={moreMenu}>
           <summary>
             More
             {activeLabel && secondary.some(([label]) => label === activeLabel)
@@ -83,7 +86,10 @@ export function ProjectContextBar({
               <Link
                 href={href}
                 key={href}
-                onClick={() => setPendingHref(href)}
+                onClick={() => {
+                  setPendingHref(href);
+                  if (moreMenu.current) moreMenu.current.open = false;
+                }}
                 aria-current={
                   projectPathActive(pathname, href, root) ? "page" : undefined
                 }

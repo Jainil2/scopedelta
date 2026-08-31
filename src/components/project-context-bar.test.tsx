@@ -31,7 +31,7 @@ describe("project context navigation", () => {
       <ProjectContextBar
         workspaceSlug="northstar"
         project={project}
-        canViewCommercial
+        canManageProject
       />,
     );
 
@@ -57,20 +57,34 @@ describe("project context navigation", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Loading project workspace…",
     );
+
+    const moreMenu = screen.getByText("More").closest("details");
+    expect(moreMenu).not.toBeNull();
+    await user.click(screen.getByText("More"));
+    expect(moreMenu).toHaveAttribute("open");
+    window.addEventListener("click", (event) => event.preventDefault(), {
+      capture: true,
+      once: true,
+    });
+    await user.click(screen.getByRole("link", { name: "Activity" }));
+    expect(moreMenu).not.toHaveAttribute("open");
   });
 
-  it("hides commercial from ordinary members and identifies an active secondary route", () => {
+  it("hides manager-only routes from ordinary members and identifies an active secondary route", () => {
     navigation.pathname = "/app/northstar/projects/NOVA/activity";
     render(
       <ProjectContextBar
         workspaceSlug="northstar"
         project={project}
-        canViewCommercial={false}
+        canManageProject={false}
       />,
     );
 
     expect(
       screen.queryByRole("link", { name: "Commercial" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Client collaboration" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("More · Activity")).toBeVisible();
     expect(screen.getByRole("link", { name: "Activity" })).toHaveAttribute(

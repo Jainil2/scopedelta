@@ -183,7 +183,11 @@ export function BoardWorkspace({
         Board moves update the same workflow state as the backlog. Changes only
         appear after the server accepts them.
       </p>
-      {message ? <output>{message}</output> : null}
+      {message ? (
+        <output role="status" className="workspace-message">
+          {message}
+        </output>
+      ) : null}
       <div className="backlog-toolbar">
         <PlanningFilters
           filters={filters}
@@ -629,7 +633,13 @@ export function MyWorkWorkspace({
           <Link href={`/app/${workspaceSlug}/my-work`}>Clear</Link>
         ) : null}
       </form>
-      <div className="my-work-list">
+      <div className="my-work-list" aria-busy={pending}>
+        <div className="my-work-list-header" aria-hidden="true">
+          <span>Project</span>
+          <span>Work item</span>
+          <span>Delivery context</span>
+          <span>Status</span>
+        </div>
         {items.map((item) => (
           <article className="my-work-row" key={item.id}>
             <div className="my-work-project">

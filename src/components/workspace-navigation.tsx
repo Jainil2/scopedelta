@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { AppIcon, type AppIconName } from "@/components/app-icon";
 import type { WorkspaceRole } from "@/db/schema";
 
-type NavigationItem = readonly [label: string, path: string];
+type NavigationItem = readonly [label: string, path: string, icon: AppIconName];
 
 export function WorkspaceNavigation({
   workspaceSlug,
@@ -14,30 +15,36 @@ export function WorkspaceNavigation({
   const pathname = usePathname();
   const root = `/app/${workspaceSlug}`;
   const groups: Array<readonly [string, NavigationItem[]]> = [
-    ["Home", [["Overview", root]]],
+    ["Home", [["Overview", root, "home"]]],
     [
       "Delivery",
       [
-        ["Clients", `${root}/clients`],
-        ["Projects", `${root}/projects`],
-        ["My work", `${root}/my-work`],
-        ["Operations", `${root}/operations`],
+        ["Clients", `${root}/clients`, "clients"],
+        ["Projects", `${root}/projects`, "projects"],
+        ["My work", `${root}/my-work`, "my-work"],
+        ["Operations", `${root}/operations`, "operations"],
       ],
     ],
-    ["Collaboration", [["Inbox", `${root}/inbox`]]],
+    ["Collaboration", [["Inbox", `${root}/inbox`, "inbox"]]],
     [
       "Workspace",
       [
-        ["Settings", `${root}/settings`],
-        ["Members", `${root}/settings/members`],
+        ["Settings", `${root}/settings`, "settings"],
+        ["Members", `${root}/settings/members`, "members"],
         ...(role !== "member"
           ? ([
-              ["Getting started", `${root}/settings/getting-started`],
-              ["Adoption", `${root}/settings/adoption`],
+              [
+                "Getting started",
+                `${root}/settings/getting-started`,
+                "getting-started",
+              ],
+              ["Adoption", `${root}/settings/adoption`, "adoption"],
             ] as NavigationItem[])
           : []),
         ...(role === "owner"
-          ? ([["Billing", `${root}/settings/billing`]] as NavigationItem[])
+          ? ([
+              ["Billing", `${root}/settings/billing`, "billing"],
+            ] as NavigationItem[])
           : []),
       ],
     ],
@@ -66,13 +73,14 @@ function renderGroups(
   return groups.map(([label, items]) => (
     <section className="app-navigation-group" key={label}>
       <h2>{label}</h2>
-      {items.map(([itemLabel, href]) => (
+      {items.map(([itemLabel, href, icon]) => (
         <Link
           href={href}
           key={href}
           aria-current={isActive(pathname, href, root) ? "page" : undefined}
         >
-          {itemLabel}
+          <AppIcon name={icon} />
+          <span>{itemLabel}</span>
         </Link>
       ))}
     </section>

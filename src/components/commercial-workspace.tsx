@@ -435,6 +435,14 @@ export function CommercialWorkspace({
         </p>
       ) : null}
 
+      <div className="commercial-drift-priority">
+        <DriftLedger
+          drift={drift}
+          workspaceSlug={workspaceSlug}
+          projectKey={project.key}
+        />
+      </div>
+
       <div className="commercial-workspace-grid">
         <div className="commercial-ledger">
           <section className="commercial-section">
@@ -792,12 +800,6 @@ export function CommercialWorkspace({
           </section>
 
           <BaselineHistory history={history} />
-
-          <DriftLedger
-            drift={drift}
-            workspaceSlug={workspaceSlug}
-            projectKey={project.key}
-          />
         </div>
 
         <EvidenceInspector
@@ -1336,10 +1338,15 @@ function formatBytes(bytes: number) {
 }
 
 function formatTimestamp(value: string | Date) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return `${new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "UTC",
+  }).format(new Date(value))} UTC`;
 }
 
 function sourceKindLabel(kind: Source["kind"]) {

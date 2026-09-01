@@ -4,8 +4,9 @@ import { BrandLockup } from "@/components/brand";
 import { DesktopNotificationBridge } from "@/components/desktop-notification-bridge";
 import { WebMcpBridge } from "@/components/webmcp-bridge";
 import { WorkspaceNavigation } from "@/components/workspace-navigation";
-import { WorkspaceSwitcher, initials } from "@/components/workspace-switcher";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import type { WorkspaceRole } from "@/db/schema";
+import { initials } from "@/lib/utils";
 
 type Workspace = {
   id: string;

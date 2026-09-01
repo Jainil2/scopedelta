@@ -14,8 +14,9 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { WorkspaceNavigation } from "@/components/workspace-navigation";
-import { WorkspaceSwitcher, initials } from "@/components/workspace-switcher";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import type { WorkspaceRole } from "@/db/schema";
+import { initials } from "@/lib/utils";
 
 type Workspace = {
   id: string;

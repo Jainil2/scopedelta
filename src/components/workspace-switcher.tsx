@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { WorkspaceRole } from "@/db/schema";
+import { initials } from "@/lib/utils";
 
 type Workspace = {
   id: string;
@@ -86,13 +87,4 @@ export function WorkspaceSwitcher({
       </DropdownMenu>
     </div>
   );
-}
-
-export function initials(value: string) {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BrandLockup } from "@/components/brand";
 import { ClientNotificationInbox } from "@/components/client-notification-inbox";
 import { requireSession } from "@/lib/session";
 import { listClientNotifications } from "@/server/client-collaboration";
@@ -17,9 +18,7 @@ export default async function ClientNotificationsPage() {
   return (
     <main className="client-shell client-index">
       <header className="client-topbar">
-        <Link className="client-wordmark" href="/client">
-          ScopeDelta <span>client</span>
-        </Link>
+        <BrandLockup href="/client" />
         <nav aria-label="Client navigation">
           <Link href="/client">Projects</Link>
           {workspaces.length ? <Link href="/app">Team workspace</Link> : null}

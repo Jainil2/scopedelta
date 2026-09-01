@@ -926,9 +926,9 @@ export function ProjectOverview({
     <div className="delivery-stack">
       <header className="project-header">
         <div>
-          <p className="eyebrow">Command center</p>
+          <p className="eyebrow">{project.clientName} · Project briefing</p>
           <div className="delivery-row-title command-center-title">
-            <h1>Project overview</h1>
+            <h1>{project.name}</h1>
             <span className={`state-token state-${project.lifecycle}`}>
               {project.lifecycle}
             </span>
@@ -936,9 +936,7 @@ export function ProjectOverview({
           <p>{project.summary || "No project summary added."}</p>
           <p className="command-center-context">
             <span className="project-key">{project.key}</span>
-            <span>{project.name}</span>
-            <span aria-hidden="true">·</span>
-            <span>{project.clientName}</span>
+            <span>Current delivery and commercial position</span>
           </p>
         </div>
         <div className="command-center-actions">

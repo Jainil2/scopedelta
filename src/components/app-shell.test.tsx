@@ -11,7 +11,6 @@ vi.mock("@/lib/auth-client", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
   usePathname: () => "/app/northstar-delivery-a1b2c3d4/clients",
-  useSearchParams: () => new URLSearchParams(),
 }));
 
 import { AppShell } from "./app-shell";
@@ -52,9 +51,7 @@ describe("authenticated application shell", () => {
     await user.click(
       screen.getByText("Northstar Delivery", { selector: "strong" }),
     );
-    expect(
-      screen.getByRole("navigation", { name: "Workspace switcher" }),
-    ).toBeVisible();
+    expect(await screen.findByText("Switch workspace")).toBeVisible();
     expect(screen.getAllByText("owner")).not.toHaveLength(0);
     expect(screen.getByRole("link", { name: /River Studio/ })).toHaveAttribute(
       "href",

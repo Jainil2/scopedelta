@@ -1,8 +1,16 @@
 "use client";
 
+import { ChevronDown, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRef, useState } from "react";
+import { useState } from "react";
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type ProjectLink = readonly [label: string, path: string];
 
@@ -23,7 +31,6 @@ export function ProjectContextBar({
 }>) {
   const pathname = usePathname();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
-  const moreMenu = useRef<HTMLDetailsElement>(null);
   const root = `/app/${workspaceSlug}/projects/${project.key}`;
   const navigating =
     pendingHref !== null && !projectPathActive(pathname, pendingHref, root);
@@ -74,38 +81,49 @@ export function ProjectContextBar({
             {label}
           </Link>
         ))}
-        <details className="project-more-menu" ref={moreMenu}>
-          <summary>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="project-more-menu"
+            render={<button type="button" />}
+          >
             More
             {activeLabel && secondary.some(([label]) => label === activeLabel)
               ? ` · ${activeLabel}`
               : ""}
-          </summary>
-          <div>
+            <ChevronDown aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="min-w-56 rounded-xl border-stone-200 bg-[#fffdf8] p-1.5 shadow-xl"
+          >
             {secondary.map(([label, href]) => (
-              <Link
-                href={href}
+              <DropdownMenuItem
+                className="min-h-10 rounded-lg px-3"
                 key={href}
-                onClick={() => {
-                  setPendingHref(href);
-                  if (moreMenu.current) moreMenu.current.open = false;
-                }}
-                aria-current={
-                  projectPathActive(pathname, href, root) ? "page" : undefined
+                render={
+                  <Link
+                    href={href}
+                    onClick={() => setPendingHref(href)}
+                    aria-current={
+                      projectPathActive(pathname, href, root)
+                        ? "page"
+                        : undefined
+                    }
+                  />
                 }
               >
                 {label}
-              </Link>
+              </DropdownMenuItem>
             ))}
-          </div>
-        </details>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {navigating ? (
           <span
             className="project-navigation-status"
             role="status"
             aria-live="polite"
           >
-            Loading project workspace…
+            <LoaderCircle aria-hidden="true" /> Loading project workspace…
           </span>
         ) : null}
       </nav>

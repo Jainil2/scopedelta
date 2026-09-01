@@ -2,6 +2,9 @@
 
 import { type FormEvent, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   type BusinessType,
   type LeadApiResponse,
@@ -116,7 +119,7 @@ export function LeadForm() {
           error={fieldErrors.name}
           required
         >
-          <input
+          <Input
             id="name"
             name="name"
             autoComplete="name"
@@ -134,7 +137,7 @@ export function LeadForm() {
           error={fieldErrors.email}
           required
         >
-          <input
+          <Input
             id="email"
             name="email"
             type="email"
@@ -181,7 +184,7 @@ export function LeadForm() {
           error={fieldErrors.company}
           hint="Optional"
         >
-          <input
+          <Input
             id="company"
             name="company"
             autoComplete="organization"
@@ -201,7 +204,7 @@ export function LeadForm() {
         hint="A short operational example is enough."
         required
       >
-        <textarea
+        <Textarea
           id="scopeChallenge"
           name="scopeChallenge"
           rows={5}
@@ -221,7 +224,7 @@ export function LeadForm() {
 
       <div className="honeypot" aria-hidden="true">
         <label htmlFor="website">Website</label>
-        <input
+        <Input
           id="website"
           name="website"
           tabIndex={-1}
@@ -237,14 +240,14 @@ export function LeadForm() {
       </p>
 
       <div className="form-submit-row">
-        <button
+        <Button
           className="button button-light"
           type="submit"
           disabled={isSubmitting}
         >
           {isSubmitting ? "Sending application…" : "Apply for a paid pilot"}
           <span aria-hidden="true">↗</span>
-        </button>
+        </Button>
         <p
           className={`form-status form-status-${status.kind}`}
           aria-live="polite"

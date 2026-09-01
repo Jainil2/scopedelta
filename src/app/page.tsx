@@ -1,292 +1,292 @@
+import { ArrowDown, ArrowRight, Check, Plus, ShieldCheck } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 
+import { BrandLockup, BrandMark } from "@/components/brand";
 import { LeadForm } from "@/components/lead-form";
 
 const workflowSteps = [
   {
     number: "01",
-    title: "Bring the agreed scope",
-    copy: "Start from the work both sides already understand—not from a blank change-order template.",
+    title: "Anchor the agreement",
+    copy: "Bring the scope both sides already understand into one commercial baseline.",
   },
   {
     number: "02",
-    title: "Add the new request",
-    copy: "Capture what the client is now asking for in the language your delivery team received.",
+    title: "Capture the new request",
+    copy: "Record what changed in the same language your delivery team received.",
   },
   {
     number: "03",
-    title: "Review the scope decision",
-    copy: "Check the reasoning, correct the classification, and decide what should become billable.",
+    title: "Review the difference",
+    copy: "Check the evidence, correct the classification, and decide what is billable.",
   },
   {
     number: "04",
-    title: "Send a clear change order",
-    copy: "Turn the approved difference into client-ready language with the impact made explicit.",
+    title: "Create the client decision",
+    copy: "Move forward with a clear change order, delivery impact, and audit trail.",
   },
 ] as const;
 
 export default function Home() {
   return (
-    <main>
+    <>
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
 
-      <section className="hero" aria-labelledby="page-title">
-        <Image
-          className="hero-image"
-          src="/images/scope-review-hero.png"
-          alt="A project lead reviewing synthetic scope notes at a desk"
-          fill
-          loading="eager"
-          fetchPriority="high"
-          sizes="100vw"
-        />
-        <div className="hero-shade" aria-hidden="true" />
+      <main className="marketing-site" id="main-content">
+        <section className="marketing-hero" aria-labelledby="page-title">
+          <header className="marketing-header">
+            <BrandLockup inverse />
+            <nav aria-label="Account and pilot">
+              <Link href="/sign-in">Sign in</Link>
+              <a className="marketing-header-cta" href="#pilot">
+                Apply for the pilot <ArrowRight aria-hidden="true" />
+              </a>
+            </nav>
+          </header>
 
-        <header className="site-header content-width">
-          <a
-            className="wordmark"
-            href="#page-title"
-            aria-label="ScopeDelta home"
-          >
-            <BrandMark />
-            ScopeDelta
-          </a>
-          <nav className="site-header-actions" aria-label="Account and pilot">
-            <a className="header-link" href="/sign-in">
-              Sign in <span aria-hidden="true">→</span>
-            </a>
-            <a className="header-link" href="#pilot">
-              Paid pilot <span aria-hidden="true">↘</span>
-            </a>
-          </nav>
-        </header>
+          <div className="marketing-hero-layout">
+            <div className="marketing-hero-copy">
+              <p className="marketing-kicker marketing-reveal-1">
+                Commercial control for software delivery
+              </p>
+              <h1 className="marketing-reveal-2" id="page-title">
+                Make every scope change visible before margin disappears.
+              </h1>
+              <p className="marketing-reveal-3">
+                ScopeDelta connects the agreed plan, the work being delivered,
+                and the client decision—without letting AI make the final call.
+              </p>
+              <div className="marketing-hero-actions marketing-reveal-4">
+                <a href="#pilot">
+                  Apply for a paid pilot <ArrowRight aria-hidden="true" />
+                </a>
+                <a href="#decision">
+                  Explore the decision flow <ArrowDown aria-hidden="true" />
+                </a>
+              </div>
+            </div>
 
-        <div className="hero-content content-width" id="main-content">
-          <p className="hero-eyebrow hero-stagger-1">
-            For software agencies &amp; senior freelancers
-          </p>
-          <h1 className="hero-stagger-2" id="page-title">
-            Turn scope creep into approved, billable work.
-          </h1>
-          <p className="hero-intro hero-stagger-3">
-            Compare each new request with what was agreed, review the reasoning,
-            and move toward a clear change order before margin quietly
-            disappears.
-          </p>
-          <div className="hero-actions hero-stagger-4">
-            <a className="button button-accent" href="#pilot">
-              Apply for a paid pilot <span aria-hidden="true">↘</span>
-            </a>
-            <a className="text-link" href="#example">
-              See a scope decision <span aria-hidden="true">↓</span>
-            </a>
+            <ProductDecisionCanvas />
           </div>
-        </div>
 
-        <p className="image-note content-width">
-          Original synthetic scene · no client data
-        </p>
-      </section>
+          <div className="marketing-hero-note">
+            <span>Built for agencies and senior freelancers</span>
+            <span>Human approval stays mandatory</span>
+          </div>
+        </section>
 
-      <section
-        className="problem-section section-pad"
-        aria-labelledby="problem-title"
-      >
-        <div className="content-width editorial-grid reveal">
-          <p className="section-index">01 / The margin problem</p>
-          <div>
+        <section className="marketing-intro" aria-labelledby="problem-title">
+          <div className="marketing-section-label">The margin problem</div>
+          <div className="marketing-intro-copy">
             <h2 id="problem-title">
-              The request sounds small.
-              <br />
-              The margin loss isn’t.
+              The request sounds small. The delivery delta is not.
             </h2>
-            <div className="problem-copy columns-copy">
-              <p>
-                A new export, a revised approval flow, or “just one” recurring
-                report can arrive in a friendly message and leave without a
-                commercial decision.
-              </p>
-              <p>
-                ScopeDelta is designed to make the difference visible while
-                there is still time to discuss it—before delivery pressure turns
-                extra work into an unplanned write-off.
-              </p>
-            </div>
+            <p>
+              A new export, revised approval path, or recurring report often
+              arrives as a quick favor. ScopeDelta turns that informal request
+              into a decision while the agency still has time to protect the
+              relationship and the margin.
+            </p>
           </div>
-        </div>
-      </section>
+          <figure className="marketing-editorial-image">
+            <Image
+              src="/images/scope-review-hero.png"
+              alt="A project lead reviewing synthetic scope notes at a desk"
+              fill
+              sizes="(max-width: 900px) 100vw, 52vw"
+            />
+            <figcaption>
+              Review the difference before delivery absorbs it.
+            </figcaption>
+          </figure>
+        </section>
 
-      <section
-        className="decision-section section-pad"
-        id="example"
-        aria-labelledby="example-title"
-      >
-        <div className="content-width">
-          <div className="section-heading reveal">
-            <p className="section-index">02 / A scope decision</p>
-            <div>
-              <p className="section-kicker">Illustrative synthetic example</p>
-              <h2 id="example-title">
-                See the difference, not just the request.
-              </h2>
-            </div>
+        <section
+          className="marketing-decision"
+          id="decision"
+          aria-labelledby="decision-title"
+        >
+          <div className="marketing-decision-heading">
+            <div className="marketing-section-label">One commercial record</div>
+            <h2 id="decision-title">
+              From incoming request to an evidence-backed client decision.
+            </h2>
           </div>
-
-          <div className="decision-board reveal">
-            <div className="decision-input">
-              <article>
-                <p className="decision-label">Agreed scope</p>
-                <h3>Manual monthly CSV export</h3>
-                <p>
-                  An administrator can download the current month’s account data
-                  as a CSV file from the reporting screen.
-                </p>
-              </article>
-              <article>
-                <p className="decision-label">New request</p>
-                <h3>Scheduled, branded Excel emails</h3>
-                <p>
-                  Every Monday, email each client a branded Excel workbook for
-                  their account—without an administrator running the export.
-                </p>
-              </article>
+          <div className="marketing-decision-flow">
+            <article>
+              <span>Agreed scope</span>
+              <h3>Manual monthly CSV export</h3>
+              <p>An administrator downloads the current month on demand.</p>
+            </article>
+            <div className="marketing-flow-connector" aria-hidden="true">
+              <Plus />
             </div>
-
-            <article
-              className="decision-result"
-              aria-label="Illustrative scope decision"
-            >
-              <div className="classification-row">
-                <p className="decision-label">Illustrative classification</p>
-                <code>partially_in_scope</code>
-              </div>
-              <div className="decision-reasoning">
-                <div>
-                  <span className="delta-marker" aria-hidden="true">
-                    ✓
-                  </span>
-                  <p>
-                    <strong>Covered:</strong> producing the underlying monthly
-                    data as a manual CSV export.
-                  </p>
-                </div>
-                <div>
-                  <span className="delta-marker delta-new" aria-hidden="true">
-                    +
-                  </span>
-                  <p>
-                    <strong>New work:</strong> scheduling, branded Excel output,
-                    recipient rules, and automated email delivery.
-                  </p>
-                </div>
-              </div>
-              <div className="review-rule">
-                <BrandMark />
-                <p>
-                  <strong>Agency review is mandatory.</strong> The team checks
-                  the reasoning and decides what to propose before anything
-                  reaches the client.
-                </p>
-              </div>
+            <article>
+              <span>New request</span>
+              <h3>Scheduled, branded Excel emails</h3>
+              <p>Each client receives a workbook automatically every Monday.</p>
+            </article>
+            <div className="marketing-flow-connector" aria-hidden="true">
+              <ArrowRight />
+            </div>
+            <article className="marketing-decision-outcome">
+              <span>Agency-reviewed outcome</span>
+              <h3>Partially in scope</h3>
+              <p>
+                The export exists. Scheduling, branding, recipient rules, and
+                delivery automation are new work.
+              </p>
             </article>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section
-        className="workflow-section section-pad"
-        aria-labelledby="workflow-title"
-      >
-        <div className="content-width">
-          <div className="section-heading reveal">
-            <p className="section-index">03 / The workflow</p>
+        <section
+          className="marketing-workflow"
+          aria-labelledby="workflow-title"
+        >
+          <div className="marketing-workflow-heading">
+            <div className="marketing-section-label">How the work moves</div>
             <h2 id="workflow-title">
-              From “quick favor” to a commercial decision.
+              A disciplined path from request to commercial clarity.
             </h2>
           </div>
-          <ol className="workflow-list reveal">
+          <ol>
             {workflowSteps.map((step) => (
               <li key={step.number}>
-                <span className="step-number">{step.number}</span>
+                <span>{step.number}</span>
                 <div>
                   <h3>{step.title}</h3>
                   <p>{step.copy}</p>
                 </div>
-                <span className="step-arrow" aria-hidden="true">
-                  ↘
-                </span>
+                <ArrowRight aria-hidden="true" />
               </li>
             ))}
           </ol>
-        </div>
-      </section>
+        </section>
 
-      <section
-        className="trust-section section-pad"
-        aria-labelledby="trust-title"
-      >
-        <div className="content-width trust-layout reveal">
-          <p className="section-index">04 / Built for judgment</p>
+        <section className="marketing-control" aria-labelledby="control-title">
           <div>
-            <h2 id="trust-title">Your agency stays in control.</h2>
-            <p className="trust-lead">
-              ScopeDelta supports a commercial conversation. It does not make
-              the final scope decision, contact clients, or approve work on your
-              behalf.
-            </p>
-            <div className="trust-points">
-              <p>Human review before client communication</p>
-              <p>Your team controls the quote and timeline</p>
-              <p>No confidential documents needed to apply</p>
-            </div>
+            <div className="marketing-section-label">Built for judgment</div>
+            <h2 id="control-title">
+              Your team stays commercially accountable.
+            </h2>
           </div>
-        </div>
-      </section>
+          <div className="marketing-control-copy">
+            <p>
+              ScopeDelta supports a commercial conversation. It does not contact
+              clients, approve work, or turn probabilistic output into
+              authority.
+            </p>
+            <ul>
+              <li>
+                <Check aria-hidden="true" /> Human review before client
+                communication
+              </li>
+              <li>
+                <Check aria-hidden="true" /> Evidence remains connected to the
+                decision
+              </li>
+              <li>
+                <Check aria-hidden="true" /> Your team owns quote and timeline
+                changes
+              </li>
+            </ul>
+          </div>
+        </section>
 
-      <section
-        className="pilot-section"
-        id="pilot"
-        aria-labelledby="pilot-title"
-      >
-        <div className="content-width pilot-layout">
-          <div className="pilot-copy reveal">
-            <p className="section-index">05 / Paid pilot</p>
+        <section
+          className="marketing-pilot"
+          id="pilot"
+          aria-labelledby="pilot-title"
+        >
+          <div className="marketing-pilot-copy">
+            <BrandMark />
+            <div className="marketing-section-label">Paid pilot</div>
             <h2 id="pilot-title">
-              Bring us the scope conversations that keep slipping.
+              Bring the scope conversations that keep slipping.
             </h2>
             <p>
-              We’re inviting small software agencies and senior freelancers to
-              apply for a paid pilot. Tell us where the handoff from request to
-              change order breaks down today.
+              We are inviting small software agencies and senior freelancers to
+              test ScopeDelta on the real handoff between request and change
+              order.
             </p>
+            <div className="marketing-pilot-trust">
+              <ShieldCheck aria-hidden="true" />
+              Do not submit contracts or confidential client material.
+            </div>
           </div>
-          <div className="reveal">
-            <LeadForm />
-          </div>
-        </div>
-        <footer className="site-footer content-width">
-          <span>ScopeDelta</span>
-          <span>Make the change visible.</span>
+          <LeadForm />
+        </section>
+
+        <footer className="marketing-footer">
+          <BrandLockup />
+          <p>Make the change visible.</p>
+          <Link href="/sign-in">Open your workspace</Link>
         </footer>
-      </section>
-    </main>
+      </main>
+    </>
   );
 }
 
-function BrandMark() {
+function ProductDecisionCanvas() {
   return (
-    <svg
-      className="brand-mark"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      focusable="false"
+    <div
+      className="marketing-product-canvas marketing-reveal-3"
+      aria-label="ScopeDelta product preview"
     >
-      <path
-        d="M12 2 22 21H2L12 2Zm0 5.1L6.7 18h10.6L12 7.1Z"
-        fill="currentColor"
-      />
-    </svg>
+      <div className="product-canvas-bar">
+        <span>Northstar Retail</span>
+        <strong>NOVA · Checkout recovery</strong>
+        <span>September release</span>
+      </div>
+      <div className="product-canvas-body">
+        <aside>
+          <span>Overview</span>
+          <strong>Scope decisions</strong>
+          <span>Delivery evidence</span>
+          <span>Client review</span>
+        </aside>
+        <div className="product-decision-main">
+          <header>
+            <div>
+              <span>Decision required</span>
+              <h2>Weekly branded account export</h2>
+            </div>
+            <span className="product-risk-label">Commercial review</span>
+          </header>
+          <div className="product-decision-columns">
+            <section>
+              <span>Baseline</span>
+              <h3>Manual CSV download</h3>
+              <p>Administrator initiated · monthly · raw CSV</p>
+            </section>
+            <section>
+              <span>Requested change</span>
+              <h3>Automated Excel delivery</h3>
+              <p>Scheduled · branded · per-client recipient rules</p>
+            </section>
+          </div>
+          <div className="product-decision-summary">
+            <div>
+              <span>Scope position</span>
+              <strong>Partially in scope</strong>
+            </div>
+            <p>
+              Data export is covered. Scheduling, presentation, and automated
+              delivery require a commercial decision.
+            </p>
+          </div>
+          <footer>
+            <span>
+              <ShieldCheck aria-hidden="true" /> Human review required
+            </span>
+            <span className="product-canvas-action">Prepare change order</span>
+          </footer>
+        </div>
+      </div>
+    </div>
   );
 }

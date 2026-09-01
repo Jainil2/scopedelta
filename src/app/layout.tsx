@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
 
+import "@fontsource-variable/manrope";
+import "@fontsource-variable/newsreader";
+
+import { TooltipProvider } from "@/components/ui/tooltip";
+
 import "./globals.css";
 
 const localAppUrl = "http://localhost:3000";
@@ -19,7 +24,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
-      <body>{children}</body>
+      <body>
+        <TooltipProvider>{children}</TooltipProvider>
+      </body>
     </html>
   );
 }

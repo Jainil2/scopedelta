@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useRef, useState, useTransition } from "react";
 
+import { BrandLockup } from "@/components/brand";
 import type { ClientProjectProjection } from "@/lib/client-project-projection";
 
 type ProjectOption = {
@@ -166,9 +167,7 @@ export function ClientProjectWorkspace({
   return (
     <main className="client-shell">
       <header className="client-topbar">
-        <Link className="client-wordmark" href="/client">
-          ScopeDelta <span>client</span>
-        </Link>
+        <BrandLockup href="/client" />
         <nav aria-label="Client projects">
           {projects.map((project) => (
             <Link

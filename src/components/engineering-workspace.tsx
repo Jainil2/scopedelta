@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 
 import { apiRequest } from "@/components/delivery-workspace";
-import { ProjectTabs } from "@/components/planning-workspace";
 
 type DateValue = string | Date | null;
 
@@ -264,11 +263,6 @@ export function EngineeringWorkspace({
             verification, defects, and client acceptance.
           </p>
         </div>
-        <ProjectTabs
-          workspaceSlug={workspaceSlug}
-          projectKey={project.key}
-          current="engineering"
-        />
       </header>
 
       <EngineeringStatusMessages message={message} pending={pending} />

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 
 type Status = { kind: "idle" | "error" | "success"; message: string };
@@ -309,7 +311,7 @@ function FormControl({
         {label}
         {hint ? <small>{hint}</small> : null}
       </span>
-      <input id={id} required {...props} />
+      <Input id={id} required {...props} />
     </label>
   );
 }
@@ -324,14 +326,14 @@ function SubmitButton({
   children: React.ReactNode;
 }>) {
   return (
-    <button
+    <Button
       className="app-primary-button"
       type="submit"
       disabled={pending || disabled}
     >
       {pending ? "Please wait…" : children}
       <span aria-hidden="true">↗</span>
-    </button>
+    </Button>
   );
 }
 

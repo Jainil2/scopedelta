@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { BrandLockup } from "@/components/brand";
 import { requireSession } from "@/lib/session";
 import { listClientProjects } from "@/server/client-collaboration";
 import { listWorkspaces } from "@/server/workspaces";
@@ -21,9 +22,7 @@ export default async function ClientHomePage() {
   return (
     <main className="client-shell client-index">
       <header className="client-topbar">
-        <span className="client-wordmark">
-          ScopeDelta <span>client</span>
-        </span>
+        <BrandLockup href="/client" />
         <nav aria-label="Client navigation">
           <Link href="/client/notifications">Inbox</Link>
           {workspaces.length ? <Link href="/app">Team workspace</Link> : null}

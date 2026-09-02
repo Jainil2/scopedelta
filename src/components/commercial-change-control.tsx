@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 import { apiRequest } from "@/components/delivery-workspace";
 import { ClarificationDrafts } from "@/components/ai-delivery-workspace";
@@ -113,25 +113,35 @@ export function CommercialChangeControl({
 }>) {
   const router = useRouter();
   const [message, setMessage] = useState("");
-  const [pending, startTransition] = useTransition();
+  const pending = false;
+  const [requestChanges, setRequestChanges] = useState<
+    Record<string, CommercialRequest>
+  >({});
   const base = `/api/v1/workspaces/${workspaceId}/projects/${projectId}/commercial/requests`;
   const readySources = sources.filter(
     (source) => source.parseState === "ready",
   );
   const activeScope = scopeItems.filter((item) => !item.archivedAt);
-  const openRequests = ledger.data.filter(
+  const requestRows = [
+    ...ledger.data.map((request) => requestChanges[request.id] ?? request),
+    ...Object.values(requestChanges).filter(
+      (request) =>
+        !ledger.data.some((candidate) => candidate.id === request.id),
+    ),
+  ];
+  const openRequests = requestRows.filter(
     (request) => request.state === "open",
   );
-  const clarificationRequests = ledger.data.filter(
+  const clarificationRequests = requestRows.filter(
     (request) => request.state === "needs_clarification",
   );
-  const decided = ledger.data.filter(
+  const decided = requestRows.filter(
     (request) => request.state === "resolved" || request.state === "withdrawn",
   );
 
   function refresh(text: string) {
     setMessage(text);
-    startTransition(() => router.refresh());
+    router.refresh();
   }
 
   async function createRequest(event: FormEvent<HTMLFormElement>) {
@@ -140,7 +150,7 @@ export function CommercialChangeControl({
     const form = new FormData(formElement);
     const receivedValue = String(form.get("receivedAt") || "");
     const impact = impactPayload(form, "request");
-    const response = await apiRequest(base, "POST", {
+    const response = await apiRequest<CommercialRequest>(base, "POST", {
       idempotencyKey: crypto.randomUUID(),
       title: form.get("title"),
       requestText: form.get("requestText"),
@@ -153,17 +163,32 @@ export function CommercialChangeControl({
       impact,
     });
     if (response.ok) {
+      if (response.data) {
+        setRequestChanges((current) => ({
+          ...current,
+          [response.data!.id]: response.data!,
+        }));
+      }
       formElement.reset();
       refresh("Client request recorded.");
     } else setMessage(response.message);
   }
 
   async function updateState(requestId: string, state: string) {
-    const response = await apiRequest(`${base}/${requestId}`, "PATCH", {
-      state,
-    });
-    if (response.ok) refresh("Request state updated.");
-    else setMessage(response.message);
+    const response = await apiRequest<CommercialRequest>(
+      `${base}/${requestId}`,
+      "PATCH",
+      { state },
+    );
+    if (response.ok) {
+      if (response.data) {
+        setRequestChanges((current) => ({
+          ...current,
+          [response.data!.id]: response.data!,
+        }));
+      }
+      refresh("Request state updated.");
+    } else setMessage(response.message);
   }
 
   async function confirmDecision(
@@ -174,7 +199,7 @@ export function CommercialChangeControl({
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const disposition = String(form.get("disposition"));
-    const response = await apiRequest(
+    const response = await apiRequest<CommercialRequest>(
       `${base}/${request.id}/decisions`,
       "POST",
       {
@@ -192,6 +217,12 @@ export function CommercialChangeControl({
       },
     );
     if (response.ok) {
+      if (response.data) {
+        setRequestChanges((current) => ({
+          ...current,
+          [response.data!.id]: response.data!,
+        }));
+      }
       formElement.reset();
       refresh(
         request.currentDecision
@@ -210,12 +241,22 @@ export function CommercialChangeControl({
     const form = new FormData(formElement);
     const impact = impactPayload(form, "followup");
     if (!impact) return setMessage("Record at least one impact value.");
-    const response = await apiRequest(`${base}/${request.id}/impacts`, "POST", {
-      ...impact,
-      decisionId: request.currentDecision?.id ?? null,
-      supersedesImpactAssessmentId: request.impacts[0]?.id ?? null,
-    });
+    const response = await apiRequest<CommercialRequest>(
+      `${base}/${request.id}/impacts`,
+      "POST",
+      {
+        ...impact,
+        decisionId: request.currentDecision?.id ?? null,
+        supersedesImpactAssessmentId: request.impacts[0]?.id ?? null,
+      },
+    );
     if (response.ok) {
+      if (response.data) {
+        setRequestChanges((current) => ({
+          ...current,
+          [response.data!.id]: response.data!,
+        }));
+      }
       formElement.reset();
       refresh("Impact assessment recorded without rewriting prior history.");
     } else setMessage(response.message);
@@ -236,7 +277,7 @@ export function CommercialChangeControl({
           </p>
         </div>
         <span className="commercial-badge commercial-linked">
-          {ledger.page.total} requests
+          {ledger.page.total + requestRows.length - ledger.data.length} requests
         </span>
       </header>
 

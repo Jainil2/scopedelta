@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { BrandLockup } from "@/components/brand";
+
 export function AuthShell({
   eyebrow,
   title,
@@ -17,14 +19,9 @@ export function AuthShell({
         Skip to content
       </a>
       <header className="auth-header">
-        <Link className="app-wordmark" href="/">
-          <span className="app-brand-mark" aria-hidden="true">
-            Δ
-          </span>{" "}
-          ScopeDelta
-        </Link>
+        <BrandLockup />
         <Link className="auth-home-link" href="/">
-          Public site
+          Back to the public site
         </Link>
       </header>
       <section className="auth-layout" aria-labelledby="auth-title">
@@ -32,10 +29,11 @@ export function AuthShell({
           <p className="app-eyebrow">{eyebrow}</p>
           <h1 id="auth-title">{title}</h1>
           <p>{description}</p>
-          <p className="auth-boundary">
-            Workspaces are isolated by server-side membership checks. Never
-            paste contracts or confidential client content into account forms.
-          </p>
+          <div className="auth-proof" aria-label="Account protections">
+            <span>Verified work identity</span>
+            <span>Server-side workspace isolation</span>
+            <span>No confidential documents required</span>
+          </div>
         </div>
         <div className="auth-form-region">{children}</div>
       </section>

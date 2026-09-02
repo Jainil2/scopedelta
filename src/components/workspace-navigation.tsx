@@ -1,82 +1,96 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
+import {
+  BarChart3,
+  Building2,
+  CreditCard,
+  FolderKanban,
+  Inbox,
+  LayoutDashboard,
+  Leaf,
+  ListTodo,
+  Rocket,
+  Settings,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import type { WorkspaceRole } from "@/db/schema";
+import { cn } from "@/lib/utils";
 
-type NavigationItem = readonly [label: string, path: string];
+type NavigationItem = readonly [label: string, path: string, icon: LucideIcon];
 
 export function WorkspaceNavigation({
   workspaceSlug,
   role,
-}: Readonly<{ workspaceSlug: string; role: WorkspaceRole }>) {
+  onNavigate,
+}: Readonly<{
+  workspaceSlug: string;
+  role: WorkspaceRole;
+  onNavigate?: () => void;
+}>) {
   const pathname = usePathname();
   const root = `/app/${workspaceSlug}`;
   const groups: Array<readonly [string, NavigationItem[]]> = [
-    ["Home", [["Overview", root]]],
+    ["Workspace", [["Overview", root, LayoutDashboard]]],
     [
       "Delivery",
       [
-        ["Clients", `${root}/clients`],
-        ["Projects", `${root}/projects`],
-        ["My work", `${root}/my-work`],
-        ["Operations", `${root}/operations`],
+        ["Clients", `${root}/clients`, Building2],
+        ["Projects", `${root}/projects`, FolderKanban],
+        ["My work", `${root}/my-work`, ListTodo],
+        ["Operations", `${root}/operations`, BarChart3],
       ],
     ],
-    ["Collaboration", [["Inbox", `${root}/inbox`]]],
+    ["Communication", [["Inbox", `${root}/inbox`, Inbox]]],
     [
-      "Workspace",
+      "Administration",
       [
-        ["Settings", `${root}/settings`],
-        ["Members", `${root}/settings/members`],
+        ["Settings", `${root}/settings`, Settings],
+        ["Members", `${root}/settings/members`, Users],
         ...(role !== "member"
           ? ([
-              ["Getting started", `${root}/settings/getting-started`],
-              ["Adoption", `${root}/settings/adoption`],
+              ["Getting started", `${root}/settings/getting-started`, Rocket],
+              ["Adoption", `${root}/settings/adoption`, Leaf],
             ] as NavigationItem[])
           : []),
         ...(role === "owner"
-          ? ([["Billing", `${root}/settings/billing`]] as NavigationItem[])
+          ? ([
+              ["Billing", `${root}/settings/billing`, CreditCard],
+            ] as NavigationItem[])
           : []),
       ],
     ],
   ];
-  const activeLabel = groups
-    .flatMap(([, items]) => items)
-    .find(([, href]) => isActive(pathname, href, root))?.[0];
 
   return (
     <nav className="app-navigation" aria-label="Workspace">
-      <details className="workspace-navigation-menu" open>
-        <summary>
-          Workspace menu{activeLabel ? ` · ${activeLabel}` : ""}
-        </summary>
-        <div>{renderGroups(groups, pathname, root)}</div>
-      </details>
+      {groups.map(([label, items]) => (
+        <section className="app-navigation-group" key={label}>
+          <h2>{label}</h2>
+          <div>
+            {items.map(([itemLabel, href, Icon]) => {
+              const active = isActive(pathname, href, root);
+              return (
+                <Link
+                  className={cn(active && "is-active")}
+                  href={href}
+                  key={href}
+                  onClick={onNavigate}
+                  aria-current={active ? "page" : undefined}
+                >
+                  <Icon aria-hidden="true" />
+                  <span>{itemLabel}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </nav>
   );
-}
-
-function renderGroups(
-  groups: Array<readonly [string, NavigationItem[]]>,
-  pathname: string,
-  root: string,
-) {
-  return groups.map(([label, items]) => (
-    <section className="app-navigation-group" key={label}>
-      <h2>{label}</h2>
-      {items.map(([itemLabel, href]) => (
-        <Link
-          href={href}
-          key={href}
-          aria-current={isActive(pathname, href, root) ? "page" : undefined}
-        >
-          {itemLabel}
-        </Link>
-      ))}
-    </section>
-  ));
 }
 
 function isActive(pathname: string, href: string, root: string) {

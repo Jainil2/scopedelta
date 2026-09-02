@@ -49,20 +49,16 @@ describe("authenticated application shell", () => {
 
     expect(screen.getByRole("navigation", { name: "Workspace" })).toBeVisible();
     await user.click(
-      screen.getByText("Northstar Delivery", { selector: "summary" }),
+      screen.getByText("Northstar Delivery", { selector: "strong" }),
     );
-    expect(
-      screen.getByRole("navigation", { name: "Workspace switcher" }),
-    ).toBeVisible();
+    expect(await screen.findByText("Switch workspace")).toBeVisible();
     expect(screen.getAllByText("owner")).not.toHaveLength(0);
-    expect(screen.getByRole("link", { name: /River Studio/ })).toHaveAttribute(
-      "href",
-      "/app/river-studio-e5f6a7b8",
-    );
-    expect(screen.getByRole("link", { name: /New workspace/ })).toHaveAttribute(
-      "href",
-      "/onboarding",
-    );
+    expect(
+      screen.getByRole("menuitem", { name: /River Studio/ }),
+    ).toHaveAttribute("href", "/app/river-studio-e5f6a7b8");
+    expect(
+      screen.getByRole("menuitem", { name: /New workspace/ }),
+    ).toHaveAttribute("href", "/onboarding");
     expect(
       screen.getByRole("link", { name: "Skip to content" }),
     ).toHaveAttribute("href", "#main-content");
@@ -76,7 +72,10 @@ describe("authenticated application shell", () => {
     );
     expect(screen.getByRole("heading", { name: "Delivery" })).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Collaboration" }),
+      screen.getByRole("heading", { name: "Communication" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Administration" }),
     ).toBeVisible();
     expect(screen.getByRole("heading", { name: "Workspace" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Projects" })).toHaveAttribute(
@@ -85,5 +84,32 @@ describe("authenticated application shell", () => {
     );
     expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
     expect(screen.getByText("Browser tools unavailable")).toBeVisible();
+  });
+
+  it("opens the mobile workspace navigation as an accessible sheet", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppShell
+        current={{
+          id: "workspace-one",
+          name: "Northstar Delivery",
+          slug: "northstar-delivery-a1b2c3d4",
+          role: "owner",
+        }}
+        workspaces={[]}
+        userId="user-one"
+        userName="Alex Rivera"
+      >
+        <h1>Workspace overview</h1>
+      </AppShell>,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Open workspace navigation" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Workspace navigation" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Close" })).toBeEnabled();
   });
 });

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BrandLockup } from "@/components/brand";
 import { WorkspaceCreateForm } from "@/components/platform-forms";
 import { requireSession } from "@/lib/session";
 
@@ -15,12 +16,7 @@ export default async function OnboardingPage() {
   return (
     <main className="onboarding-page">
       <header className="auth-header">
-        <Link className="app-wordmark" href="/">
-          <span className="app-brand-mark" aria-hidden="true">
-            Δ
-          </span>{" "}
-          ScopeDelta
-        </Link>
+        <BrandLockup />
         {existing[0] ? (
           <Link className="auth-home-link" href={`/app/${existing[0].slug}`}>
             Back to workspace

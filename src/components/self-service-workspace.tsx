@@ -155,10 +155,23 @@ export function WorkspaceLifecyclePanel({
   const [message, setMessage] = useState("");
   const [workspaceExport, setWorkspaceExport] =
     useState<WorkspaceExport | null>(null);
-  const open = requests.find((request) =>
+  const [createdRequest, setCreatedRequest] = useState<LifecycleRequest | null>(
+    null,
+  );
+  const [dismissedRequestIds, setDismissedRequestIds] = useState<string[]>([]);
+  const currentRequests = [
+    ...(createdRequest &&
+    !requests.some((request) => request.id === createdRequest.id)
+      ? [createdRequest]
+      : []),
+    ...requests,
+  ].filter((request) => !dismissedRequestIds.includes(request.id));
+  const open = currentRequests.find((request) =>
     ["requested", "in_review", "blocked"].includes(request.state),
   );
-  const processed = requests.find((request) => request.state === "processed");
+  const processed = currentRequests.find(
+    (request) => request.state === "processed",
+  );
 
   async function createExport() {
     if (pending) return;
@@ -222,15 +235,19 @@ export function WorkspaceLifecyclePanel({
     setPending(true);
     setMessage("");
     try {
-      await mutate(`/api/v1/workspaces/${workspaceId}/lifecycle-requests`, {
-        method: "POST",
-        body: JSON.stringify({
-          intent: data.get("intent"),
-          confirmation: data.get("confirmation"),
-          exportAcknowledged: data.get("exportAcknowledged") === "on",
-          retentionAcknowledged: data.get("retentionAcknowledged") === "on",
-        }),
-      });
+      const request = await mutate<LifecycleRequest>(
+        `/api/v1/workspaces/${workspaceId}/lifecycle-requests`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            intent: data.get("intent"),
+            confirmation: data.get("confirmation"),
+            exportAcknowledged: data.get("exportAcknowledged") === "on",
+            retentionAcknowledged: data.get("retentionAcknowledged") === "on",
+          }),
+        },
+      );
+      setCreatedRequest(request);
       setMessage("Lifecycle request recorded. No workspace data was deleted.");
       router.refresh();
     } catch (error) {
@@ -252,6 +269,7 @@ export function WorkspaceLifecyclePanel({
         `/api/v1/workspaces/${workspaceId}/lifecycle-requests/${open.id}`,
         { method: "DELETE" },
       );
+      setDismissedRequestIds((current) => [...current, open.id]);
       setMessage("Lifecycle request canceled.");
       router.refresh();
     } catch (error) {

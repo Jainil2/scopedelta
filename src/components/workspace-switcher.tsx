@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -50,31 +51,33 @@ export function WorkspaceSwitcher({
           className="w-[var(--anchor-width)] min-w-64 rounded-xl border-stone-200 bg-[#fffdf8] p-1.5 shadow-xl"
           sideOffset={8}
         >
-          <DropdownMenuLabel className="px-2.5 py-2 text-[0.68rem] font-bold uppercase tracking-[0.13em] text-stone-500">
-            Switch workspace
-          </DropdownMenuLabel>
-          {workspaces.map((workspace) => (
-            <DropdownMenuItem
-              key={workspace.id}
-              className="min-h-11 gap-3 rounded-lg px-2.5 py-2"
-              render={<Link href={`/app/${workspace.slug}`} />}
-            >
-              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-stone-100 text-[0.65rem] font-extrabold text-stone-700">
-                {initials(workspace.name)}
-              </span>
-              <span className="grid min-w-0 flex-1">
-                <strong className="truncate text-sm font-semibold">
-                  {workspace.name}
-                </strong>
-                <small className="capitalize text-stone-500">
-                  {workspace.role}
-                </small>
-              </span>
-              {workspace.id === current.id ? (
-                <Check className="size-4 text-[#365b45]" aria-hidden="true" />
-              ) : null}
-            </DropdownMenuItem>
-          ))}
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="px-2.5 py-2 text-[0.68rem] font-bold uppercase tracking-[0.13em] text-stone-500">
+              Switch workspace
+            </DropdownMenuLabel>
+            {workspaces.map((workspace) => (
+              <DropdownMenuItem
+                key={workspace.id}
+                className="min-h-11 gap-3 rounded-lg px-2.5 py-2"
+                render={<Link href={`/app/${workspace.slug}`} />}
+              >
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-stone-100 text-[0.65rem] font-extrabold text-stone-700">
+                  {initials(workspace.name)}
+                </span>
+                <span className="grid min-w-0 flex-1">
+                  <strong className="truncate text-sm font-semibold">
+                    {workspace.name}
+                  </strong>
+                  <small className="capitalize text-stone-500">
+                    {workspace.role}
+                  </small>
+                </span>
+                {workspace.id === current.id ? (
+                  <Check className="size-4 text-[#365b45]" aria-hidden="true" />
+                ) : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="min-h-10 gap-2 rounded-lg px-2.5"

@@ -4,8 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 
-import { ProjectTabs } from "@/components/planning-workspace";
-
 type Project = { id: string; key: string; name: string; clientName: string };
 type PageInfo = { number: number; size: number; total: number; pages: number };
 type Member = { userId: string; name: string };
@@ -100,14 +98,10 @@ async function mutate<T>(
 
 function ProjectHeader({
   project,
-  workspaceSlug,
-  current,
   title,
   detail,
 }: Readonly<{
   project: Project;
-  workspaceSlug: string;
-  current: "brief" | "activity";
   title: string;
   detail: string;
 }>) {
@@ -123,11 +117,6 @@ function ProjectHeader({
           {detail} · {project.name}
         </p>
       </div>
-      <ProjectTabs
-        workspaceSlug={workspaceSlug}
-        projectKey={project.key}
-        current={current}
-      />
     </header>
   );
 }
@@ -273,7 +262,6 @@ function MentionControl({
 
 export function ProjectBriefWorkspace({
   workspaceId,
-  workspaceSlug,
   project,
   initialNotes,
   members,
@@ -359,8 +347,6 @@ export function ProjectBriefWorkspace({
     <section className="collaboration-page">
       <ProjectHeader
         project={project}
-        workspaceSlug={workspaceSlug}
-        current="brief"
         title="Project brief"
         detail="Durable context for the delivery team"
       />
@@ -515,8 +501,6 @@ export function ActivityWorkspace({
     <section className="collaboration-page">
       <ProjectHeader
         project={project}
-        workspaceSlug={workspaceSlug}
-        current="activity"
         title="Project activity"
         detail="A factual, privacy-safe delivery timeline"
       />

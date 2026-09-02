@@ -212,6 +212,14 @@ function TemplateLedger({
   const router = useRouter();
   const [pending, setPending] = useState("");
   const [message, setMessage] = useState("");
+  const [createdTemplates, setCreatedTemplates] = useState<Template[]>([]);
+  const templateRows = [
+    ...templates,
+    ...createdTemplates.filter(
+      (template) =>
+        !templates.some((candidate) => candidate.id === template.id),
+    ),
+  ];
 
   async function createTemplate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -221,10 +229,14 @@ function TemplateLedger({
     setPending("create-template");
     setMessage("");
     try {
-      await apiRequest(`/api/v1/workspaces/${workspaceId}/project-templates`, {
-        method: "POST",
-        body: JSON.stringify(templatePayload(data)),
-      });
+      const template = await apiRequest<Template>(
+        `/api/v1/workspaces/${workspaceId}/project-templates`,
+        {
+          method: "POST",
+          body: JSON.stringify(templatePayload(data)),
+        },
+      );
+      setCreatedTemplates((current) => [...current, template]);
       form.reset();
       setMessage(
         "Template created. Applying it will copy this version into a new project.",
@@ -325,9 +337,9 @@ function TemplateLedger({
           pending={pending === "create-template"}
         />
       </details>
-      {templates.length ? (
+      {templateRows.length ? (
         <div className="adoption-ledger">
-          {templates.map((template) => (
+          {templateRows.map((template) => (
             <details className="adoption-template" key={template.id}>
               <summary>
                 <span>

@@ -2,8 +2,6 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 
-import { ProjectTabs } from "@/components/planning-workspace";
-
 type JobKind =
   "scope_change_analysis" | "delivery_risk_brief" | "work_context_qa_pack";
 type JobStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
@@ -83,7 +81,6 @@ function labelForKind(kind: JobKind) {
 
 export function AiDeliveryWorkspace({
   workspaceId,
-  workspaceSlug,
   project,
   initialJobs,
   requests,
@@ -230,11 +227,6 @@ export function AiDeliveryWorkspace({
             actions · {project.name}
           </p>
         </div>
-        <ProjectTabs
-          workspaceSlug={workspaceSlug}
-          projectKey={project.key}
-          current="ai"
-        />
       </header>
 
       {message ? <output className="ai-message">{message}</output> : null}

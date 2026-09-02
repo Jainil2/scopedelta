@@ -1440,8 +1440,7 @@ textarea:disabled {
   letter-spacing: 0.04em;
 }
 
-.project-context-navigation,
-.project-tabs {
+.project-context-navigation {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -1452,8 +1451,7 @@ textarea:disabled {
 }
 
 .project-context-navigation > a,
-.project-more-menu,
-.project-tabs a {
+.project-more-menu {
   display: inline-flex;
   min-height: 2.7rem;
   min-width: max-content;
@@ -1472,8 +1470,7 @@ textarea:disabled {
 .project-context-navigation > a:hover,
 .project-context-navigation > a[aria-current="page"],
 .project-more-menu:hover,
-.project-more-menu[data-popup-open],
-.project-tabs a[aria-current="page"] {
+.project-more-menu[data-popup-open] {
   background: #e4ebe5;
   color: #294634;
 }

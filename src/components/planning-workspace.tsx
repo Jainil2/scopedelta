@@ -174,8 +174,6 @@ export function BoardWorkspace({
     <div className="delivery-stack planning-workspace">
       <ProjectHeader
         project={project}
-        workspaceSlug={workspaceSlug}
-        current="board"
         title="Board"
         detail={`${pageInfo.total} active work items`}
       />
@@ -388,7 +386,6 @@ export function BoardWorkspace({
 
 export function CyclesWorkspace({
   workspaceId,
-  workspaceSlug,
   project,
   cycles,
   pageInfo,
@@ -438,8 +435,6 @@ export function CyclesWorkspace({
     <div className="delivery-stack cycles-workspace">
       <ProjectHeader
         project={project}
-        workspaceSlug={workspaceSlug}
-        current="cycles"
         title="Cycles"
         detail={`${pageInfo.total} planning timeboxes`}
       />
@@ -832,14 +827,10 @@ function PlanningFilters({
 
 function ProjectHeader({
   project,
-  workspaceSlug,
-  current,
   title,
   detail,
 }: Readonly<{
   project: Project;
-  workspaceSlug: string;
-  current: "board" | "cycles";
   title: string;
   detail: string;
 }>) {
@@ -855,76 +846,7 @@ function ProjectHeader({
           {detail} · {project.name}
         </p>
       </div>
-      <ProjectTabs
-        workspaceSlug={workspaceSlug}
-        projectKey={project.key}
-        current={current}
-      />
     </header>
-  );
-}
-
-export function ProjectTabs({
-  workspaceSlug,
-  projectKey,
-  current,
-}: Readonly<{
-  workspaceSlug: string;
-  projectKey: string;
-  current:
-    | "overview"
-    | "backlog"
-    | "board"
-    | "cycles"
-    | "brief"
-    | "commercial"
-    | "engineering"
-    | "ai"
-    | "activity";
-}>) {
-  const tabs = [
-    ["overview", "Overview", `/app/${workspaceSlug}/projects/${projectKey}`],
-    [
-      "backlog",
-      "Backlog",
-      `/app/${workspaceSlug}/projects/${projectKey}/backlog`,
-    ],
-    ["board", "Board", `/app/${workspaceSlug}/projects/${projectKey}/board`],
-    ["cycles", "Cycles", `/app/${workspaceSlug}/projects/${projectKey}/cycles`],
-    ["brief", "Brief", `/app/${workspaceSlug}/projects/${projectKey}/brief`],
-    [
-      "commercial",
-      "Commercial",
-      `/app/${workspaceSlug}/projects/${projectKey}/commercial`,
-    ],
-    [
-      "engineering",
-      "Engineering & QA",
-      `/app/${workspaceSlug}/projects/${projectKey}/engineering`,
-    ],
-    [
-      "ai",
-      "AI intelligence",
-      `/app/${workspaceSlug}/projects/${projectKey}/ai`,
-    ],
-    [
-      "activity",
-      "Activity",
-      `/app/${workspaceSlug}/projects/${projectKey}/activity`,
-    ],
-  ] as const;
-  return (
-    <nav className="project-tabs" aria-label="Project">
-      {tabs.map(([id, label, href]) => (
-        <Link
-          href={href}
-          key={id}
-          aria-current={id === current ? "page" : undefined}
-        >
-          {label}
-        </Link>
-      ))}
-    </nav>
   );
 }
 

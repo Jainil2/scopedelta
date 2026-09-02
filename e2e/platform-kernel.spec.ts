@@ -46,6 +46,9 @@ test.beforeAll(async () => {
   await new Promise<void>((resolve) =>
     aiStub.listen(3902, "127.0.0.1", resolve),
   );
+});
+
+test.beforeEach(async () => {
   await withTestDatabase(async (pool) => {
     await pool.query("truncate table auth_rate_limits, action_rate_limits");
   });
@@ -324,7 +327,7 @@ test("client project, milestone, and backlog work through the production UI", as
     ),
   ).toBe(true);
   await openProjectMore(page);
-  await expect(page.getByRole("link", { name: "Activity" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Activity" })).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 1000 });
 
   await page.getByText("New milestone").click();
@@ -367,7 +370,7 @@ test("client project, milestone, and backlog work through the production UI", as
   ).toBeVisible();
 
   await openProjectMore(page);
-  await page.getByRole("link", { name: "Cycles" }).click();
+  await page.getByRole("menuitem", { name: "Cycles" }).click();
   await expect(
     page.getByRole("heading", { name: "No open cycles" }),
   ).toBeVisible();
@@ -648,17 +651,19 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
     leadPage.getByRole("heading", { name: "Commercial", level: 1 }),
   ).toBeVisible();
   await openProjectMore(leadPage);
-  await leadPage.getByRole("link", { name: "Engineering & QA" }).click();
+  await leadPage.getByRole("menuitem", { name: "Engineering & QA" }).click();
   await expect(
     leadPage.getByRole("heading", { name: "Engineering & QA evidence" }),
   ).toBeVisible();
   await openProjectMore(leadPage);
-  await leadPage.getByRole("link", { name: "Client collaboration" }).click();
+  await leadPage
+    .getByRole("menuitem", { name: "Client collaboration" })
+    .click();
   await expect(
     leadPage.getByRole("heading", { name: "Client collaboration" }),
   ).toBeVisible();
   await openProjectMore(leadPage);
-  await leadPage.getByRole("link", { name: "Activity" }).click();
+  await leadPage.getByRole("menuitem", { name: "Activity" }).click();
   await expect(
     leadPage.getByRole("heading", { name: "Project activity" }),
   ).toBeVisible();
@@ -672,7 +677,7 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
     ),
   ).toBe(true);
   await openProjectMore(leadPage);
-  const narrowEngineeringLink = leadPage.getByRole("link", {
+  const narrowEngineeringLink = leadPage.getByRole("menuitem", {
     name: "Engineering & QA",
   });
   await expect(narrowEngineeringLink).toBeVisible();
@@ -723,26 +728,21 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
     "The requested workspace or project is unavailable to this user. Check project_key and current access before retrying.",
   );
   await openProjectMore(memberPage);
-  const memberProjectNavigation = memberPage.getByRole("navigation", {
-    name: "Project",
-  });
   await expect(
-    memberProjectNavigation.getByRole("link", { name: "Engineering & QA" }),
+    memberPage.getByRole("menuitem", { name: "Engineering & QA" }),
   ).toBeVisible();
   await expect(
-    memberProjectNavigation.getByRole("link", { name: "Client collaboration" }),
+    memberPage.getByRole("menuitem", { name: "Client collaboration" }),
   ).toHaveCount(0);
   await expect(
-    memberProjectNavigation.getByRole("link", { name: "Activity" }),
+    memberPage.getByRole("menuitem", { name: "Activity" }),
   ).toBeVisible();
-  await memberProjectNavigation
-    .getByRole("link", { name: "Engineering & QA" })
-    .click();
+  await memberPage.getByRole("menuitem", { name: "Engineering & QA" }).click();
   await expect(
     memberPage.getByRole("heading", { name: "Engineering & QA evidence" }),
   ).toBeVisible();
   await openProjectMore(memberPage);
-  await memberProjectNavigation.getByRole("link", { name: "Activity" }).click();
+  await memberPage.getByRole("menuitem", { name: "Activity" }).click();
   await expect(
     memberPage.getByRole("heading", { name: "Project activity" }),
   ).toBeVisible();
@@ -778,7 +778,10 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
     });
   }
   await leadPage
-    .getByRole("navigation", { name: "Workspace" })
+    .getByRole("button", { name: "Open workspace navigation" })
+    .click();
+  await leadPage
+    .getByRole("dialog", { name: "Workspace navigation" })
     .getByRole("link", { name: "My work", exact: true })
     .click();
   await expect(
@@ -786,10 +789,15 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
       name: /Confirm wholesale change-order review/,
     }),
   ).toBeVisible();
-  const signOutButton = leadPage.getByRole("button", { name: "Sign out" });
+  await leadPage
+    .getByRole("button", { name: "Open workspace navigation" })
+    .click();
+  const signOutButton = leadPage
+    .getByRole("dialog", { name: "Workspace navigation" })
+    .getByRole("button", { name: "Sign out" });
   await expect(signOutButton).toBeInViewport();
   await expect(signOutButton).toBeEnabled();
-  await expectFourBrowserTools(leadPage);
+  await expectFourBrowserTools(leadPage, { visibleStatus: false });
   await memberContext.close();
   await leadContext.close();
 });
@@ -832,7 +840,7 @@ test("owner operates portfolio capacity and work-item time from the UI", async (
   await milestoneForm.getByRole("button", { name: "Create milestone" }).click();
   await expect(page.getByRole("status")).toHaveText("Milestone created.");
 
-  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByRole("link", { name: "Backlog", exact: true }).click();
   await page.getByText("New work item").click();
   const workForm = page.locator("form.work-form").filter({
     has: page.getByRole("button", { name: "Create work item" }),
@@ -1066,7 +1074,7 @@ test("admin applies a template, previews Jira CSV, imports safely, and exports c
   await applyForm.getByRole("button", { name: "Apply v1" }).click();
   await page.waitForURL(/\/projects\/TPL$/);
   await expect(page.getByText("Release ready", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByRole("link", { name: "Backlog", exact: true }).click();
   await expect(
     page.getByRole("button", { name: /TPL-1 Prepare delivery launch/ }),
   ).toBeVisible();
@@ -1161,7 +1169,7 @@ test("commercial baseline, decision authorization and contradictions stay tracea
   await page.getByLabel("Project name").fill("Evidence-backed delivery");
   await page.getByRole("button", { name: "Create project" }).click();
   await page.getByRole("link", { name: /Evidence-backed delivery/ }).click();
-  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByRole("link", { name: "Backlog", exact: true }).click();
   await page.getByText("New work item").click();
   const workForm = page.locator("form.work-form").filter({
     has: page.getByRole("button", { name: "Create work item" }),
@@ -1513,7 +1521,7 @@ test("project brief, work discussion, activity, and inbox are accessible and bou
   await page.getByLabel("Project name").fill("Contextual delivery");
   await page.getByRole("button", { name: "Create project" }).click();
   await page.getByRole("link", { name: /Contextual delivery/ }).click();
-  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByRole("link", { name: "Backlog", exact: true }).click();
   await page.getByText("New work item").click();
   const createForm = page.locator("form.work-form").filter({
     has: page.getByRole("button", { name: "Create work item" }),
@@ -1616,7 +1624,7 @@ test("project brief, work discussion, activity, and inbox are accessible and bou
   await page.goto(`/app/${workspaceSlug}/projects/TEAM/brief`);
   await page.getByLabel("Title").fill("Launch constraint");
   await page
-    .getByLabel("Context")
+    .getByRole("textbox", { name: "Context", exact: true })
     .fill("Keep the rollout limited to the internal delivery team.");
   await page.getByRole("button", { name: "Save note" }).click();
   await expect(
@@ -1624,7 +1632,7 @@ test("project brief, work discussion, activity, and inbox are accessible and bou
   ).toBeVisible();
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page
-    .getByLabel("Context")
+    .getByRole("textbox", { name: "Context", exact: true })
     .fill(
       "Keep the rollout limited to the internal delivery team until review.",
     );
@@ -1755,7 +1763,9 @@ test("client collaboration keeps one commercial truth across internal and extern
 
   await Promise.all([
     page.waitForURL(/\/app\/[^/]+\/projects\/[^/]+\/client$/),
-    page.getByRole("link", { name: "Client collaboration" }).click(),
+    page
+      .getByRole("link", { name: "Client collaboration", exact: true })
+      .click(),
   ]);
   const clientManagementUrl = page.url();
   const workspaceSlug = new URL(clientManagementUrl).pathname.split("/")[2]!;
@@ -2169,7 +2179,7 @@ test("local engineering QA evidence and defects stay traceable without GitHub", 
   await page.getByLabel("Project name").fill("Engineering QA loop");
   await page.getByRole("button", { name: "Create project" }).click();
   await page.getByRole("link", { name: /Engineering QA loop/ }).click();
-  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByRole("link", { name: "Backlog", exact: true }).click();
   await page.getByText("New work item").click();
   const workForm = page.locator("form.work-form").filter({
     has: page.getByRole("button", { name: "Create work item" }),
@@ -2280,7 +2290,7 @@ test("AI delivery jobs stay cited, stale-aware, and human-confirmed", async ({
   await page.getByLabel("Project name").fill("AI delivery evidence");
   await page.getByRole("button", { name: "Create project" }).click();
   await page.getByRole("link", { name: /AI delivery evidence/ }).click();
-  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByRole("link", { name: "Backlog", exact: true }).click();
   await page.getByText("New work item").click();
   const workForm = page.locator("form.work-form").filter({
     has: page.getByRole("button", { name: "Create work item" }),
@@ -2504,17 +2514,22 @@ async function installWebMcpModelContext(page: Page) {
   });
 }
 
-async function expectFourBrowserTools(page: Page) {
+async function expectFourBrowserTools(
+  page: Page,
+  { visibleStatus = true }: { visibleStatus?: boolean } = {},
+) {
   const expected = [
     "list_my_work",
     "search_work_items",
     "get_commercial_drift",
     "create_work_item",
   ];
-  await expect(page.getByText("4 browser tools active")).toBeVisible();
-  await expect(page.locator(".webmcp-tool-names")).toHaveText(
-    expected.join(", "),
-  );
+  if (visibleStatus) {
+    await expect(page.getByText("4 browser tools active")).toBeVisible();
+    await expect(page.locator(".webmcp-tool-names")).toHaveText(
+      expected.join(", "),
+    );
+  }
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -3056,10 +3071,11 @@ async function removeDevIndicator(page: Page) {
 }
 
 async function openProjectMore(page: Page) {
-  const menu = page.locator("details.project-more-menu");
-  if (!(await menu.evaluate((element) => element.hasAttribute("open")))) {
-    await menu.locator("summary").click();
+  const trigger = page.getByRole("button", { name: /^More(?: · .+)?$/ });
+  if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+    await trigger.click();
   }
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
 }
 
 function isoDateOffset(value: string, days: number) {

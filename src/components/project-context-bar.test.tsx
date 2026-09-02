@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -43,12 +43,25 @@ describe("project context navigation", () => {
       "page",
     );
     expect(screen.getByRole("link", { name: "Commercial" })).toBeVisible();
+    const moreTrigger = screen.getByRole("button", { name: "More" });
+    await user.click(moreTrigger);
     expect(
-      screen.getByRole("link", { name: "Engineering & QA" }),
+      await screen.findByRole("menuitem", { name: "Engineering & QA" }),
     ).toHaveAttribute("href", "/app/northstar/projects/NOVA/engineering");
+    expect(moreTrigger).toHaveAttribute("aria-expanded", "true");
     expect(
-      screen.getByRole("link", { name: "Client collaboration" }),
+      screen.getByRole("menuitem", { name: "Client collaboration" }),
     ).toHaveAttribute("href", "/app/northstar/projects/NOVA/client");
+
+    window.addEventListener("click", (event) => event.preventDefault(), {
+      capture: true,
+      once: true,
+    });
+    await user.click(screen.getByRole("menuitem", { name: "Activity" }));
+    await waitFor(() =>
+      expect(moreTrigger).toHaveAttribute("aria-expanded", "false"),
+    );
+
     window.addEventListener("click", (event) => event.preventDefault(), {
       capture: true,
       once: true,
@@ -57,20 +70,10 @@ describe("project context navigation", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Loading project workspace…",
     );
-
-    const moreMenu = screen.getByText("More").closest("details");
-    expect(moreMenu).not.toBeNull();
-    await user.click(screen.getByText("More"));
-    expect(moreMenu).toHaveAttribute("open");
-    window.addEventListener("click", (event) => event.preventDefault(), {
-      capture: true,
-      once: true,
-    });
-    await user.click(screen.getByRole("link", { name: "Activity" }));
-    expect(moreMenu).not.toHaveAttribute("open");
   });
 
-  it("hides manager-only routes from ordinary members and identifies an active secondary route", () => {
+  it("hides manager-only routes from ordinary members and identifies an active secondary route", async () => {
+    const user = userEvent.setup();
     navigation.pathname = "/app/northstar/projects/NOVA/activity";
     render(
       <ProjectContextBar
@@ -87,9 +90,9 @@ describe("project context navigation", () => {
       screen.queryByRole("link", { name: "Client collaboration" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("More · Activity")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Activity" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    await user.click(screen.getByRole("button", { name: "More · Activity" }));
+    expect(
+      await screen.findByRole("menuitem", { name: "Activity" }),
+    ).toHaveAttribute("aria-current", "page");
   });
 });

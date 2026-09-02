@@ -720,6 +720,14 @@ function subscriptionEvent(input: {
   customerId?: string;
   checkoutAttemptId?: string;
 }): PaddleWebhookEvent {
+  const occurredAt = new Date(input.occurredAt).getTime();
+  const periodStartsAt = new Date(
+    occurredAt - 24 * 60 * 60 * 1_000,
+  ).toISOString();
+  const periodEndsAt = new Date(
+    occurredAt + 30 * 24 * 60 * 60 * 1_000,
+  ).toISOString();
+
   return {
     event_id: input.id,
     event_type:
@@ -743,13 +751,13 @@ function subscriptionEvent(input: {
           : {}),
       },
       current_billing_period: {
-        starts_at: "2026-08-01T00:00:00.000Z",
-        ends_at: "2026-09-01T00:00:00.000Z",
+        starts_at: periodStartsAt,
+        ends_at: periodEndsAt,
       },
       scheduled_change: input.scheduledCancel
         ? {
             action: "cancel",
-            effective_at: "2026-09-01T00:00:00.000Z",
+            effective_at: periodEndsAt,
           }
         : null,
       items: [{ price: { id: "pri_paid_test" } }],

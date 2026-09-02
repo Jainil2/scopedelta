@@ -238,7 +238,7 @@ function ProductDecisionCanvas() {
       aria-label="ScopeDelta product preview"
     >
       <div className="product-canvas-bar">
-        <span>Northstar Retail</span>
+        <span>Illustrative synthetic example · Northstar Retail</span>
         <strong>NOVA · Checkout recovery</strong>
         <span>September release</span>
       </div>

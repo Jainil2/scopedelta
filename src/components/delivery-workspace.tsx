@@ -324,11 +324,20 @@ export function ClientDirectory({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
+  const [clientChanges, setClientChanges] = useState<Record<string, Client>>(
+    {},
+  );
   const composerRef = useRef<HTMLDetailsElement>(null);
+  const clientRows = [
+    ...clients.map((client) => clientChanges[client.id] ?? client),
+    ...Object.values(clientChanges).filter(
+      (client) => !clients.some((candidate) => candidate.id === client.id),
+    ),
+  ];
 
   async function create(formData: FormData) {
     setMessage("");
-    const response = await apiRequest(
+    const response = await apiRequest<Client>(
       `/api/v1/workspaces/${workspaceId}/clients`,
       "POST",
       {
@@ -339,6 +348,12 @@ export function ClientDirectory({
     );
     setMessage(response.ok ? "Client created." : response.message);
     if (response.ok) {
+      if (response.data) {
+        setClientChanges((current) => ({
+          ...current,
+          [response.data!.id]: response.data!,
+        }));
+      }
       composerRef.current?.querySelector("form")?.reset();
       composerRef.current?.removeAttribute("open");
       startTransition(() => router.refresh());
@@ -347,17 +362,25 @@ export function ClientDirectory({
 
   async function setLifecycle(client: Client) {
     const next = client.lifecycle === "active" ? "archived" : "active";
-    const response = await apiRequest(
+    const response = await apiRequest<Client>(
       `/api/v1/workspaces/${workspaceId}/clients/${client.id}`,
       "PATCH",
       { lifecycle: next },
     );
     setMessage(response.ok ? `Client ${next}.` : response.message);
-    if (response.ok) startTransition(() => router.refresh());
+    if (response.ok) {
+      if (response.data) {
+        setClientChanges((current) => ({
+          ...current,
+          [response.data!.id]: response.data!,
+        }));
+      }
+      startTransition(() => router.refresh());
+    }
   }
 
   async function edit(client: Client, formData: FormData) {
-    const response = await apiRequest(
+    const response = await apiRequest<Client>(
       `/api/v1/workspaces/${workspaceId}/clients/${client.id}`,
       "PATCH",
       {
@@ -367,7 +390,15 @@ export function ClientDirectory({
       },
     );
     setMessage(response.ok ? "Client updated." : response.message);
-    if (response.ok) startTransition(() => router.refresh());
+    if (response.ok) {
+      if (response.data) {
+        setClientChanges((current) => ({
+          ...current,
+          [response.data!.id]: response.data!,
+        }));
+      }
+      startTransition(() => router.refresh());
+    }
   }
 
   return (
@@ -401,8 +432,8 @@ export function ClientDirectory({
       </header>
       {message ? <output>{message}</output> : null}
       <div className="delivery-list" aria-label="Clients">
-        {clients.length ? (
-          clients.map((client) => (
+        {clientRows.length ? (
+          clientRows.map((client) => (
             <article className="delivery-list-row" key={client.id}>
               <div>
                 <div className="delivery-row-title">
@@ -479,7 +510,8 @@ export function ClientDirectory({
           <span />
         )}
         <span>
-          Page {pageInfo.page} · {pageInfo.total} clients
+          Page {pageInfo.page} ·{" "}
+          {pageInfo.total + clientRows.length - clients.length} clients
         </span>
         {pageInfo.hasNextPage ? (
           <Link
@@ -521,13 +553,23 @@ export function ProjectDirectory({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
+  const [createdProjects, setCreatedProjects] = useState<Project[]>([]);
   const composerRef = useRef<HTMLDetailsElement>(null);
   const activeClients = clients.filter(
     (client) => client.lifecycle === "active",
   );
 
+  const projectRows = [
+    ...projects,
+    ...createdProjects.filter(
+      (project) =>
+        !projects.some((candidate) => candidate.id === project.id) &&
+        projectMatchesDirectory(project, query, lifecycle),
+    ),
+  ];
+
   async function create(formData: FormData) {
-    const response = await apiRequest(
+    const response = await apiRequest<Project>(
       `/api/v1/workspaces/${workspaceId}/projects`,
       "POST",
       {
@@ -542,6 +584,9 @@ export function ProjectDirectory({
     );
     setMessage(response.ok ? "Project created." : response.message);
     if (response.ok) {
+      if (response.data) {
+        setCreatedProjects((current) => [...current, response.data!]);
+      }
       composerRef.current?.querySelector("form")?.reset();
       composerRef.current?.removeAttribute("open");
       startTransition(() => router.refresh());
@@ -675,8 +720,8 @@ export function ProjectDirectory({
         ) : null}
       </form>
       <div className="delivery-list" aria-label="Projects">
-        {projects.length ? (
-          projects.map((project) => (
+        {projectRows.length ? (
+          projectRows.map((project) => (
             <Link
               className="delivery-list-row delivery-project-link"
               href={`/app/${workspaceSlug}/projects/${project.key}`}
@@ -736,7 +781,9 @@ export function ProjectDirectory({
           <span />
         )}
         <span>
-          Page {projectPageInfo.page} · {projectPageInfo.total} projects
+          Page {projectPageInfo.page} ·{" "}
+          {projectPageInfo.total + projectRows.length - projects.length}{" "}
+          projects
         </span>
         {projectPageInfo.hasNextPage ? (
           <Link
@@ -1473,39 +1520,6 @@ export function BacklogWorkspace({
             {pageInfo.total} active work items · {project.name}
           </p>
         </div>
-        <nav className="project-tabs" aria-label="Project">
-          <Link href={`/app/${workspaceSlug}/projects/${project.key}`}>
-            Overview
-          </Link>
-          <Link
-            aria-current="page"
-            href={`/app/${workspaceSlug}/projects/${project.key}/backlog`}
-          >
-            Backlog
-          </Link>
-          <Link href={`/app/${workspaceSlug}/projects/${project.key}/board`}>
-            Board
-          </Link>
-          <Link href={`/app/${workspaceSlug}/projects/${project.key}/cycles`}>
-            Cycles
-          </Link>
-          <Link href={`/app/${workspaceSlug}/projects/${project.key}/brief`}>
-            Brief
-          </Link>
-          <Link
-            href={`/app/${workspaceSlug}/projects/${project.key}/commercial`}
-          >
-            Commercial
-          </Link>
-          <Link
-            href={`/app/${workspaceSlug}/projects/${project.key}/engineering`}
-          >
-            Engineering &amp; QA
-          </Link>
-          <Link href={`/app/${workspaceSlug}/projects/${project.key}/activity`}>
-            Activity
-          </Link>
-        </nav>
       </header>
       {message ? <output>{message}</output> : null}
       <div className="backlog-toolbar">
@@ -2058,6 +2072,25 @@ export function backlogPageHref(filters: BacklogFilters, page: number) {
   return `?${query.toString()}`;
 }
 
+function projectMatchesDirectory(
+  project: Project,
+  query: string | undefined,
+  lifecycle: "current" | "active" | "completed" | "archived" | "all",
+) {
+  const matchesLifecycle =
+    lifecycle === "all" ||
+    (lifecycle === "current"
+      ? project.lifecycle === "active" || project.lifecycle === "completed"
+      : project.lifecycle === lifecycle);
+  const normalizedQuery = query?.trim().toLowerCase();
+  const matchesQuery =
+    !normalizedQuery ||
+    [project.key, project.name, project.clientName].some((value) =>
+      value.toLowerCase().includes(normalizedQuery),
+    );
+  return matchesLifecycle && matchesQuery;
+}
+
 function projectDirectoryHref(
   workspaceSlug: string,
   projectPage: number,
@@ -2172,17 +2205,23 @@ function formText(formData: FormData, name: string) {
   return typeof value === "string" ? value : "";
 }
 
-export async function apiRequest(url: string, method: string, body: unknown) {
+export async function apiRequest<T = unknown>(
+  url: string,
+  method: string,
+  body: unknown,
+) {
   const response = await fetch(url, {
     method,
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
   const payload = (await response.json()) as {
+    data?: T;
     error?: { message?: string };
   };
   return {
     ok: response.ok,
+    data: payload.data,
     message: payload.error?.message || "The action could not be completed.",
   };
 }

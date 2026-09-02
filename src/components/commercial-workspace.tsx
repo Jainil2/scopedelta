@@ -21,7 +21,6 @@ import {
   AppSelect,
   AppTextarea,
 } from "@/components/app-form-controls";
-import { ProjectTabs } from "@/components/planning-workspace";
 
 type Source = {
   id: string;
@@ -84,6 +83,8 @@ type Overview = {
   } | null;
   scopeItems: ScopeItem[];
 };
+
+type BaselineVersion = NonNullable<Overview["baseline"]>["versions"][number];
 
 type DriftItem = {
   id: string;
@@ -185,9 +186,37 @@ export function CommercialWorkspace({
   exposurePanel?: ReactNode;
 }>) {
   const router = useRouter();
-  const overview = initialOverview;
+  const [sourceAdditions, setSourceAdditions] = useState<Source[]>([]);
+  const [baselineVersionOverride, setBaselineVersionOverride] =
+    useState<BaselineVersion | null>(null);
+  const sources = [
+    ...initialOverview.sources,
+    ...sourceAdditions.filter(
+      (source) =>
+        !initialOverview.sources.some(
+          (candidate) => candidate.id === source.id,
+        ),
+    ),
+  ];
+  const overview =
+    initialOverview.baseline &&
+    baselineVersionOverride?.id === initialOverview.baseline.versionId
+      ? {
+          ...initialOverview,
+          sources,
+          baseline: {
+            ...initialOverview.baseline,
+            ...baselineVersionOverride,
+            versions: initialOverview.baseline.versions.map((version) =>
+              version.id === baselineVersionOverride.id
+                ? baselineVersionOverride
+                : version,
+            ),
+          },
+        }
+      : { ...initialOverview, sources };
   const [message, setMessage] = useState("");
-  const [pending, startTransition] = useTransition();
+  const pending = false;
   const [source, setSource] = useState<SourceDetail | null>(null);
   const [loadingSource, setLoadingSource] = useState(false);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
@@ -203,7 +232,7 @@ export function CommercialWorkspace({
 
   function refresh(text: string) {
     setMessage(text);
-    startTransition(() => router.refresh());
+    router.refresh();
   }
 
   async function loadSource(
@@ -266,7 +295,7 @@ export function CommercialWorkspace({
       mediaType = file.type;
       kind = file.name.toLowerCase().endsWith(".pdf") ? "pdf" : "docx";
     }
-    const response = await apiRequest(`${base}/sources`, "POST", {
+    const response = await apiRequest<Source>(`${base}/sources`, "POST", {
       idempotencyKey: crypto.randomUUID(),
       kind,
       name,
@@ -274,6 +303,9 @@ export function CommercialWorkspace({
       contentBase64: bytesToBase64(bytes),
     });
     if (response.ok) {
+      if (response.data) {
+        setSourceAdditions((current) => [...current, response.data!]);
+      }
       form.reset();
       refresh("Commercial source preserved and parsed.");
     } else setMessage(response.message);
@@ -304,13 +336,15 @@ export function CommercialWorkspace({
 
   async function activateVersion() {
     if (!overview.baseline) return;
-    const response = await apiRequest(
+    const response = await apiRequest<BaselineVersion>(
       `${base}/baseline/versions/${overview.baseline.versionId}/activate`,
       "POST",
       {},
     );
-    if (response.ok) refresh("Baseline version is now effective.");
-    else setMessage(response.message);
+    if (response.ok) {
+      if (response.data) setBaselineVersionOverride(response.data);
+      refresh("Baseline version is now effective.");
+    } else setMessage(response.message);
   }
 
   async function saveScope(event: FormEvent<HTMLFormElement>) {
@@ -396,11 +430,6 @@ export function CommercialWorkspace({
             {project.name}
           </p>
         </div>
-        <ProjectTabs
-          workspaceSlug={workspaceSlug}
-          projectKey={project.key}
-          current="commercial"
-        />
       </header>
 
       <section

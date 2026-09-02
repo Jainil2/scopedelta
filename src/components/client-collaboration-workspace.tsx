@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useRef, useState, useTransition } from "react";
 
@@ -62,7 +61,6 @@ function formString(data: FormData, name: string) {
 
 export function ClientCollaborationWorkspace({
   workspaceId,
-  workspaceSlug,
   project,
   preview,
   participants,
@@ -335,35 +333,6 @@ export function ClientCollaborationWorkspace({
           </p>
         </div>
       </header>
-      <nav className="project-tabs" aria-label="Project">
-        <Link href={`/app/${workspaceSlug}/projects/${project.key}`}>
-          Overview
-        </Link>
-        <Link href={`/app/${workspaceSlug}/projects/${project.key}/backlog`}>
-          Backlog
-        </Link>
-        <Link href={`/app/${workspaceSlug}/projects/${project.key}/board`}>
-          Board
-        </Link>
-        <Link href={`/app/${workspaceSlug}/projects/${project.key}/cycles`}>
-          Cycles
-        </Link>
-        <Link href={`/app/${workspaceSlug}/projects/${project.key}/brief`}>
-          Brief
-        </Link>
-        <Link href={`/app/${workspaceSlug}/projects/${project.key}/commercial`}>
-          Commercial
-        </Link>
-        <Link
-          aria-current="page"
-          href={`/app/${workspaceSlug}/projects/${project.key}/client`}
-        >
-          Client collaboration
-        </Link>
-        <Link href={`/app/${workspaceSlug}/projects/${project.key}/activity`}>
-          Activity
-        </Link>
-      </nav>
       {message ? <output className="client-alert">{message}</output> : null}
 
       <section className="management-grid">

@@ -10,11 +10,11 @@ describe("Home", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "Turn scope creep into approved, billable work.",
+        name: "Make every scope change visible before margin disappears.",
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/software agencies & senior freelancers/i),
+      screen.getByText(/small software agencies and senior freelancers/i),
     ).toBeInTheDocument();
     expect(
       screen.getAllByRole("link", { name: /apply for a paid pilot/i }).length,
@@ -24,13 +24,15 @@ describe("Home", () => {
   it("labels the example as synthetic and keeps decisions human-reviewed", () => {
     render(<Home />);
 
-    expect(screen.getByText("partially_in_scope")).toBeInTheDocument();
+    expect(screen.getAllByText(/partially in scope/i).length).toBeGreaterThan(
+      0,
+    );
     expect(
       screen.getByText(/illustrative synthetic example/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/agency review is mandatory/i)).toBeInTheDocument();
+    expect(screen.getByText(/human review required/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/does not make the final scope decision/i),
+      screen.getByText(/without letting AI make the final call/i),
     ).toBeInTheDocument();
   });
 

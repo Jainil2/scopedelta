@@ -223,7 +223,27 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:3200/ | grep --quiet "Turn scope creep into approved"; then
+            # Assert the public page contract, not mutable marketing copy.
+            if node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+
+          try {
+            const response = await fetch("http://127.0.0.1:3200/", {
+              redirect: "error",
+              signal: AbortSignal.timeout(5_000),
+            });
+            assert.equal(response.status, 200, "Homepage must return HTTP 200");
+            assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+            const html = await response.text();
+            assert.match(html, /<main\b[^>]*\bid="main-content"/, "Missing main landmark");
+            assert.match(html, /<h1\b[^>]*>/, "Missing page heading");
+            assert.match(html, /<a\b[^>]*\bhref="\/sign-in"/, "Missing sign-in navigation");
+          } catch (error) {
+            console.error(`Homepage smoke check failed: ${error.message}`);
+            process.exitCode = 1;
+          }
+          NODE
+            then
               exit 0
             fi
             sleep 1

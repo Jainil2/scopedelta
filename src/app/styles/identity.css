@@ -1,0 +1,488 @@
+/* ============================================================================
+   Identity and onboarding — plus the form-control system for the whole
+   product.
+
+   Two things live here. The first is the identity/onboarding shell. The second
+   is ancestor-scoped: the input, button, label and callout treatments below
+   are inherited by every authenticated screen, the client surface and the
+   marketing pilot form, so they are the product's control system rather than
+   a local decoration. Restyle them as such.
+
+   Direction "Dossier": cool achromatic document surfaces, hairline structure,
+   one authority accent (--seal), tight radii, no gradients. --shadow-1 is the
+   ceiling; --shadow-2 belongs to dialogs.
+
+   Responsive coverage is co-located. Intrinsic sizing (clamp, --content,
+   minmax(0, …)) carries most of it; the single query at 68rem exists only to
+   fold the two-column identity layout into one.
+   ============================================================================ */
+
+/* --- Page ground -----------------------------------------------------------
+   The old hard-stop two-tone split at 58% was a gradient pretending to be a
+   layout, and it had to be switched off the moment the columns stacked. The
+   split is now expressed structurally instead: one paper ground, and the form
+   is a bordered --surface card sitting on it. Nothing to unwind when it
+   stacks. */
+.auth-page,
+.onboarding-page {
+  min-height: 100svh;
+  background: var(--paper);
+}
+
+.auth-header {
+  display: flex;
+  width: var(--content);
+  min-height: clamp(4.5rem, 8vw, 6rem);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-3);
+  margin: 0 auto;
+  border-bottom: 1px solid var(--rule);
+}
+
+.auth-home-link {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  transition: color var(--dur-1) var(--ease);
+}
+
+.auth-home-link:hover {
+  color: var(--seal);
+}
+
+/* Asymmetric while there is room for it: the context column carries the
+   heading and the proof list, the form column only needs its own width.
+   minmax(0, …) tracks mean neither can push past the container even before
+   the 68rem query fires. */
+.auth-layout,
+.onboarding-layout {
+  display: grid;
+  width: var(--content);
+  min-height: calc(100svh - 6rem);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  align-items: center;
+  gap: clamp(var(--gap-4), 5vw, var(--gap-6));
+  margin: 0 auto;
+  padding: clamp(2.5rem, 6vw, 5rem) 0;
+}
+
+.auth-context,
+.onboarding-layout > div:first-child {
+  max-width: 42rem;
+}
+
+.app-eyebrow,
+.eyebrow {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+
+/* The display serif is gone. Character now comes from scale, weight and
+   rhythm inside --sans: the clamp rides the type scale itself, which also
+   removes the old narrow-viewport font-size override. */
+.auth-context h1,
+.onboarding-layout h1 {
+  max-width: 24ch;
+  margin: var(--gap-3) 0 var(--gap-3);
+  font-family: var(--sans);
+  font-size: clamp(var(--text-2xl), 4vw, var(--text-3xl));
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+
+.auth-context > p:not(.app-eyebrow),
+.onboarding-layout > div:first-child > p:not(.app-eyebrow) {
+  max-width: 36rem;
+  color: var(--ink-2);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+
+/* Three claims, filed as ledger rows rather than sold as features: hairline
+   separators, muted ink, and a single small seal dot per row. */
+.auth-proof {
+  display: grid;
+  gap: 0;
+  max-width: 36rem;
+  margin-top: var(--gap-5);
+  border-top: 1px solid var(--rule);
+}
+
+.auth-proof span {
+  display: flex;
+  align-items: baseline;
+  padding: var(--gap-2) 0;
+  border-bottom: 1px solid var(--rule-faint);
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+}
+
+.auth-proof span::before {
+  width: 0.3rem;
+  height: 0.3rem;
+  flex: none;
+  margin-right: var(--gap-2);
+  border-radius: var(--r-pill);
+  background: var(--seal);
+  content: "";
+}
+
+.auth-form-region,
+.onboarding-layout > form {
+  width: 100%;
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-4);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+
+.platform-form,
+.platform-form fieldset,
+.settings-form,
+.invite-form,
+.self-service-stack,
+.verification-status {
+  display: grid;
+  gap: var(--gap-3);
+}
+
+/* --- Labels (app-wide) --------------------------------------------------- */
+.platform-field,
+.form-field,
+.delivery-form label,
+.inline-form label,
+.settings-form label,
+.client-form label,
+.engineering-page label,
+.commercial-page label,
+.operations-page label,
+.adoption-page label {
+  display: grid;
+  gap: var(--gap-1);
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+}
+
+.platform-field > span,
+.form-field > label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-3);
+}
+
+.platform-field small,
+.field-message {
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: normal;
+}
+
+/* --- Controls (app-wide) ------------------------------------------------- */
+/* 2.75rem = 44px: one height shared with the button union, comfortably over
+   the 40px touch floor the e2e suite asserts. The old inset white highlight
+   was a bevel from another design language and is gone. `letter-spacing` is
+   reset because most controls sit inside a label that tracks its own text. */
+:where(.auth-page, .onboarding-page, .app-frame, .client-shell, .pilot-form)
+  :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+    select,
+    textarea
+  ) {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: var(--gap-2) var(--gap-3);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--text-base);
+  font-weight: var(--weight-regular);
+  letter-spacing: normal;
+  transition:
+    border-color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
+}
+
+/* No `outline: none` here: base.css already draws a --seal focus-visible
+   outline, and suppressing it would leave keyboard users with a 22%-alpha
+   ring as their only indicator. The seal border plus ring is the pointer-focus
+   affordance; the outline stacks on top of it for keyboard focus. */
+:where(.auth-page, .onboarding-page, .app-frame, .client-shell, .pilot-form)
+  :where(input, select, textarea):focus {
+  border-color: var(--seal);
+  box-shadow: 0 0 0 3px var(--seal-ring);
+}
+
+textarea {
+  resize: vertical;
+}
+
+/* --- Buttons (app-wide) -------------------------------------------------- */
+/* The union's default is the primary: --seal fill, --ink-inverse text. The
+   secondary group below overrides ground and ink only, so height, radius,
+   type and timing stay identical across every button in the product. */
+.app-primary-button,
+.app-secondary-button,
+.app-secondary-link,
+.button-secondary,
+.button-light,
+.client-button,
+.delivery-form button,
+.inline-form button,
+.backlog-filters button,
+.my-work-filters button,
+.lifecycle-actions button,
+.reorder-actions button,
+.engineering-page button,
+.commercial-page button:not(.text-button),
+.operations-page button,
+.adoption-page button,
+.ai-delivery-page button:not(.text-button),
+.settings-form button,
+.invite-form button {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-1);
+  padding: var(--gap-2) var(--gap-4);
+  border: 1px solid transparent;
+  border-radius: var(--r-2);
+  background: var(--seal);
+  color: var(--ink-inverse);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+
+/* The translateY(-1px) hover bounce is dropped. A ledger that answers "which
+   clause authorised this work" should not have springy chrome, and lifting an
+   inline-flex anchor re-rasterised its text on every hover. The state change
+   is now carried by ground alone. */
+:where(
+  .app-primary-button,
+  .client-button,
+  .delivery-form button,
+  .inline-form button
+):hover {
+  background: var(--seal-hover);
+}
+
+.app-secondary-button,
+.app-secondary-link,
+.button-secondary,
+.reorder-actions button,
+.lifecycle-actions button,
+.engineering-page button,
+.commercial-page button:not(.text-button),
+.operations-page button,
+.adoption-page button {
+  border-color: var(--rule);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+:where(
+  .app-secondary-button,
+  .app-secondary-link,
+  .button-secondary,
+  .reorder-actions button,
+  .lifecycle-actions button,
+  .engineering-page button,
+  .commercial-page button:not(.text-button),
+  .operations-page button,
+  .adoption-page button
+):hover {
+  border-color: var(--rule-strong);
+  background: var(--surface-2);
+}
+
+/* Destructive actions. `.danger-button` is emitted at four sites
+   (platform-forms.tsx:475,571 · self-service-workspace.tsx:394 ·
+   client-collaboration-workspace.tsx:509) and had no CSS anywhere, so
+   "Remove member" and "Revoke access" looked identical to a neutral control.
+   It composes onto either .app-text-button or .app-secondary-button, so both
+   the bare and the chromed forms are covered. */
+.danger-button {
+  color: var(--danger);
+}
+
+.app-secondary-button.danger-button,
+.danger-button.app-secondary-button {
+  border-color: var(--danger-rule);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+:where(.danger-button):hover {
+  color: var(--danger);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+:where(
+  .app-secondary-button.danger-button,
+  .danger-button.app-secondary-button
+):hover {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  text-decoration: none;
+}
+
+/* Buttons keep opacity: a muted fill still reads as a button. Inputs do not —
+   see the honest treatment below. */
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* A disabled field is a real state, not a faded copy of an enabled one:
+   sunken ground, hairline border, muted ink, no focus affordance left behind.
+   Full opacity keeps the value readable. */
+input:disabled,
+select:disabled,
+textarea:disabled {
+  border-color: var(--rule);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  opacity: 1;
+  box-shadow: none;
+}
+
+/* --- Status callouts (app-wide) ------------------------------------------ */
+/* Neutral by default. This family carries success, information and error, so
+   the shared treatment commits to none of them: sunken ground, --rule-strong
+   marker, body ink. Variants below add meaning. .client-alert is in this union
+   deliberately — client.css loads after this file and narrows it for the
+   client surface, which composes cleanly against a neutral base. */
+.platform-status,
+.workspace-message,
+.commercial-message,
+.client-alert,
+.ai-message,
+.ai-error,
+.ai-stale-banner,
+.planning-note,
+.operations-mutation,
+.billing-notice,
+.adoption-callout {
+  display: block;
+  margin: 0;
+  padding: var(--gap-2) var(--gap-3);
+  border-left: 2px solid var(--rule-strong);
+  border-radius: 0 var(--r-2) var(--r-2) 0;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-snug);
+}
+
+.platform-status:empty,
+.form-status:empty {
+  display: none;
+}
+
+.platform-status-error,
+.form-error,
+.field-error,
+.danger-text {
+  color: var(--danger);
+}
+
+/* Unambiguous failure: danger marker, danger ground, danger ink.
+   `.client-alert` is deliberately NOT in this group. The components use it as
+   their neutral and success channel too, so grouping it here made
+   "Request sent" render as an error. client.css owns it: neutral by default,
+   danger via the `.client-alert.error` modifier the component actually emits. */
+.platform-status-error {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-weight: var(--weight-medium);
+}
+
+/* --- Form footers ------------------------------------------------------- */
+.form-links,
+.form-alternative {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-3);
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+
+.form-links a,
+.form-alternative a,
+.auth-form-region a {
+  color: var(--seal);
+  font-weight: var(--weight-semibold);
+  transition: color var(--dur-1) var(--ease);
+}
+
+.form-links a:hover,
+.form-alternative a:hover,
+.auth-form-region a:hover {
+  color: var(--seal-hover);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* `.auth-form-region a` above outranks the button union, which previously
+   painted the verification page's primary CTA seal-on-seal — an invisible
+   button. Restore the inverse ink for the one anchor that is a filled button.
+   The secondary link is left seal-coloured on purpose; it reads correctly
+   against --surface. */
+.auth-form-region .app-primary-button,
+.auth-form-region .app-primary-button:hover {
+  color: var(--ink-inverse);
+  text-decoration: none;
+}
+
+.verification-status > p {
+  margin: 0 0 var(--gap-2);
+  color: var(--ink-2);
+  line-height: var(--leading-normal);
+}
+
+/* --- Responsive --------------------------------------------------------- */
+/* Everything else above is intrinsic. Only the column split needs a query:
+   below 68rem the form card and the context column each take the full
+   measure. `align-items: center` is a no-op in a single-column grid, and the
+   min-height goes inert as soon as content exceeds it, so neither needs
+   unwinding here. */
+@media (max-width: 68rem) {
+  .auth-layout,
+  .onboarding-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

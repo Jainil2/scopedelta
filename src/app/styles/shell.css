@@ -1,0 +1,615 @@
+/* ============================================================================
+   Authenticated workspace shell — the case-file chrome.
+
+   The spine (.app-sidebar) is the only inverted surface in the product and
+   uses the --night* family exclusively. The content side is document paper.
+   Structure is carried by hairlines; the seal appears twice — on the current
+   project route and in the pin-cite chip — and nowhere else.
+
+   This file owns its own responsive behaviour, including the
+   desktop-sidebar -> fixed-mobile-bar switch at 68rem.
+   ============================================================================ */
+
+.app-frame {
+  display: grid;
+  min-height: 100svh;
+  grid-template-columns: 17.5rem minmax(0, 1fr);
+  background: var(--paper);
+  font-family: var(--sans);
+}
+
+/* --- The spine ------------------------------------------------------------ */
+
+.app-sidebar {
+  position: sticky;
+  z-index: 40;
+  top: 0;
+  display: flex;
+  height: 100svh;
+  min-height: 0;
+  flex-direction: column;
+  padding: var(--gap-4) var(--gap-3) var(--gap-3);
+  background: var(--night);
+  color: var(--night-ink);
+  overflow: hidden;
+}
+
+.app-brand-block {
+  padding: 0 var(--gap-1) var(--gap-4);
+  border-bottom: 1px solid var(--night-rule);
+}
+
+.app-brand-block > p {
+  max-width: 13rem;
+  margin: var(--gap-3) 0 0;
+  color: var(--night-ink-3);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-snug);
+}
+
+/* --- Workspace switcher --------------------------------------------------- */
+
+.workspace-switcher {
+  padding: var(--gap-3) var(--gap-1) var(--gap-2);
+}
+
+.workspace-switcher > span {
+  display: block;
+  margin: 0 0 var(--gap-1) 0.15rem;
+  color: var(--night-ink-3);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  line-height: var(--leading-tight);
+  text-transform: uppercase;
+}
+
+.workspace-switcher-trigger {
+  display: grid;
+  width: 100%;
+  min-height: 3.25rem;
+  grid-template-columns: 2rem minmax(0, 1fr) 1rem;
+  align-items: center;
+  gap: var(--gap-2);
+  padding: var(--gap-1) var(--gap-2);
+  border: 1px solid var(--night-rule);
+  border-radius: var(--r-3);
+  background: transparent;
+  color: var(--night-ink);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+
+.workspace-switcher-trigger:hover,
+.workspace-switcher-trigger[data-popup-open] {
+  border-color: var(--night-ink-3);
+  background: var(--night-2);
+}
+
+.workspace-avatar,
+.account-avatar {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid var(--night-rule);
+  border-radius: var(--r-2);
+  background: var(--night-2);
+  color: var(--night-ink);
+  font-family: var(--mono);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-label);
+  line-height: 1;
+}
+
+.workspace-switcher-copy,
+.account-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.workspace-switcher-copy strong,
+.account-copy strong {
+  overflow: hidden;
+  color: var(--night-ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-switcher-copy small,
+.account-copy small {
+  overflow: hidden;
+  color: var(--night-ink-2);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-tight);
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.workspace-switcher-trigger > svg {
+  width: 0.9rem;
+  color: var(--night-ink-3);
+}
+
+/* --- Navigation ---------------------------------------------------------- */
+
+.app-navigation {
+  min-height: 0;
+  flex: 1;
+  padding: var(--gap-1) 0 var(--gap-3);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--night-rule) transparent;
+}
+
+.app-navigation-group + .app-navigation-group {
+  padding-top: var(--gap-3);
+  margin-top: var(--gap-3);
+  border-top: 1px solid var(--night-rule);
+}
+
+.app-navigation-group h2 {
+  margin: 0 0 var(--gap-1) var(--gap-2);
+  color: var(--night-ink-3);
+  font-family: var(--sans);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  line-height: var(--leading-tight);
+  text-transform: uppercase;
+}
+
+.app-navigation-group > div {
+  display: grid;
+  gap: 1px;
+}
+
+.app-navigation a {
+  display: grid;
+  min-width: 0;
+  min-height: 2.4rem;
+  grid-template-columns: 1.05rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--gap-2);
+  padding: var(--gap-1) var(--gap-2);
+  border-radius: var(--r-2);
+  color: var(--night-ink-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-snug);
+  transition:
+    color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease);
+}
+
+.app-navigation a svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--night-ink-3);
+}
+
+.app-navigation a:hover {
+  background: var(--night-2);
+  color: var(--night-ink);
+}
+
+.app-navigation a:hover svg {
+  color: var(--night-ink-2);
+}
+
+/* The active route is the one item that gets a marker: a hairline-thin
+   light-on-dark bar in the gutter, which clears contrast on --night where
+   --seal (a deep ink blue) would not. */
+.app-navigation a.is-active {
+  background: var(--night-2);
+  color: var(--night-ink);
+  font-weight: var(--weight-semibold);
+  box-shadow: inset 2px 0 0 var(--night-ink);
+}
+
+.app-navigation a.is-active svg {
+  color: var(--night-ink);
+}
+
+/* --- Agent connection indicator ------------------------------------------ */
+
+.webmcp-status {
+  display: flex;
+  align-items: center;
+  margin: 0 var(--gap-1);
+  padding: var(--gap-2) 0;
+  border-top: 1px solid var(--night-rule);
+  color: var(--night-ink-2);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-snug);
+}
+
+.webmcp-status-dot,
+.notification-dot {
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: none;
+  margin-right: var(--gap-1);
+  border-radius: var(--r-pill);
+  background: var(--seal);
+}
+
+/* data-state is the whole point of the indicator: authorised, mid-handshake,
+   or no browser tool surface at all. */
+.webmcp-status[data-state="available"] .webmcp-status-dot {
+  background: var(--state-linked);
+  box-shadow: 0 0 0 1px var(--state-linked-rule);
+}
+
+.webmcp-status[data-state="registering"] .webmcp-status-dot {
+  background: var(--state-stale);
+  box-shadow: 0 0 0 1px var(--state-stale-rule);
+}
+
+.webmcp-status[data-state="unavailable"] {
+  color: var(--night-ink-3);
+}
+
+.webmcp-status[data-state="unavailable"] .webmcp-status-dot {
+  background: var(--ink-3);
+  box-shadow: none;
+}
+
+/* The same indicator on the light surfaces (identity pages, client portal). */
+.webmcp-status:not([data-surface="workspace"]) {
+  color: var(--ink-3);
+  border-top-color: var(--rule);
+}
+
+.webmcp-status:not([data-surface="workspace"])[data-state="unavailable"] {
+  color: var(--ink-3);
+}
+
+/* --- Account footer ------------------------------------------------------ */
+
+.app-account {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--gap-2);
+  padding: var(--gap-3) var(--gap-1) 0;
+  border-top: 1px solid var(--night-rule);
+}
+
+.app-text-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease);
+}
+
+.app-text-button:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Inside the inverted account footer the same button flips to night ink. */
+.app-account .app-text-button {
+  color: var(--night-ink-2);
+}
+
+.app-account .app-text-button:hover {
+  color: var(--night-ink);
+}
+
+/* --- Content side -------------------------------------------------------- */
+
+.app-main {
+  min-width: 0;
+  min-height: 100svh;
+  background: var(--paper);
+}
+
+.app-mobile-bar {
+  display: none;
+}
+
+/* --- Project context header ---------------------------------------------- */
+
+.project-context-shell {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--rule);
+}
+
+.project-context-bar {
+  display: grid;
+  width: min(100% - 4rem, 94rem);
+  min-height: 5.5rem;
+  grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: var(--gap-3);
+  margin: 0 auto;
+}
+
+.project-context-identity {
+  min-width: 0;
+}
+
+.project-context-identity p,
+.project-context-identity small {
+  display: block;
+  overflow: hidden;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The client name reads as the file's docket line. */
+.project-context-identity p {
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+
+.project-context-identity > div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--gap-2);
+  margin: var(--gap-1) 0;
+}
+
+.project-context-identity strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Pin-cite: the project identifier, everywhere it appears ------------- */
+
+.project-key {
+  display: inline-block;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  background: var(--surface-2);
+  color: var(--seal-ink);
+  font-family: var(--mono);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-label);
+  line-height: var(--leading-snug);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* --- Route nav ----------------------------------------------------------- */
+
+.project-context-navigation {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--gap-1);
+  padding-bottom: 0.15rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  /* A visible hairline scrollbar is the affordance — the route list is
+     genuinely wider than the bar on narrow viewports. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
+.project-context-navigation > a,
+.project-more-menu {
+  display: inline-flex;
+  min-height: 2.5rem;
+  min-width: max-content;
+  align-items: center;
+  gap: var(--gap-1);
+  padding: 0 var(--gap-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+  cursor: pointer;
+  transition:
+    color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+
+.project-context-navigation > a:hover,
+.project-more-menu:hover,
+.project-more-menu[data-popup-open] {
+  border-color: var(--rule);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+/* The current route carries the seal. */
+.project-context-navigation > a[aria-current="page"] {
+  border-color: var(--rule);
+  background: var(--surface);
+  color: var(--seal-ink);
+  font-weight: var(--weight-semibold);
+  box-shadow: inset 0 -2px 0 var(--seal);
+}
+
+.project-more-menu svg {
+  width: 0.8rem;
+  color: var(--ink-3);
+}
+
+.project-navigation-status {
+  display: inline-flex;
+  min-width: max-content;
+  align-items: center;
+  gap: var(--gap-1);
+  padding-inline: var(--gap-1);
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+}
+
+.project-navigation-status svg {
+  width: 0.85rem;
+  animation: spin 700ms linear infinite;
+}
+
+.project-page-slot {
+  min-width: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================================
+   Responsive. The 68rem block performs the spine -> mobile-bar switch and is
+   load-bearing: without it the fixed bar never appears and the sidebar eats
+   the viewport.
+   ============================================================================ */
+
+@media (max-width: 82rem) {
+  .app-frame {
+    grid-template-columns: 15.5rem minmax(0, 1fr);
+  }
+
+  .project-context-bar {
+    width: min(100% - 3rem, 94rem);
+  }
+}
+
+@media (max-width: 68rem) {
+  .app-frame {
+    grid-template-columns: 1fr;
+    padding-top: 4.5rem;
+  }
+
+  .app-sidebar {
+    display: none;
+  }
+
+  .app-mobile-bar {
+    position: fixed;
+    z-index: 45;
+    top: 0;
+    right: 0;
+    left: 0;
+    display: grid;
+    min-height: 4.5rem;
+    grid-template-columns: 2.7rem auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--gap-2);
+    padding: 0 var(--gap-3);
+    border-bottom: 1px solid var(--rule);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: blur(16px);
+  }
+
+  .app-mobile-menu {
+    display: grid;
+    width: 2.65rem;
+    height: 2.65rem;
+    place-items: center;
+    border: 1px solid var(--rule);
+    border-radius: var(--r-2);
+    background: var(--surface);
+    color: var(--ink-2);
+  }
+
+  .app-mobile-menu svg {
+    width: 1rem;
+  }
+
+  .app-mobile-bar > a {
+    min-width: 0;
+    font-size: var(--text-base);
+  }
+
+  .app-mobile-bar > a > span:first-child {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .app-mobile-workspace {
+    min-width: 0;
+    overflow: hidden;
+    justify-self: end;
+    color: var(--ink-3);
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-label);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Clears the fixed bar. */
+  .project-context-shell {
+    top: 4.5rem;
+  }
+
+  .project-context-bar {
+    width: min(100% - 2rem, 94rem);
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: var(--gap-1);
+    padding: var(--gap-2) 0 var(--gap-1);
+  }
+
+  .project-context-navigation {
+    justify-content: flex-start;
+    margin-inline: calc(var(--gap-1) * -1);
+  }
+}
+
+@media (max-width: 42rem) {
+  .app-mobile-bar {
+    padding: 0 var(--gap-2);
+  }
+
+  .project-context-bar {
+    width: min(100% - 1.25rem, 94rem);
+  }
+
+  .project-context-identity strong {
+    font-size: var(--text-base);
+  }
+}
+
+/* END_SHELL */

@@ -1,0 +1,728 @@
+/* ============================================================================
+   Commercial evidence, the scope ledger, the drift ledger and the baseline
+   version chain — the case-file heart of the product.
+
+   Three signatures live in this file:
+     · pin-cites      — character offsets set as bracketed monospace citations
+     · the state spine — a 2px left rule in the matching --state-* colour
+     · the authorization chain — source → clause → decision → work as a
+       hairline spine with --seal nodes
+
+   Typographic law: only the client's own contract prose is --serif
+   (.source-text-inspector, .selected-evidence blockquote). Everything the
+   application says is --sans; identifiers, offsets, versions and money are
+   --mono and always tabular.
+   ============================================================================ */
+
+/* --- The drift band: unauthorised work, flagged above the fold ------------ */
+.commercial-drift-priority {
+  padding: var(--gap-4) 0;
+  border-block: 1px solid var(--state-stale-rule);
+}
+
+.commercial-drift-priority .drift-ledger {
+  /* Intrinsic two-up: one column as soon as a row cannot hold its measure. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  column-gap: var(--gap-4);
+}
+
+.drift-ledger {
+  display: grid;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Signature 2 — the state spine. Each drift row is a marked-up line of the
+   document, ruled in the colour of the state the row reports. */
+.drift-ledger > a {
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding-inline: var(--gap-3) var(--gap-2);
+  border-left: 2px solid var(--state-unclassified-rule);
+  color: var(--ink);
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+
+.drift-ledger > a:hover {
+  padding-inline: var(--gap-3) var(--gap-2);
+  background: var(--surface-2);
+}
+
+.drift-ledger > a strong {
+  overflow-wrap: anywhere;
+  font-weight: var(--weight-semibold);
+}
+
+.drift-ledger > a > span:last-child {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.drift-ledger > a:has(.drift-commercially_unlinked) {
+  border-left-color: var(--state-unlinked);
+}
+
+.drift-ledger > a:has(.drift-stale_commercial_basis) {
+  border-left-color: var(--state-stale);
+}
+
+.drift-ledger > a:has(.drift-needs_classification) {
+  border-left-color: var(--state-unclassified);
+}
+
+@media (max-width: 42rem) {
+  .drift-ledger > a {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: var(--gap-1);
+  }
+}
+
+/* --- Ledger beside the sticky inspector ---------------------------------- */
+.commercial-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 0.34fr);
+  align-items: start;
+  gap: var(--gap-5);
+}
+
+.commercial-ledger {
+  display: grid;
+  min-width: 0;
+  gap: var(--gap-6);
+}
+
+@media (max-width: 68rem) {
+  .commercial-workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--gap-4);
+  }
+}
+
+/* --- Panels: hairline document sections --------------------------------- */
+.commercial-section,
+.engineering-section,
+.settings-section,
+.adoption-section,
+.operations-composer,
+.management-panel,
+.billing-plan-card,
+.client-management,
+.work-commercial-panel,
+.work-editor,
+.context-composer,
+.comment-composer {
+  display: grid;
+  gap: var(--gap-3);
+  min-width: 0;
+  padding-top: var(--gap-4);
+  border-top: 1px solid var(--rule);
+}
+
+/* --- The evidence inspector ---------------------------------------------- */
+.evidence-inspector {
+  position: sticky;
+  top: 8rem;
+  display: grid;
+  gap: var(--gap-3);
+  min-width: 0;
+  padding: var(--gap-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+
+/* The agreement speaks in serif: this is the client's own extracted prose. */
+.source-text-inspector {
+  min-height: clamp(16rem, 42vh, 26rem);
+  max-width: 68ch;
+  padding: var(--gap-3);
+  border: 1px solid var(--rule-faint);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--text-md);
+  font-weight: var(--weight-regular);
+  letter-spacing: normal;
+  line-height: var(--leading-normal);
+  resize: vertical;
+}
+
+.source-text-inspector::selection {
+  background: var(--seal-soft);
+  color: var(--seal-ink);
+}
+
+/* Signature 1 — pin-cites. The product stores evidence as exact character
+   ranges, so offsets are set as a bracketed monospace citation. */
+.evidence-offsets {
+  width: fit-content;
+  align-items: baseline;
+  gap: var(--gap-1);
+  padding: 0.2rem var(--gap-1);
+  border: 1px solid var(--seal-ring);
+  border-radius: var(--r-1);
+  background: var(--seal-soft);
+  color: var(--seal-ink);
+  font-family: var(--mono);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+}
+
+.evidence-offsets::before {
+  content: "[";
+}
+
+.evidence-offsets::after {
+  content: "]";
+}
+
+.evidence-offsets::before,
+.evidence-offsets::after,
+.evidence-offsets > span + span::before {
+  color: var(--state-unclassified);
+  font-weight: var(--weight-semibold);
+}
+
+.evidence-offsets > span + span::before {
+  content: "· ";
+}
+
+.evidence-offsets > span:last-child {
+  color: var(--ink-3);
+}
+
+/* The anchored excerpt, quoted back from the agreement. */
+.selected-evidence > span:first-child {
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+
+.selected-evidence blockquote {
+  margin: var(--gap-2) 0 0;
+  padding: var(--gap-2) var(--gap-3);
+  border-left: 2px solid var(--seal);
+  border-radius: 0 var(--r-2) var(--r-2) 0;
+  background: var(--seal-soft);
+  color: var(--seal-ink);
+  font-family: var(--serif);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 68rem) {
+  /* Stacked: the inspector is a plain panel again, never sticky. */
+  .evidence-inspector {
+    position: static;
+    top: auto;
+  }
+
+  .source-text-inspector {
+    max-width: none;
+    min-height: 18rem;
+  }
+}
+
+/* --- The source register and the scope ledger ---------------------------- */
+.commercial-source-list,
+.scope-ledger {
+  font-variant-numeric: tabular-nums;
+}
+
+.commercial-source-list > article {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-width: 0;
+}
+
+/* The scope ledger carries the state spine too: kind-coloured rules turn the
+   list into an annotated clause register. */
+.scope-ledger > article {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  padding-inline-start: var(--gap-3);
+  border-left: 2px solid var(--state-unclassified-rule);
+}
+
+.scope-ledger > article:has(.scope-deliverable) {
+  border-left-color: var(--state-linked);
+}
+
+.scope-ledger > article:has(.scope-requirement) {
+  border-left-color: var(--state-internal);
+}
+
+.scope-ledger > article:has(.scope-exclusion) {
+  border-left-color: var(--state-unlinked);
+}
+
+.scope-ledger > article:has(.scope-constraint) {
+  border-left-color: var(--state-stale);
+}
+
+.scope-ledger > article.scope-item-archived {
+  border-left-color: var(--rule);
+  color: var(--ink-3);
+}
+
+.commercial-source-list > article strong,
+.scope-ledger > article strong {
+  overflow-wrap: anywhere;
+}
+
+.scope-ledger > article p {
+  margin: var(--gap-1) 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+}
+
+@media (max-width: 42rem) {
+  .commercial-source-list > article,
+  .scope-ledger > article {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: var(--gap-2);
+  }
+}
+
+/* --- Signature 3 — the authorization chain ------------------------------
+   source → clause → decision → work, drawn as a hairline spine with small
+   --seal nodes so the provenance reads as a connected chain. */
+.work-commercial-links {
+  position: relative;
+  padding-left: var(--gap-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.work-commercial-links::before {
+  content: "";
+  position: absolute;
+  top: 2rem;
+  bottom: 2rem;
+  left: 0.28rem;
+  width: 1px;
+  background: var(--rule);
+}
+
+.work-commercial-links > div {
+  position: relative;
+  display: grid;
+  min-height: 4.25rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--gap-2) var(--gap-3);
+  min-width: 0;
+  padding: var(--gap-2) 0;
+  border-bottom: 1px solid var(--rule-faint);
+}
+
+.work-commercial-links > div::before {
+  content: "";
+  position: absolute;
+  top: 2rem;
+  left: calc(-1 * var(--gap-4) + 0.05rem);
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--seal);
+  box-shadow: 0 0 0 3px var(--surface);
+}
+
+.work-commercial-links > div > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.work-commercial-links > div strong {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.work-commercial-links > div > div > span {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+
+@media (max-width: 42rem) {
+  .work-commercial-links > div {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .work-commercial-links > div > div {
+    grid-column: 1 / -1;
+  }
+}
+
+/* --- Baseline history: an immutable, numbered, dated register ------------ */
+.baseline-history {
+  display: grid;
+  gap: var(--gap-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.baseline-history > details,
+.commercial-disclosure,
+.version-scope-detail,
+.comment-history details,
+.adoption-template-detail {
+  border-bottom: 1px solid var(--rule);
+}
+
+.baseline-history > details {
+  padding-left: var(--gap-3);
+  border-left: 2px solid var(--rule);
+}
+
+/* The effective version is the one in force; drafts are provisional and
+   superseded rows are deliberately quieter. */
+.baseline-history > details:has(.version-effective) {
+  border-left-color: var(--seal);
+}
+
+.baseline-history > details:has(.version-draft) {
+  border-left-color: var(--state-stale-rule);
+}
+
+.baseline-history > details:has(.version-superseded) {
+  border-left-color: var(--rule-faint);
+  color: var(--ink-3);
+}
+
+.baseline-history > details:has(.version-superseded) summary strong {
+  color: var(--ink-2);
+  font-weight: var(--weight-medium);
+}
+
+.baseline-history summary,
+.commercial-disclosure summary,
+.version-scope-detail summary,
+.adoption-template-detail summary {
+  display: flex;
+  min-height: 3.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-2);
+  cursor: pointer;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.baseline-history summary strong {
+  overflow-wrap: anywhere;
+}
+
+.baseline-history summary > span:last-child {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+
+.baseline-history dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: var(--gap-3);
+  margin: 0 0 var(--gap-2);
+  padding-bottom: var(--gap-2);
+  border-bottom: 1px solid var(--rule-faint);
+}
+
+.baseline-history dt {
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+
+.baseline-history dd {
+  margin: var(--gap-1) 0 0;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* --- Engineering readiness ---------------------------------------------- */
+.engineering-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  align-items: start;
+  gap: var(--gap-4);
+}
+
+.engineering-section {
+  padding: var(--gap-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+
+.engineering-grid > .engineering-section:first-child {
+  grid-column: 1 / -1;
+  padding: var(--gap-4) 0;
+  border-inline: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.engineering-card {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.engineering-card strong {
+  overflow-wrap: anywhere;
+}
+
+/* --- Forms: one rhythm, collapsing intrinsically ------------------------- */
+.engineering-inline-form,
+.delivery-form-grid,
+.commercial-check-grid,
+.commercial-change-form,
+.scope-form-row,
+.publication-grid,
+.cycle-form,
+.work-form,
+.project-editor,
+.row-editor,
+.inline-form,
+.invite-form,
+.settings-form {
+  display: grid;
+  /* min(100%, …) keeps a single column at 390px with no overflow. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  align-items: end;
+  gap: var(--gap-3);
+  min-width: 0;
+}
+
+:where(
+    .engineering-inline-form,
+    .delivery-form-grid,
+    .commercial-check-grid,
+    .commercial-change-form,
+    .scope-form-row,
+    .publication-grid,
+    .cycle-form,
+    .work-form,
+    .project-editor,
+    .row-editor,
+    .inline-form,
+    .invite-form,
+    .settings-form
+  )
+  label:not(:has(input[type="checkbox"], input[type="radio"])) {
+  display: grid;
+  gap: var(--gap-1);
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+}
+
+/* Choice rows keep their control inline with its text. */
+.commercial-check-grid {
+  align-items: start;
+}
+
+.commercial-check-grid label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap-1);
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  overflow-wrap: anywhere;
+}
+
+.field-wide,
+.form-span,
+.adoption-span,
+.scope-title-field {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.engineering-work-trace-grid,
+.work-collaboration-grid,
+.collaboration-split,
+.management-grid,
+.project-columns,
+.two-column,
+.publication-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  align-items: start;
+  gap: var(--gap-4);
+  min-width: 0;
+}
+
+/* --- Operations, settings, adoption, and billing ------------------------- */
+.operations-tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--rule);
+  scrollbar-width: thin;
+}
+
+.operations-tabs a {
+  min-width: max-content;
+  padding: var(--gap-2) var(--gap-3);
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  transition: color var(--dur-1) var(--ease);
+}
+
+.operations-tabs a:hover {
+  color: var(--ink);
+}
+
+.operations-tabs a[aria-current="page"] {
+  box-shadow: inset 0 -2px var(--seal);
+  color: var(--seal-ink);
+}
+
+.operations-row,
+.adoption-row,
+.member-row,
+.portfolio-row,
+.time-row,
+.cycle-row,
+.delivery-list-row,
+.client-project-link {
+  min-width: 0;
+  padding: var(--gap-3) 0;
+  border-bottom: 1px solid var(--rule);
+  font-variant-numeric: tabular-nums;
+}
+
+.operations-filter {
+  min-width: min(100%, 10rem);
+}
+
+.adoption-grid,
+.billing-plan-grid,
+.management-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+  gap: var(--gap-4);
+  min-width: 0;
+}
+
+.adoption-section,
+.billing-plan-card,
+.management-panel {
+  padding: var(--gap-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+
+.member-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--gap-2) var(--gap-3);
+}
+
+@media (max-width: 42rem) {
+  .member-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.label-manager,
+.workspace-member-picker,
+.mention-control,
+.dependency-editor,
+.lifecycle-section,
+.baseline-draft-control {
+  display: grid;
+  gap: var(--gap-3);
+  min-width: 0;
+}
+
+.pagination,
+.compact-pagination,
+.mention-result-pages {
+  display: flex;
+  min-height: 3rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-3);
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination a,
+.compact-pagination a {
+  color: var(--seal);
+  font-weight: var(--weight-semibold);
+}
+
+.route-loading {
+  display: grid;
+  width: var(--content);
+  min-height: 28rem;
+  place-content: center;
+  gap: var(--gap-3);
+  margin: 0 auto;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.route-loading > span {
+  display: block;
+  width: 2rem;
+  height: 2rem;
+  margin: 0 auto;
+  border: 2px solid var(--rule);
+  border-top-color: var(--seal);
+  border-radius: var(--r-pill);
+  animation: spin 700ms linear infinite;
+}
+
+.project-route-loading > div {
+  width: min(100%, 40rem);
+  height: 0.7rem;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  animation: loading-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes loading-shimmer {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* END_PRODUCT */

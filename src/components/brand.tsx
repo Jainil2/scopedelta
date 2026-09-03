@@ -33,16 +33,18 @@ export function BrandLockup({
     <Link
       href={href}
       className={cn(
-        "inline-flex items-center gap-3 text-[0.95rem] font-extrabold tracking-[-0.035em]",
-        inverse ? "text-stone-50" : "text-stone-950",
+        "inline-flex items-center gap-3 text-[0.95rem] font-semibold tracking-[-0.03em]",
+        inverse ? "text-night-ink" : "text-foreground",
         className,
       )}
       aria-label={label}
     >
       <span
         className={cn(
-          "grid size-9 place-items-center rounded-xl",
-          inverse ? "bg-[#f0a35d] text-[#20241f]" : "bg-[#365b45] text-white",
+          "grid size-9 place-items-center rounded-md",
+          inverse
+            ? "bg-seal-soft text-seal-ink"
+            : "bg-primary text-primary-foreground",
         )}
       >
         <BrandMark className="size-4" />

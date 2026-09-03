@@ -1,10 +1,12 @@
 # HACK-DEMO — From first workspace to completed project
 
-**Script v2 · September 3, 2026 · target 2:50. Prepared for rehearsal; not recorded.**
+**Script v2 · September 3, 2026 · target 2:50. Partial UI footage captured; final recording incomplete.**
 
 Owner: [HACK-DEMO #74](https://github.com/Jainil2/scopedelta/issues/74). Operator instructions: [runbook](HACK_DEMO_RUNBOOK.md). Recording status: [handoff](HACK_DEMO_STATE.md).
 
 The founder's September 3 request replaces the seeded, four-tool-only storyboard with an end-to-end flow using the tools merged in [PR #77](https://github.com/Jainil2/scopedelta/pull/77). The verified merge commit is `a44b619153df508d8cc91e8a1a0f678524974919`. The founder reports the tools are available in production; this script is checked against that source, not a completed live rehearsal.
+
+Live rehearsal found that the native browser rejects the all-at-once workspace registration. The founder approved a narrow compatibility fix: keep discovery/navigation and the original shortcuts available, and load one business workflow through `discover_workflows.load` before using it. Refresh native tools after selection. Local native registration and selection checks are separate from production execution; the reviewed fix must be deployed before recording those production scenes. The external NOVA Approver invitation is accepted.
 
 ## Environment answer
 
@@ -110,10 +112,10 @@ A baseline source upload alone is not an effective agreement. A paid-change deci
 
 ## Recording readiness and alternatives
 
-The script is ready to rehearse. The current client session, fresh NOVA records and natural-language tool execution still need live verification. Prefer the connected in-app browser; use Chrome only if its WebMCP connection is available. Enter credentials outside capture.
+The client session and NOVA setup are verified, and partial ordinary-UI footage exists. Native production execution awaits the registration fix's review and deployment. Reconcile the remaining scenes and narration with real outcomes. Prefer the connected in-app browser; use Chrome only if its WebMCP connection is available. Enter credentials outside capture.
 
 If no separate verified client approver is available, continue preparing the internal setup and commercial shots. Use the runbook's internal-only variant for a draft: show **Awaiting client approval**, not a fabricated approval or completed engagement. The full end-to-end recording still needs the client session. Adding another environment variable will not supply that session.
 
 Rehearse once, correct the voiceover against observed facts, and capture genuine tool results with their matching ordinary UI. On an uncertain write, inspect state before retrying. Preserve the rehearsed project and name subsequent takes explicitly; do not reset a shared workspace for convenience.
 
-Final deliverables remain `HACK-DEMO.mp4` in the repository root and `HACK-DEMO.srt`: readable 16:9 footage, proposed 1920×1080 H.264/AAC at 30 fps, intelligible narration and synchronized captions, under 180 seconds. The existing 2:48 v1 narration is obsolete for this script. Recording, new voice generation, public upload and submission have not occurred in this script update.
+Final deliverables remain `HACK-DEMO.mp4` in the repository root and `HACK-DEMO.srt`: readable 16:9 footage, proposed 1920×1080 H.264/AAC at 30 fps, intelligible narration and synchronized captions, under 180 seconds. The existing 2:48 v1 narration is obsolete. Replacement v2 voice segments and initial UI footage are prepared; final editing, public upload and submission remain outstanding.

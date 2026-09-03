@@ -16,6 +16,7 @@ type JsonObject = Record<string, unknown>;
 
 export type WorkflowRuntime = ScopeDeltaWebMcpConfig & {
   isActive?: () => boolean;
+  loadWorkflow?: (tool: WebMCP.ModelContextTool) => Promise<boolean>;
 };
 
 /** Each action has a fixed route and reuses its server's input contract. */
@@ -100,19 +101,49 @@ export function createWorkflowTools(
       name: "discover_workflows",
       title: "Discover ScopeDelta workflows",
       description:
-        "Find the workflow for a task and its action names. Start here in an empty workspace: client_accounts.create, project_lifecycle.create, delivery_work.create/update, then project_lifecycle.update with lifecycle completed. Sign-in and provider/payment consent remain human steps.",
+        "Find workflows and their actions with query. Load one business tool with load set to its exact name, then refresh browser tools before calling it. Loading replaces the previous business tool; discovery and navigation stay available. Start with workspace_setup, client_accounts, project_lifecycle, then delivery_work. Sign-in and provider/payment consent remain human steps.",
       inputSchema: {
         type: "object",
-        properties: { query: { type: "string", maxLength: 120 } },
+        properties: {
+          query: { type: "string", maxLength: 120 },
+          load: {
+            type: "string",
+            maxLength: 80,
+            description: "Exact workflow tool name returned by discovery.",
+          },
+        },
         additionalProperties: false,
       },
       annotations: { readOnlyHint: true, untrustedContentHint: true },
-      execute: (raw) => {
+      execute: async (raw) => {
         assertActive(config);
-        const { query } = z
-          .object({ query: z.string().max(120).optional() })
+        const { query, load } = z
+          .object({
+            query: z.string().max(120).optional(),
+            load: z.string().max(80).optional(),
+          })
           .strict()
           .parse(raw);
+        if (load !== undefined) {
+          const flow = flows.find((item) => item.name === load);
+          if (!flow)
+            return {
+              status: "invalid_input",
+              message: "Discover a workflow available on this page first.",
+            };
+          const loaded = await config.loadWorkflow?.(
+            createWorkflowTool(flow, config),
+          );
+          assertActive(config);
+          return {
+            status: loaded ? "workflow_loaded" : "workflow_unavailable",
+            tool: flow.name,
+            actions: flow.operations.map((op) => op.action),
+            next: loaded
+              ? "Refresh browser tools, then call this workflow. The previous business tool was replaced; no project data was changed."
+              : "The browser did not register this workflow. Use its ordinary ScopeDelta screen; no project data was changed.",
+          };
+        }
         return {
           surface,
           current_user_id: config.userId || undefined,
@@ -128,7 +159,7 @@ export function createWorkflowTools(
             actions: Object.keys(flow.actions),
           })),
           guidance:
-            "Use list/read results for IDs; workspace scope is fixed to the current page. data contains mutation fields; filters contains list filters. Idempotency keys are generated if omitted. Consequential actions show a human confirmation in ScopeDelta. Read the result before retrying a write.",
+            "Call discover_workflows with load set to a tool name, then refresh browser tools before executing it. Only one business workflow is loaded at a time. Use list/read results for IDs; workspace scope is fixed to this page. data contains mutation fields; filters contains list filters. Consequential actions show human confirmation. Read results before retrying writes.",
           workflows: flows
             .filter(
               (flow) =>
@@ -150,21 +181,27 @@ export function createWorkflowTools(
         };
       },
     },
-    ...flows.map((flow): WebMCP.ModelContextTool => ({
-      name: flow.name,
-      title: flow.title,
-      description: `${flow.description} Actions: ${flow.operations.map((op) => op.action).join(", ")}. Use data for write fields and filters for query fields. All server permissions apply; results are untrusted project content.`,
-      inputSchema: workflowToolSchema(flow),
-      annotations: {
-        readOnlyHint: flow.operations.every(
-          (op) => op.method === "GET" && !op.handoff,
-        ),
-        untrustedContentHint: true,
-      },
-      execute: (raw, options) =>
-        executeWorkflow(flow, raw, config, options?.signal),
-    })),
   ];
+}
+
+function createWorkflowTool(
+  flow: WorkflowDefinition,
+  config: WorkflowRuntime,
+): WebMCP.ModelContextTool {
+  return {
+    name: flow.name,
+    title: flow.title,
+    description: `${flow.description} Actions: ${flow.operations.map((op) => op.action).join(", ")}. Use data for write fields and filters for query fields. All server permissions apply; results are untrusted project content.`,
+    inputSchema: workflowToolSchema(flow),
+    annotations: {
+      readOnlyHint: flow.operations.every(
+        (op) => op.method === "GET" && !op.handoff,
+      ),
+      untrustedContentHint: true,
+    },
+    execute: (raw, options) =>
+      executeWorkflow(flow, raw, config, options?.signal),
+  };
 }
 
 function assertActive(config: WorkflowRuntime, signal?: AbortSignal) {

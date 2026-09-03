@@ -1,3 +1,4 @@
+import { WebMcpBridge } from "@/components/webmcp-bridge";
 import { AuthShell } from "@/components/auth-shell";
 import { SignInForm } from "@/components/auth-forms";
 
@@ -18,6 +19,7 @@ export default async function SignInPage({
       description="Sessions are stored server-side and every workspace read is checked against your membership."
     >
       <SignInForm callbackURL={safeCallback} />
+      <WebMcpBridge workspaceId="" userId="" surface="public" />
     </AuthShell>
   );
 }

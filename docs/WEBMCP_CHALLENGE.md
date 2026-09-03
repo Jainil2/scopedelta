@@ -1,5 +1,7 @@
 # WEBMCP-001 — Existing ScopeDelta Workflows as Browser Tools
 
+> Historical four-tool challenge scope. [WEBMCP-002](workflows/README.md) expands coverage to the full product lifecycle; see [usage and first-user setup](workflows/USAGE.md). Update recording/submission claims after that branch is reviewed and deployed.
+
 ## HACK-002 judge-facing workflow
 
 HACK-002 adds a role-aware project command center and coherent project navigation without changing the four WebMCP names, schemas, authorization rules, fixture semantics, or commercial meaning. The persistent project bar identifies the client, project, lead, lifecycle, and active surface; Overview, Backlog, Board, and manager-only Commercial remain primary, while Cycles, Brief, Client, Engineering & QA, AI, and Activity live in a keyboard-accessible secondary menu. Workspace navigation is grouped into Home, Delivery, Collaboration, and Workspace administration with active-route semantics and a compact narrow-screen menu.

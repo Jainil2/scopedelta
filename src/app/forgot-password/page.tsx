@@ -1,3 +1,4 @@
+import { WebMcpBridge } from "@/components/webmcp-bridge";
 import { AuthShell } from "@/components/auth-shell";
 import { ForgotPasswordForm } from "@/components/auth-forms";
 
@@ -9,6 +10,7 @@ export default function ForgotPasswordPage() {
       description="We send the same response whether or not the address is registered."
     >
       <ForgotPasswordForm />
+      <WebMcpBridge workspaceId="" userId="" surface="public" />
     </AuthShell>
   );
 }

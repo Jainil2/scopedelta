@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { BrandLockup } from "@/components/brand";
 import { WorkspaceCreateForm } from "@/components/platform-forms";
+import { WebMcpBridge } from "@/components/webmcp-bridge";
 import { requireSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,7 @@ export default async function OnboardingPage() {
         </div>
         <WorkspaceCreateForm />
       </section>
+      <WebMcpBridge workspaceId="" userId={session.user.id} surface="setup" />
     </main>
   );
 }

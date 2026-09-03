@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 
 import {
@@ -9,6 +9,8 @@ import {
   test,
 } from "@playwright/test";
 import { Pool } from "pg";
+import { WORKFLOW_CATALOG } from "../src/webmcp/workflow-catalog";
+import { HUMAN_FLOWS } from "../src/webmcp/workflow-navigation";
 
 const mailpitUrl = "http://127.0.0.1:8025";
 let aiStub: Server;
@@ -506,7 +508,7 @@ test("client project, milestone, and backlog work through the production UI", as
   ).toBeAttached();
 });
 
-test("judge project lead and ordinary member keep one role-aware four-tool journey", async ({
+test("judge project lead and ordinary member keep the compatible tool journey across workspace navigation", async ({
   page,
   browser,
 }) => {
@@ -569,7 +571,7 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
   await expect(leadPage.getByText("Edit project details")).toBeVisible();
   await leadPage.getByRole("link", { name: "Backlog", exact: true }).click();
 
-  await expectFourBrowserTools(leadPage);
+  await expectWorkspaceBrowserTools(leadPage);
 
   const readResults = await leadPage.evaluate(async () => {
     const tools = (
@@ -645,7 +647,7 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
       name: /Confirm wholesale change-order review/,
     }),
   ).toBeVisible();
-  await expectFourBrowserTools(leadPage);
+  await expectWorkspaceBrowserTools(leadPage);
   await leadPage.getByRole("link", { name: "Commercial", exact: true }).click();
   await expect(
     leadPage.getByRole("heading", { name: "Commercial", level: 1 }),
@@ -668,7 +670,7 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
     leadPage.getByRole("heading", { name: "Project activity" }),
   ).toBeVisible();
   await leadPage.reload();
-  await expectFourBrowserTools(leadPage);
+  await expectWorkspaceBrowserTools(leadPage);
 
   await leadPage.setViewportSize({ width: 390, height: 844 });
   expect(
@@ -699,7 +701,7 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
     memberPage.getByRole("link", { name: "Commercial", exact: true }),
   ).toHaveCount(0);
   await expect(memberPage.getByText("Edit project details")).toHaveCount(0);
-  await expectFourBrowserTools(memberPage);
+  await expectWorkspaceBrowserTools(memberPage);
   const memberCommercialError = await memberPage.evaluate(async () => {
     const tool = (
       window as typeof window & {
@@ -797,7 +799,7 @@ test("judge project lead and ordinary member keep one role-aware four-tool journ
     .getByRole("button", { name: "Sign out" });
   await expect(signOutButton).toBeInViewport();
   await expect(signOutButton).toBeEnabled();
-  await expectFourBrowserTools(leadPage, { visibleStatus: false });
+  await expectWorkspaceBrowserTools(leadPage, { visibleStatus: false });
   await memberContext.close();
   await leadContext.close();
 });
@@ -1778,6 +1780,12 @@ test("client collaboration keeps one commercial truth across internal and extern
     .getByLabel("Client-safe summary")
     .fill("Launch readiness, handover, and agreed acceptance.");
   await page.getByRole("button", { name: "Add to client view" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Milestone added to the client projection.",
+  );
+  await expect(
+    page.getByRole("button", { name: "Create invitation" }),
+  ).toBeEnabled();
   await page.getByLabel("Email").fill(approverEmail);
   await page.getByLabel("Role").selectOption("approver");
   await Promise.all([
@@ -1795,6 +1803,7 @@ test("client collaboration keeps one commercial truth across internal and extern
 
   const clientContext = await browser.newContext();
   const clientPage = await clientContext.newPage();
+  await installWebMcpModelContext(clientPage);
   await clientPage.goto(invitationUrl);
   await expect(
     clientPage.getByText(/Sign in or create a verified account/),
@@ -1809,6 +1818,48 @@ test("client collaboration keeps one commercial truth across internal and extern
   await clientPage.goto(verification);
   await clientPage.getByRole("link", { name: "Continue" }).click();
   await clientPage.waitForURL(/\/client\/projects\//);
+  await expect
+    .poll(() =>
+      clientPage.evaluate(() =>
+        (
+          window as unknown as { __webMcpTools: Map<string, unknown> }
+        ).__webMcpTools.has("client_project_access"),
+      ),
+    )
+    .toBe(true);
+  const clientToolState = await clientPage.evaluate(async () => {
+    const tools = (
+      window as unknown as {
+        __webMcpTools: Map<
+          string,
+          {
+            execute: (
+              input: unknown,
+              options: { signal: AbortSignal },
+            ) => Promise<unknown>;
+          }
+        >;
+      }
+    ).__webMcpTools;
+    return {
+      names: [...tools.keys()],
+      result: await tools
+        .get("client_project_access")!
+        .execute(
+          { action: "read", projectId: location.pathname.split("/").at(-1) },
+          { signal: new AbortController().signal },
+        ),
+    };
+  });
+  expect(clientToolState.names).not.toContain("commercial_decisions");
+  expect(clientToolState.result).toMatchObject({ status: "ok" });
+  expect(JSON.stringify(clientToolState.result)).not.toContain(
+    "Private internal project summary",
+  );
+  expect(JSON.stringify(clientToolState.result)).not.toContain(
+    "Private milestone implementation detail",
+  );
+
   await expect(
     clientPage.getByRole("heading", { name: "Northstar Portal" }),
   ).toBeVisible();
@@ -2514,7 +2565,7 @@ async function installWebMcpModelContext(page: Page) {
   });
 }
 
-async function expectFourBrowserTools(
+async function expectWorkspaceBrowserTools(
   page: Page,
   { visibleStatus = true }: { visibleStatus?: boolean } = {},
 ) {
@@ -2523,12 +2574,20 @@ async function expectFourBrowserTools(
     "search_work_items",
     "get_commercial_drift",
     "create_work_item",
+    ...HUMAN_FLOWS.map((flow) => flow.name),
+    "open_workflow",
+    "discover_workflows",
+    ...WORKFLOW_CATALOG.filter((flow) =>
+      flow.surfaces.includes("workspace"),
+    ).map((flow) => flow.name),
   ];
   if (visibleStatus) {
-    await expect(page.getByText("4 browser tools active")).toBeVisible();
-    await expect(page.locator(".webmcp-tool-names")).toHaveText(
-      expected.join(", "),
-    );
+    await expect(
+      page.getByText(`${expected.length} browser tools active`),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Agent workflows", exact: true }),
+    ).toBeVisible();
   }
   await expect
     .poll(() =>
@@ -3089,3 +3148,294 @@ function isoMonday(value: string) {
   date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
   return date.toISOString().slice(0, 10);
 }
+
+// The browser protocol is emulated; authentication, routes, services and persistence are real.
+test("workflow tools take a first user from empty workspace to completed delivery", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  await installWebMcpModelContext(page);
+  const evidence: { method: string; path: string; status: number }[] = [];
+  page.on("response", (response) => {
+    const path = new URL(response.url()).pathname;
+    if (path.startsWith("/api/v1/"))
+      evidence.push({
+        method: response.request().method(),
+        path: path.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/g, "[id]"),
+        status: response.status(),
+      });
+  });
+  const email = `workflow-first-${Date.now()}@example.test`;
+  await signUpAndVerifyLocally(page, email, "test-password-123", "/onboarding");
+  async function run(
+    name: string,
+    input: Record<string, unknown>,
+    confirmation?: "confirm" | "cancel",
+  ) {
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (name) =>
+            (
+              window as unknown as { __webMcpTools: Map<string, unknown> }
+            ).__webMcpTools.has(name),
+          name,
+        ),
+      )
+      .toBe(true);
+    const args = { name, input };
+    const resultPromise = page.evaluate(async ({ name, input }) => {
+      const tools = (
+        window as unknown as {
+          __webMcpTools: Map<
+            string,
+            {
+              execute: (
+                input: unknown,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            }
+          >;
+        }
+      ).__webMcpTools;
+      return tools
+        .get(name)!
+        .execute(input, { signal: new AbortController().signal });
+    }, args);
+    if (confirmation) {
+      await expect(
+        page.getByRole("dialog", { name: "Review agent action" }),
+      ).toBeVisible();
+      await page
+        .getByRole("button", {
+          name: confirmation === "confirm" ? "Confirm action" : "Cancel",
+          exact: true,
+        })
+        .click();
+    }
+    return (await resultPromise) as {
+      status: string;
+      data: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+  }
+  async function ok(
+    name: string,
+    input: Record<string, unknown>,
+    confirmation?: "confirm",
+  ) {
+    const result = await run(name, input, confirmation);
+    expect(
+      result,
+      `${name}.${input.action}: ${JSON.stringify(result)}`,
+    ).toMatchObject({ status: "ok" });
+    return result.data;
+  }
+  const workspace = await ok("workspace_setup", {
+    action: "create",
+    data: { name: "First User Studio" },
+  });
+  await expect(page).toHaveURL(new RegExp(`/app/${workspace.slug}$`));
+  const root = `/app/${workspace.slug}`;
+  const empty = await ok("project_lifecycle", { action: "list" });
+  expect(empty.items).toEqual([]);
+  const client = await ok("client_accounts", {
+    action: "create",
+    data: { name: "Acme Agency" },
+  });
+  const project = await ok("project_lifecycle", {
+    action: "create",
+    data: { clientId: client.id, key: "WEB", name: "Website launch" },
+  });
+  const projectId = project.id;
+  const milestone = await ok("project_milestones", {
+    action: "create",
+    projectId,
+    data: { name: "Launch review" },
+  });
+  const work = await ok("delivery_work", {
+    action: "create",
+    projectId,
+    data: {
+      title: "Build landing page",
+      milestoneId: milestone.id,
+      status: "in_progress",
+      assigneeUserId: project.leadUserId,
+    },
+  });
+  await ok("work_discussion", {
+    action: "post",
+    projectId,
+    workItemId: work.id,
+    data: { body: "Kickoff complete. Ready to build." },
+  });
+  await ok("project_notes", {
+    action: "create",
+    projectId,
+    data: { title: "Kickoff notes", body: "Use the agreed scope for launch." },
+  });
+  const source = await ok("commercial_evidence", {
+    action: "add_text",
+    projectId,
+    data: {
+      name: "Agreed scope",
+      text: "Build one landing page and verify the contact form.",
+    },
+  });
+  const readSource = await ok("commercial_evidence", {
+    action: "read_source",
+    projectId,
+    sourceId: source.id,
+  });
+  expect(readSource.extractedText).toContain("landing page");
+  await ok("time_tracking", {
+    action: "create",
+    data: {
+      projectId,
+      workItemId: work.id,
+      workDate: "2026-09-03",
+      durationMinutes: 90,
+      classification: "billable",
+    },
+  });
+  await ok(
+    "qa_verification",
+    {
+      action: "record",
+      projectId,
+      data: {
+        workItemId: work.id,
+        method: "manual",
+        category: "Acceptance",
+        result: "passed",
+        notes: "Contact form checked locally.",
+      },
+    },
+    "confirm",
+  );
+  await ok("delivery_work", {
+    action: "update",
+    projectId,
+    workItemId: work.id,
+    data: { status: "done" },
+  });
+  await ok("portfolio_review", { action: "read" });
+  await page.goto(`${root}/projects/WEB/backlog`);
+  await expect(
+    page.getByRole("button", { name: /WEB-1 Build landing page/ }),
+  ).toBeVisible();
+  const canceled = await run(
+    "project_lifecycle",
+    { action: "update", projectId, data: { lifecycle: "completed" } },
+    "cancel",
+  );
+  expect(canceled.status).toBe("not_applied");
+  expect(
+    (await ok("project_lifecycle", { action: "read", projectId })).lifecycle,
+  ).toBe("active");
+  await ok(
+    "project_lifecycle",
+    { action: "update", projectId, data: { lifecycle: "completed" } },
+    "confirm",
+  );
+  expect(
+    (await ok("project_lifecycle", { action: "read", projectId })).lifecycle,
+  ).toBe("completed");
+  const projects = await ok("project_lifecycle", {
+    action: "list",
+    filters: { lifecycle: "completed" },
+  });
+  expect(projects.items).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: "Website launch",
+        lifecycle: "completed",
+      }),
+    ]),
+  );
+  await page.goto(`${root}/projects?lifecycle=completed`);
+  await expect(
+    page.getByRole("link", { name: /Website launch/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Agent workflows", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Agent workflows",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByLabel("Find a workflow").fill("time_tracking");
+  await expect(page.locator(".workflow-card")).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { name: "Record delivery time" }),
+  ).toBeVisible();
+  await page.getByLabel("Find a workflow").clear();
+  await page.screenshot({ path: testInfo.outputPath("workflow-explorer.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByLabel("Find a workflow")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("workflow-explorer-mobile.png"),
+  });
+  const mobileCanceled = await run(
+    "project_lifecycle",
+    { action: "update", projectId, data: { lifecycle: "active" } },
+    "cancel",
+  );
+  expect(mobileCanceled.status).toBe("not_applied");
+  await ok(
+    "project_lifecycle",
+    { action: "update", projectId, data: { lifecycle: "active" } },
+    "confirm",
+  );
+  expect(
+    (await ok("project_lifecycle", { action: "read", projectId })).lifecycle,
+  ).toBe("active");
+  await ok(
+    "project_lifecycle",
+    { action: "update", projectId, data: { lifecycle: "archived" } },
+    "confirm",
+  );
+  const archived = await ok("project_lifecycle", {
+    action: "list",
+    filters: { lifecycle: "archived" },
+  });
+  expect(archived.items).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: projectId, lifecycle: "archived" }),
+    ]),
+  );
+  await ok(
+    "project_lifecycle",
+    { action: "update", projectId, data: { lifecycle: "active" } },
+    "confirm",
+  );
+  expect(
+    (await ok("project_lifecycle", { action: "read", projectId })).lifecycle,
+  ).toBe("active");
+  await page.getByRole("button", { name: "Open workspace navigation" }).click();
+  await page
+    .getByRole("link", { name: "Agent workflows", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Agent workflows",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await writeFile(
+    testInfo.outputPath("workflow-api-evidence.json"),
+    JSON.stringify(evidence, null, 2) + "\n",
+  );
+  await testInfo.attach("workflow-api-evidence", {
+    body: JSON.stringify(evidence, null, 2),
+    contentType: "application/json",
+  });
+  expect(evidence.filter((entry) => entry.status >= 400)).toEqual([]);
+});

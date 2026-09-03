@@ -30,25 +30,25 @@
 
 :root {
   color-scheme: light;
-  --background: #f4f1e9;
-  --foreground: #20241f;
-  --card: #fffdf8;
-  --card-foreground: #20241f;
-  --popover: #fffdf8;
-  --popover-foreground: #20241f;
-  --primary: #365b45;
-  --primary-foreground: #fffdf8;
-  --secondary: #ebe8df;
-  --secondary-foreground: #292d29;
-  --muted: #ebe8df;
-  --muted-foreground: #686d67;
-  --accent: #e4ebe5;
-  --accent-foreground: #294634;
-  --destructive: #aa4744;
-  --border: #d8d4ca;
-  --input: #d0ccc1;
-  --ring: #557260;
-  --radius: 0.75rem;
+  --background: #f7f8f6;
+  --foreground: #17211b;
+  --card: #ffffff;
+  --card-foreground: #17211b;
+  --popover: #ffffff;
+  --popover-foreground: #17211b;
+  --primary: #245c43;
+  --primary-foreground: #ffffff;
+  --secondary: #eef2ef;
+  --secondary-foreground: #294236;
+  --muted: #f1f4f2;
+  --muted-foreground: #66736b;
+  --accent: #e2eee7;
+  --accent-foreground: #1f523b;
+  --destructive: #b34d4a;
+  --border: #dce4de;
+  --input: #cbd8cf;
+  --ring: #4d8a69;
+  --radius: 0.625rem;
   --paper: #f4f1e9;
   --paper-deep: #e7e2d7;
   --ink: #20241f;
@@ -93,6 +93,36 @@
   select,
   textarea {
     font: inherit;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select,
+  textarea {
+    min-height: 2.75rem;
+    border: 1px solid var(--input);
+    border-radius: var(--radius-md);
+    background: var(--card);
+    color: var(--foreground);
+    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):hover,
+  select:hover,
+  textarea:hover {
+    border-color: var(--ring);
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+  select:focus,
+  textarea:focus {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 16%, transparent);
+    outline: none;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--muted-foreground);
   }
 
   button,
@@ -1157,12 +1187,12 @@ textarea:disabled {
 }
 
 /* Authenticated workspace shell */
-.app-frame {
+  .app-frame {
   display: grid;
   min-height: 100svh;
-  grid-template-columns: 17.5rem minmax(0, 1fr);
-  background: #f4f1e9;
-}
+  grid-template-columns: 18rem minmax(0, 1fr);
+  background: var(--background);
+  }
 
 .app-sidebar {
   position: sticky;

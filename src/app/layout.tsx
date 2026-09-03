@@ -23,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" data-scroll-behavior="smooth">
+    <html lang="en" className="bg-background" data-scroll-behavior="smooth">
       <body>
         <TooltipProvider>{children}</TooltipProvider>
       </body>

@@ -246,6 +246,22 @@
   min-width: 0;
 }
 
+/* The identity cell holds <strong>name</strong><span>kind · size</span> with
+   no separator between them, so inline flow rendered "…demoPasted text".
+   Stacking the two mirrors the scope ledger's title-over-meta rhythm. */
+.commercial-source-list > article > div:first-child {
+  display: grid;
+  gap: var(--gap-1);
+  min-width: 0;
+}
+
+.commercial-source-list > article > div:first-child > span {
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
 /* The scope ledger carries the state spine too: kind-coloured rules turn the
    list into an annotated clause register. */
 .scope-ledger > article {

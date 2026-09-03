@@ -259,6 +259,12 @@
   background: var(--surface);
 }
 
+/* With no messages the component renders the thread container with no
+   children, which drew an empty bordered box beside the composer. */
+.client-discussion:empty {
+  display: none;
+}
+
 .client-card,
 .client-empty-state {
   display: grid;

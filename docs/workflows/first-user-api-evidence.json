@@ -1,0 +1,122 @@
+[
+  {
+    "method": "POST",
+    "path": "/api/v1/workspaces",
+    "status": 201
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/workspaces/[id]/projects",
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workspaces/[id]/clients",
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workspaces/[id]/projects",
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workspaces/[id]/projects/[id]/milestones",
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workspaces/[id]/projects/[id]/work-items",
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workspaces/[id]/projects/[id]/work-items/[id]/comments",
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workspaces/[id]/projects/[id]/notes",
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workspaces/[id]/projects/[id]/commercial/sources",
+    "status": 201
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/workspaces/[id]/projects/[id]/commercial/sources/[id]",
+    "status": 200
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workspaces/[id]/time-entries",
+    "status": 201
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workspaces/[id]/projects/[id]/engineering/verifications",
+    "status": 201
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/workspaces/[id]/projects/[id]/work-items/[id]",
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/workspaces/[id]/portfolio",
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/workspaces/[id]/projects/[id]",
+    "status": 200
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/workspaces/[id]/projects/[id]",
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/workspaces/[id]/projects/[id]",
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/workspaces/[id]/projects",
+    "status": 200
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/workspaces/[id]/projects/[id]",
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/workspaces/[id]/projects/[id]",
+    "status": 200
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/workspaces/[id]/projects/[id]",
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/workspaces/[id]/projects",
+    "status": 200
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/workspaces/[id]/projects/[id]",
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/workspaces/[id]/projects/[id]",
+    "status": 200
+  }
+]

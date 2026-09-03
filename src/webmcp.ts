@@ -1,6 +1,7 @@
 /// <reference types="webmcp-types" />
 
 import { z } from "zod";
+import type { WorkflowContext } from "@/webmcp/workflow-types";
 
 /**
  * Browser-only adapters for pre-existing authenticated ScopeDelta workflows.
@@ -39,7 +40,7 @@ type DriftState =
 const MAX_TOOL_OUTPUT_CHARACTERS = 1_500;
 const REGISTRY_KEY = Symbol.for("scopedelta.webmcp.registry");
 
-type ToolName = (typeof WEBMCP_TOOL_NAMES)[number];
+type ToolName = string;
 type ModelContext = WebMCP.ModelContext;
 type CompatibleNavigator = Navigator & { modelContext?: ModelContext };
 
@@ -54,6 +55,7 @@ export type ScopeDeltaWebMcpConfig = {
   workspaceId: string;
   userId: string;
   onWorkItemCreated: () => void | Promise<void>;
+  workflowContext?: WorkflowContext;
 };
 
 type RegistryRecord = {
@@ -496,6 +498,7 @@ export function createScopeDeltaWebMcpTools(
           input.project_key,
           options?.signal,
         );
+        options?.signal?.throwIfAborted();
         const created = await apiRequest<WorkItem>(
           `/api/v1/workspaces/${config.workspaceId}/projects/${project.id}/work-items`,
           {
@@ -607,13 +610,43 @@ async function registerTools(
   host: Document & Record<symbol, unknown>,
   config: ScopeDeltaWebMcpConfig,
 ) {
-  const tools = createScopeDeltaWebMcpTools(config);
+  const tools =
+    config.workflowContext && config.workflowContext.surface !== "workspace"
+      ? []
+      : createScopeDeltaWebMcpTools(config);
+  if (config.workflowContext) {
+    const { createWorkflowTools } = await import("@/webmcp/workflows");
+    if (!isCurrentRegistry(registry, host)) return;
+    tools.push(
+      ...createWorkflowTools({
+        ...config,
+        isActive: () => isCurrentRegistry(registry, host),
+      }),
+    );
+  }
   for (const tool of tools) {
     if (!isCurrentRegistry(registry, host)) break;
     const controller = new AbortController();
     registry.controllers.push(controller);
     try {
-      await registry.context.registerTool(tool, { signal: controller.signal });
+      const execute = tool.execute;
+      const documentTool: WebMCP.ModelContextTool = {
+        ...tool,
+        execute: (input, options) => {
+          if (!isCurrentRegistry(registry, host))
+            throw new Error(
+              "This tool belongs to an old page. Discover tools again.",
+            );
+          const signal = options?.signal
+            ? AbortSignal.any([controller.signal, options.signal])
+            : controller.signal;
+          signal.throwIfAborted();
+          return execute(input, { ...options, signal });
+        },
+      };
+      await registry.context.registerTool(documentTool, {
+        signal: controller.signal,
+      });
       if (!isCurrentRegistry(registry, host)) {
         controller.abort();
         break;
@@ -659,12 +692,8 @@ async function reconcileStatus(
   setStatus({
     available: true,
     phase,
-    registeredTools: WEBMCP_TOOL_NAMES.filter((name) =>
-      registeredTools.includes(name),
-    ),
-    failedTools: WEBMCP_TOOL_NAMES.filter((name) =>
-      registry.failedTools.has(name),
-    ),
+    registeredTools,
+    failedTools: [...registry.failedTools],
   });
 }
 

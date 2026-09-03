@@ -1,5 +1,7 @@
 # ScopeDelta WebMCP Challenge Submission Draft
 
+> Historical four-tool challenge scope. [WEBMCP-002](workflows/README.md) expands coverage to the full product lifecycle; see [usage and first-user setup](workflows/USAGE.md). Update recording/submission claims after that branch is reviewed and deployed.
+
 ## Working title and pitch
 
 **ScopeDelta — Keep delivery tied to the agreement**

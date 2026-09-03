@@ -45,7 +45,11 @@ export function AppShell({
         </div>
         <WorkspaceSwitcher current={current} workspaces={workspaces} />
         <WorkspaceNavigation workspaceSlug={current.slug} role={current.role} />
-        <WebMcpBridge workspaceId={current.id} userId={userId} />
+        <WebMcpBridge
+          workspaceId={current.id}
+          workspaceSlug={current.slug}
+          userId={userId}
+        />
         <div className="app-account">
           <span className="account-avatar" aria-hidden="true">
             {initials(userName)}

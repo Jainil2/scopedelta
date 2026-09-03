@@ -1,3 +1,4 @@
+import { WebMcpBridge } from "@/components/webmcp-bridge";
 import Link from "next/link";
 
 import { AuthShell } from "@/components/auth-shell";
@@ -41,6 +42,7 @@ export default async function VerificationStatusPage({
           </Link>
         )}
       </div>
+      <WebMcpBridge workspaceId="" userId="" surface="public" />
     </AuthShell>
   );
 }

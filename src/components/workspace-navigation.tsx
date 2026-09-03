@@ -3,6 +3,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
+  Workflow,
   Building2,
   CreditCard,
   FolderKanban,
@@ -34,7 +35,13 @@ export function WorkspaceNavigation({
   const pathname = usePathname();
   const root = `/app/${workspaceSlug}`;
   const groups: Array<readonly [string, NavigationItem[]]> = [
-    ["Workspace", [["Overview", root, LayoutDashboard]]],
+    [
+      "Workspace",
+      [
+        ["Overview", root, LayoutDashboard],
+        ["Agent workflows", `${root}/workflows`, Workflow],
+      ],
+    ],
     [
       "Delivery",
       [

@@ -1350,8 +1350,9 @@ textarea:disabled {
   background: #7e9a83;
 }
 
-.webmcp-tool-names {
-  display: none;
+.webmcp-status:not([data-surface="workspace"]) {
+  color: var(--muted-foreground);
+  border-top-color: var(--border);
 }
 
 .app-account {
@@ -3308,4 +3309,130 @@ textarea:disabled {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Agent workflows use the existing workspace palette and spacing. */
+.workflow-explorer {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 84rem;
+}
+.workflow-start,
+.workflow-card {
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--card);
+}
+.workflow-start ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem 2rem;
+  margin: 1.25rem 0;
+  padding-left: 1.2rem;
+  list-style: decimal;
+}
+.workflow-start h2,
+.workflow-card h2,
+.workflow-confirmation h2 {
+  font-size: 1.2rem;
+  font-weight: 650;
+}
+.workflow-start a,
+.workflow-actions a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2rem;
+}
+.workflow-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.workflow-filters label {
+  display: grid;
+  gap: 0.5rem;
+  flex: 1 1 15rem;
+}
+.workflow-filters input,
+.workflow-filters select {
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--background);
+  color: var(--foreground);
+}
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 23rem), 1fr));
+  gap: 1rem;
+}
+.workflow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.workflow-card h2,
+.workflow-card p {
+  margin: 0;
+}
+.workflow-card details {
+  flex: 1;
+}
+.workflow-card summary {
+  cursor: pointer;
+}
+.workflow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.workflow-actions button {
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--background);
+  color: var(--foreground);
+  cursor: pointer;
+}
+.workflow-actions button:last-child {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.workflow-confirmation {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(40rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  padding: 1.75rem;
+  background: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+.workflow-confirmation::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+.workflow-confirmation pre {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 45dvh;
+  overflow: auto;
+  font-size: 0.85rem;
+}
+.workflow-review-fields {
+  display: grid;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+.workflow-review-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }

@@ -1,3 +1,4 @@
+import { WebMcpBridge } from "@/components/webmcp-bridge";
 import { AuthShell } from "@/components/auth-shell";
 import { SignUpForm } from "@/components/auth-forms";
 
@@ -14,6 +15,7 @@ export default async function SignUpPage({
       description="Create your account, verify your work email, then open the first isolated workspace."
     >
       <SignUpForm callbackURL={safeCallback(callbackURL, "/onboarding")} />
+      <WebMcpBridge workspaceId="" userId="" surface="public" />
     </AuthShell>
   );
 }

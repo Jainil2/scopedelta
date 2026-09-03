@@ -9,7 +9,6 @@ import {
   test,
 } from "@playwright/test";
 import { Pool } from "pg";
-import { WORKFLOW_CATALOG } from "../src/webmcp/workflow-catalog";
 import { HUMAN_FLOWS } from "../src/webmcp/workflow-navigation";
 
 const mailpitUrl = "http://127.0.0.1:8025";
@@ -1818,6 +1817,7 @@ test("client collaboration keeps one commercial truth across internal and extern
   await clientPage.goto(verification);
   await clientPage.getByRole("link", { name: "Continue" }).click();
   await clientPage.waitForURL(/\/client\/projects\//);
+  await loadBrowserWorkflow(clientPage, "client_project_access");
   await expect
     .poll(() =>
       clientPage.evaluate(() =>
@@ -2565,6 +2565,37 @@ async function installWebMcpModelContext(page: Page) {
   });
 }
 
+async function loadBrowserWorkflow(page: Page, name: string) {
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as unknown as { __webMcpTools: Map<string, unknown> }
+        ).__webMcpTools?.has("discover_workflows"),
+      ),
+    )
+    .toBe(true);
+  const result = await page.evaluate(async (name) => {
+    const tools = (
+      window as unknown as {
+        __webMcpTools: Map<
+          string,
+          {
+            execute: (
+              input: unknown,
+              options: { signal: AbortSignal },
+            ) => Promise<unknown>;
+          }
+        >;
+      }
+    ).__webMcpTools;
+    return tools
+      .get("discover_workflows")!
+      .execute({ load: name }, { signal: new AbortController().signal });
+  }, name);
+  expect(result).toMatchObject({ status: "workflow_loaded", tool: name });
+}
+
 async function expectWorkspaceBrowserTools(
   page: Page,
   { visibleStatus = true }: { visibleStatus?: boolean } = {},
@@ -2577,9 +2608,6 @@ async function expectWorkspaceBrowserTools(
     ...HUMAN_FLOWS.map((flow) => flow.name),
     "open_workflow",
     "discover_workflows",
-    ...WORKFLOW_CATALOG.filter((flow) =>
-      flow.surfaces.includes("workspace"),
-    ).map((flow) => flow.name),
   ];
   if (visibleStatus) {
     await expect(
@@ -3172,6 +3200,7 @@ test("workflow tools take a first user from empty workspace to completed deliver
     input: Record<string, unknown>,
     confirmation?: "confirm" | "cancel",
   ) {
+    await loadBrowserWorkflow(page, name);
     await expect
       .poll(() =>
         page.evaluate(

@@ -1,80 +1,46 @@
 # ScopeDelta WebMCP Challenge Submission Draft
 
-> Historical four-tool challenge scope. [WEBMCP-002](workflows/README.md) expands coverage to the full product lifecycle; see [usage and first-user setup](workflows/USAGE.md). Update recording/submission claims after that branch is reviewed and deployed.
+Updated September 3, 2026 for the workflow expansion merged in [PR #77](https://github.com/Jainil2/scopedelta/pull/77), commit `a44b619153df508d8cc91e8a1a0f678524974919`. The founder reports production availability. Native-browser rehearsal and the final video are still pending; this is proposed submission copy, not fresh execution evidence.
 
 ## Working title and pitch
 
-**ScopeDelta — Keep delivery tied to the agreement**
+**ScopeDelta — Keep delivery tied to the agreement, from setup to completion**
 
-ScopeDelta helps small software agencies detect when active delivery has drifted from the current commercial agreement. Through four WebMCP tools, an authenticated project lead can ask what needs attention, find related work, inspect factual drift categories with provenance, and create the next ordinary work item without leaving the conversation. The same authorization, audit, validation, and UI workflows used by humans remain in control.
+ScopeDelta helps small software agencies keep delivery connected to commercial scope and client decisions. A browser agent can help create a workspace and project, organize work, inspect factual commercial drift, prepare a reviewed change decision, and carry delivery through client acceptance and project completion. People retain responsibility for access, commercial treatment, publication and approval.
 
 ## Submission copy
 
-Small agencies rarely lose margin because they cannot track tasks. They lose it when delivery changes faster than the commercial agreement: a ticket still points at an old scope revision, client work has no basis, or urgent work was never classified.
+Small agencies lose margin when delivery changes faster than the agreement. ScopeDelta connects the agreed scope, current work, client requests and recorded decisions so a team can see what needs attention and what has actually been approved.
 
-ScopeDelta turns its existing authenticated workspace into a safe browser-tool surface. The agent can list the signed-in user’s assigned work, search project work, summarize five factual commercial-drift categories, and create normal delivery work. It uses the user’s browser session and the same server routes and domain services as the UI—there is no privileged agent backend, copied customer context, or bypass around project authorization.
+Its WebMCP integration now spans the product lifecycle. A first user can sign in normally and ask an agent to create a workspace, client and project without a seeded database. The agent works through the same session, server routes and domain rules as the ordinary application. Consequential actions pause for human review in ScopeDelta; external client tools expose the authorized client projection.
 
-The NOVA demo makes the core value legible in under three minutes. A real baseline is activated, then a real amendment revises checkout scope. One active ticket remains linked to the older revision, producing stale-basis drift through lineage rather than a fabricated label. The judge can identify it, see the complete factual category counts, and create a follow-up that appears immediately in the ordinary product.
+The proposed NOVA demo follows a small launch-scope review engagement. The original agreement excludes wholesale discounts. A client requests additional review, and the agent identifies the resulting work without a commercial basis. A manager reviews a paid-change decision, the client approves its published packet, and the work is linked to the decision. The team reviews the checklist, obtains separate delivery acceptance, then confirms project completion. Every claimed result must appear in the ordinary product during rehearsal and recording.
 
-## Rubric mapping
+## Implementation and value
 
-### Technical implementation
+- The [source inventory](workflows/README.md) maps 55 business workflow tools to 156 directly invoked API operations, with separate discovery/navigation and human handoffs. The four original shortcuts remain compatible. These are catalog counts, not a claim that the video executes every tool.
+- Tools use existing authentication, authorization, validation and audit behavior. Source uploads, draft baselines, commercial decisions, client approvals and delivery acceptance keep their distinct meanings.
+- The [operator runbook](HACK_DEMO_RUNBOOK.md) demonstrates the empty-workspace path and preserves real human confirmations, actual returned IDs and visible state changes.
+- No extra Netlify environment values or demo fixture are required for that path. External provider services still require their own configuration; the main story does not invoke built-in AI, GitHub or payment processing.
+- The commercial explanation remains the central moment: factual agreement drift leads to a traceable human decision and ordinary delivery work.
 
-- Exactly four imperative WebMCP tools with strict schemas and bounded, model-safe projections.
-- Existing same-origin API routes, browser session, domain validation, audits, and authorization are reused.
-- Registration is awaited, independently abortable, reconciled after remount/navigation, and protected against duplicate/stale registries.
-- Reads preserve cancellation. The write never retries an ambiguous POST and tells the caller to search before retrying.
-- Both required isolation/capability headers are emitted for SSR/function and static responses.
-- The judge fixture is deterministic, idempotent, verified with Better Auth’s password verifier, and protected by exact identity/workspace/reset markers.
+## Current recording plan
 
-### Usefulness and impact
+Use [HACK_DEMO.md](HACK_DEMO.md) as the single current script: **2:50, nine scenes, 322 narration words**. It replaces the old pre-seeded four-tool storyboard. The cut shows one coherent engagement rather than an inventory tour.
 
-- The entry addresses agency margin leakage and change-order readiness, not generic task creation.
-- It connects delivery facts to the current agreement while keeping the result advisory.
-- The created remediation item returns to the same backlog/My Work interface the team already uses.
+| Story stage                  | Tool examples                                                                                                               | Required visible proof                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Start from zero              | `workspace_setup`, `client_accounts`, `project_lifecycle`                                                                   | Empty project list followed by the created NOVA project.                                       |
+| Establish scope and work     | `commercial_evidence`, `commercial_agreement`, `commercial_scope`, `delivery_work`, `work_commercial_basis`, `list_my_work` | Activated evidence-backed baseline and matching assigned retail work.                          |
+| Handle a client request      | `client_requests`, `search_work_items`, `get_commercial_drift`                                                              | Actual client request; wholesale work without a basis; matching ordinary ledger.               |
+| Review and approve treatment | `commercial_decisions`, `client_request_review`, `client_packet_response`, `create_work_item`                               | Manager confirmation, exact approved client packet, visible follow-up and decision link.       |
+| Accept delivery and complete | `qa_verification`, `client_acceptance_publication`, `client_delivery_acceptance`, `project_lifecycle`                       | Actual review findings, accepted delivery snapshot, confirmed completion and retained project. |
 
-### Quality and polish
+The complete recording needs genuine Team and external Client Approver sessions. An internal-only draft must end at awaiting client approval and cannot claim the full engagement is finished. Read [HACK_DEMO_STATE.md](HACK_DEMO_STATE.md) for current assets and remaining capture work. The v1 voice track does not match this script.
 
-- A purpose-built synthetic project produces one result in each drift category.
-- A role-aware NOVA command center opens on client, lead, team, delivery horizon, baseline, drift, and assigned attention work before any tool is invoked.
-- Persistent grouped navigation, immediate loading feedback, native authenticated form controls, keyboard focus, and narrow-screen overflow checks keep the judge journey coherent.
-- Human-readable project key `NOVA` avoids exposing opaque IDs to the model.
-- Unsupported browsers retain the complete normal product experience.
-- The submission provides exact prompts, reproducible reset, repository-safe evidence, and exact-SHA checks.
+## Historical final release evidence — August 31
 
-### Creativity and originality
-
-- Commercial lineage—not keyword matching—shows when delivery is based on an obsolete agreement revision.
-- The agent is a focused interface over an existing multi-user operating system, not a disconnected chatbot or demo-only endpoint.
-- One conversation moves from detection to an auditable remediation item without granting the agent new business powers.
-
-## Prompt-to-tool proof
-
-| Judge prompt                                                                                                                     | Expected tool          | Proof to capture                                                    |
-| -------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------- |
-| “What assigned work needs my attention?”                                                                                         | `list_my_work`         | Five assigned NOVA base items with delivery context.                |
-| “In project NOVA, find the wholesale discount work.”                                                                             | `search_work_items`    | `Add wholesale discount rules`.                                     |
-| “Why is delivery drifting from the current commercial agreement in NOVA? Give me the factual category counts and affected work.” | `get_commercial_drift` | Counts of one for all five categories and the five affected titles. |
-| “In NOVA, create a high-priority work item titled ‘Confirm wholesale change-order review’ and assign it to me.”                  | `create_work_item`     | Stable created item followed by the same title in ordinary UI.      |
-
-## Under-three-minute storyboard
-
-Target duration: **2:45**, leaving fifteen seconds below the limit.
-
-| Time      | Screen and narration                                                                                                                                                                                                                              |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0:00–0:18 | Open on the NOVA command center: client, lead, team, active cycle, launch milestone, current baseline, all five drift counts, and assigned attention. “Agencies need to know when delivery no longer matches the agreement.”                      |
-| 0:18–0:32 | Show the four active browser tools. State that they reuse the signed-in session and existing authorization/domain services.                                                                                                                       |
-| 0:32–0:52 | Ask prompt 1. Briefly show the five assigned NOVA items and the matching command-center attention list.                                                                                                                                           |
-| 0:52–1:12 | Ask prompt 2. Highlight `Add wholesale discount rules` and its project context.                                                                                                                                                                   |
-| 1:12–1:55 | Ask prompt 3. Center the response and ordinary drift ledger: one linked, stale basis, commercially unlinked, needs classification, and support/internal. Explain that one internal summary request shares the authoritative classification logic. |
-| 1:55–2:25 | Ask prompt 4. Show the returned created item, then the same high-priority assigned item in Backlog, My Work, and the refreshed command-center attention list.                                                                                     |
-| 2:25–2:38 | Use the persistent project bar to return to Overview, then refresh. Show exactly four tools with no duplicates and mention that ordinary members do not see Commercial.                                                                           |
-| 2:38–2:45 | Closing: “ScopeDelta keeps delivery tied to the agreement—through the tools teams and agents already use.”                                                                                                                                        |
-
-Avoid showing sign-in entry, account menus, cookies, network request headers, database IDs, private email, or password in the video. Use tight crops and repository-safe screenshots.
-
-## Final release evidence
+The following HACK-003 record is retained as historical evidence. Its four-tool counts, missing-demo-configuration observations and pending entries describe the earlier release. They do not describe the merged workflow catalog or the founder's September 3 environment update. Its reset instruction is not an instruction to reset the v2 recording workspace. Use the current script and handoff above for recording status.
 
 Last updated: **2026-08-31**. This is the durable HACK-003 release record. Do
 not replace pending entries with assumptions or evidence from a different

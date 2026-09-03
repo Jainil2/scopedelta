@@ -61,7 +61,7 @@ export type ScopeDeltaWebMcpConfig = {
 type RegistryRecord = {
   id: symbol;
   context: ModelContext;
-  controllers: AbortController[];
+  controllers: Set<AbortController>;
   successfulTools: Set<ToolName>;
   failedTools: Set<ToolName>;
   disposed: boolean;
@@ -553,7 +553,7 @@ export function registerScopeDeltaWebMcp(
   const registry: RegistryRecord = {
     id: Symbol("scopedelta-webmcp-registration"),
     context,
-    controllers: [],
+    controllers: new Set(),
     successfulTools: new Set(),
     failedTools: new Set(),
     disposed: false,
@@ -617,46 +617,42 @@ async function registerTools(
   if (config.workflowContext) {
     const { createWorkflowTools } = await import("@/webmcp/workflows");
     if (!isCurrentRegistry(registry, host)) return;
+    let selected: { name: string; controller: AbortController } | undefined;
+    let loading: Promise<boolean> = Promise.resolve(false);
     tools.push(
       ...createWorkflowTools({
         ...config,
         isActive: () => isCurrentRegistry(registry, host),
+        loadWorkflow: (tool, signal) => {
+          // Serialize replacement so concurrent discovery cannot accumulate tools.
+          loading = loading.then(async () => {
+            if (!isCurrentRegistry(registry, host)) return false;
+            // A request abandoned while queued must leave the selection intact.
+            if (signal?.aborted) return false;
+            if (selected) {
+              selected.controller.abort();
+              registry.controllers.delete(selected.controller);
+              registry.successfulTools.delete(selected.name);
+              registry.failedTools.delete(selected.name);
+            }
+            selected = { name: tool.name, controller: new AbortController() };
+            const loaded = await registerDocumentTool(
+              registry,
+              host,
+              tool,
+              selected.controller,
+            );
+            await reconcileStatus(registry, host, "available");
+            return loaded;
+          });
+          return loading;
+        },
       }),
     );
   }
   for (const tool of tools) {
     if (!isCurrentRegistry(registry, host)) break;
-    const controller = new AbortController();
-    registry.controllers.push(controller);
-    try {
-      const execute = tool.execute;
-      const documentTool: WebMCP.ModelContextTool = {
-        ...tool,
-        execute: (input, options) => {
-          if (!isCurrentRegistry(registry, host))
-            throw new Error(
-              "This tool belongs to an old page. Discover tools again.",
-            );
-          const signal = options?.signal
-            ? AbortSignal.any([controller.signal, options.signal])
-            : controller.signal;
-          signal.throwIfAborted();
-          return execute(input, { ...options, signal });
-        },
-      };
-      await registry.context.registerTool(documentTool, {
-        signal: controller.signal,
-      });
-      if (!isCurrentRegistry(registry, host)) {
-        controller.abort();
-        break;
-      }
-      registry.successfulTools.add(tool.name as ToolName);
-    } catch {
-      if (!registry.disposed && !controller.signal.aborted) {
-        registry.failedTools.add(tool.name as ToolName);
-      }
-    }
+    await registerDocumentTool(registry, host, tool, new AbortController());
     await reconcileStatus(registry, host);
   }
 
@@ -669,6 +665,46 @@ async function registerTools(
     registry.toolChangeListener,
   );
   await reconcileStatus(registry, host, "available");
+}
+
+async function registerDocumentTool(
+  registry: RegistryRecord,
+  host: Document & Record<symbol, unknown>,
+  tool: WebMCP.ModelContextTool,
+  controller: AbortController,
+) {
+  registry.controllers.add(controller);
+  try {
+    const documentTool: WebMCP.ModelContextTool = {
+      ...tool,
+      execute: (input, options) => {
+        if (!isCurrentRegistry(registry, host))
+          throw new Error(
+            "This tool belongs to an old page. Discover tools again.",
+          );
+        const signal = options?.signal
+          ? AbortSignal.any([controller.signal, options.signal])
+          : controller.signal;
+        signal.throwIfAborted();
+        return tool.execute(input, { ...options, signal });
+      },
+    };
+    await registry.context.registerTool(documentTool, {
+      signal: controller.signal,
+    });
+    if (!isCurrentRegistry(registry, host) || controller.signal.aborted) {
+      controller.abort();
+      registry.controllers.delete(controller);
+      return false;
+    }
+    registry.successfulTools.add(tool.name);
+    return true;
+  } catch {
+    controller.abort();
+    registry.controllers.delete(controller);
+    if (!registry.disposed) registry.failedTools.add(tool.name);
+    return false;
+  }
 }
 
 async function reconcileStatus(

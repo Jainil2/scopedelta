@@ -134,7 +134,7 @@ The workflow tools directly invoke **156 API operations**. 3 billing/provider op
 | `desktop_preferences` | Explain how to continue notification permissions, external sign-in and local preferences in the native ScopeDelta desktop app. Browser tools cannot change native preferences.       | instructions                                     |
 | `pilot_interest`      | Open the public pilot form for the person to review and submit their contact details and requirements.                                                                               | open_form                                        |
 
-Workspace pages register the original four tools, discovery/navigation, four handoff tools, and workspace business flows. Setup pages register workspace setup plus discovery/navigation/handoffs; authenticated client pages register only client projection flows plus discovery/navigation/handoffs. Public account pages expose only discovery/navigation/handoffs.
+Workspace pages register the original four tools, discovery/navigation and four handoff tools. `discover_workflows` lists all workflows allowed on the current surface; `{"load":"<workflow name>"}` registers one business tool, replacing the previous selection. Refresh native tools after loading. Setup pages can load workspace setup; authenticated client pages can load only client projection flows. Public account pages expose only discovery/navigation/handoffs. The registered set contains at most eleven tools on workspace pages and seven elsewhere; all 55 business workflows remain discoverable on their authorized surfaces.
 
 ## Complete work sequences
 

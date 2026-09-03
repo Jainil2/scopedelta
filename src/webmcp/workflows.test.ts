@@ -74,19 +74,25 @@ describe("workflow coverage and surface isolation", () => {
       }
     }
   });
-  it("provides only onboarding actions before a workspace exists and client projections in the portal", () => {
+  it("discovers only onboarding actions before a workspace exists and client projections in the portal", async () => {
+    const discover = async () =>
+      (await createWorkflowTools(config)
+        .find((tool) => tool.name === "discover_workflows")!
+        .execute({}, { signal: new AbortController().signal })) as {
+        workflows: { tool: string }[];
+      };
     config.workflowContext!.surface = "setup";
-    let names = createWorkflowTools(config).map((tool) => tool.name);
+    let names = (await discover()).workflows.map((flow) => flow.tool);
     expect(names).toContain("workspace_setup");
     expect(names).not.toContain("delivery_work");
     config.workflowContext!.surface = "client";
-    names = createWorkflowTools(config).map((tool) => tool.name);
+    names = (await discover()).workflows.map((flow) => flow.tool);
     expect(names).toContain("client_project_access");
     expect(names).toContain("client_packet_response");
     expect(names).not.toContain("commercial_decisions");
     expect(names).not.toContain("workspace_setup");
   });
-  it("registers the expanded tools, then removes workspace access when the document changes surface", async () => {
+  it("loads one workflow at a time and removes workspace access when the document changes surface", async () => {
     const registered = new Map<string, WebMCP.ModelContextTool>();
     const context = {
       registerTool: vi.fn(
@@ -110,14 +116,99 @@ describe("workflow coverage and surface isolation", () => {
     }) as unknown as Document;
     const first = registerScopeDeltaWebMcp(config, doc);
     await first.ready;
+    const load = (name: string) =>
+      registered
+        .get("discover_workflows")!
+        .execute({ load: name }, { signal: new AbortController().signal });
+    expect(registered.size).toBe(10);
+    expect(registered.has("client_accounts")).toBe(false);
+    expect(await load("client_accounts")).toMatchObject({
+      status: "workflow_loaded",
+    });
     const staleTool = registered.get("client_accounts")!;
+    await load("project_lifecycle");
+    expect(registered.size).toBe(11);
+    expect(registered.has("client_accounts")).toBe(false);
     expect(getWebMcpStatus().registeredTools).toContain("project_lifecycle");
+    await expect(
+      Promise.resolve().then(() =>
+        staleTool.execute(
+          { action: "list" },
+          { signal: new AbortController().signal },
+        ),
+      ),
+    ).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Every business flow remains loadable, with a bounded native registration.
+    for (const item of WORKFLOW_CATALOG.filter((flow) =>
+      flow.surfaces.includes("workspace"),
+    )) {
+      expect(await load(item.name)).toMatchObject({
+        status: "workflow_loaded",
+      });
+      expect(registered.size).toBe(11);
+      expect(
+        Buffer.byteLength(JSON.stringify([...registered.values()])),
+      ).toBeLessThan(32_000);
+    }
+    await Promise.all([load("client_accounts"), load("delivery_work")]);
+    expect(registered.size).toBe(11);
+    expect(registered.has("client_accounts")).toBe(false);
+    expect(registered.has("delivery_work")).toBe(true);
+    // An abandoned load must leave the current selection registered.
+    const abandoned = new AbortController();
+    const abandonedLoad = registered
+      .get("discover_workflows")!
+      .execute({ load: "client_accounts" }, { signal: abandoned.signal });
+    abandoned.abort();
+    await expect(abandonedLoad).rejects.toThrow();
+    expect(registered.size).toBe(11);
+    expect(registered.has("delivery_work")).toBe(true);
+    expect(registered.has("client_accounts")).toBe(false);
+    // A failed native registration is reported and does not poison later loads.
+    context.registerTool.mockRejectedValueOnce(new Error("unsupported"));
+    expect(await load("client_accounts")).toMatchObject({
+      status: "workflow_unavailable",
+    });
+    expect(registered.size).toBe(10);
+    expect(getWebMcpStatus().failedTools).toEqual(["client_accounts"]);
+    expect(await load("project_lifecycle")).toMatchObject({
+      status: "workflow_loaded",
+    });
+    expect(getWebMcpStatus().failedTools).toEqual([]);
+    // Replacing a workflow cancels a pending human confirmation before a write.
+    config.workflowContext!.confirm = vi.fn(
+      (_request, signal) =>
+        new Promise<boolean>((resolve) =>
+          signal?.addEventListener("abort", () => resolve(false), {
+            once: true,
+          }),
+        ),
+    );
+    const pending = registered
+      .get("project_lifecycle")!
+      .execute(
+        { action: "update", projectId, data: { lifecycle: "completed" } },
+        { signal: new AbortController().signal },
+      );
+    expect(config.workflowContext!.confirm).toHaveBeenCalledOnce();
+    await load("client_accounts");
+    expect(await pending).toMatchObject({ status: "not_applied" });
+    expect(fetchMock).not.toHaveBeenCalled();
     const second = registerScopeDeltaWebMcp(
       { ...config, workspaceId: "", workflowContext: { surface: "client" } },
       doc,
     );
     await second.ready;
     expect(registered.has("delivery_work")).toBe(false);
+    expect(registered.size).toBe(6);
+    expect(await load("commercial_decisions")).toMatchObject({
+      status: "invalid_input",
+    });
+    expect(registered.size).toBe(6);
+    expect(await load("client_project_access")).toMatchObject({
+      status: "workflow_loaded",
+    });
     expect(registered.has("client_project_access")).toBe(true);
     await expect(
       Promise.resolve().then(() =>

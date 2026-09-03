@@ -15,7 +15,11 @@ Example prompt: “Set up Acme as a client and Website launch as project WEB. Ma
 
 ## Finding and executing a flow
 
-`discover_workflows` accepts an optional `query` such as `"commercial"` or `"time_tracking"`. Each business tool has an `action` selector; `data` contains write fields, `filters` contains list filters, and IDs are separate route fields such as `projectId` and `workItemId`. Use authorized list/read results for IDs. The workspace is fixed by the current document.
+Before each new business workflow in the sequence above, call `discover_workflows` with `{"load":"<workflow name>"}`, refresh the browser's available tools, then call that workflow. For example, load `workspace_setup` before creating the workspace, then load `client_accounts` on the resulting workspace page. Loading replaces the previous business workflow; its action names and schemas remain unchanged. Switching actions within the same loaded workflow does not require another load.
+
+`discover_workflows` also accepts an optional `query` such as `"commercial"` or `"time_tracking"` to find every workflow allowed on the current surface. Discovery without `load` does not change registration. The four original workspace shortcuts and the lightweight navigation/handoff tools stay available. Workspace pages register ten base tools and at most one business tool; other surfaces register six base tools and at most one business tool. This avoids sending the entire business schema catalog to the browser at once.
+
+Each business tool has an `action` selector; `data` contains write fields, `filters` contains list filters, and IDs are separate route fields such as `projectId` and `workItemId`. Use authorized list/read results for IDs. The workspace is fixed by the current document. A canceled or replaced tool must be discovered again; never retry an uncertain write merely because the tool selection changed.
 
 `open_workflow` opens a named ordinary screen. Project destinations such as `board`, `commercial`, `engineering` or `ai` also require a returned project key. It never accepts arbitrary URLs.
 

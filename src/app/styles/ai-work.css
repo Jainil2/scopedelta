@@ -1,0 +1,389 @@
+/* AI, work detail, and collaboration.
+   These panes are the inspectable half of the dossier: the application speaks
+   in sans, the client's own agreement prose stays serif, and every machine
+   artefact (JSON snapshots, evidence keys, usage figures) is monospaced and
+   wrapped so a long identifier can never widen the layout. Responsive
+   coverage is co-located with each rule. */
+
+.ai-workspace-grid {
+  display: grid;
+  min-width: 0;
+  min-height: 40rem;
+  /* Two tracks, because the page renders exactly two children: the job rail
+     and the result pane. The evidence inspector is a child of the pane. */
+  grid-template-columns: minmax(16rem, 0.32fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--gap-4);
+}
+
+@media (max-width: 82rem) {
+  .ai-workspace-grid {
+    grid-template-columns: 15rem minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 42rem) {
+  .ai-workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- Document panels ---------------------------------------------------- */
+
+.ai-job-rail,
+.ai-result-pane,
+.ai-evidence-inspector,
+.work-summary,
+.work-editor,
+.context-ledger,
+.context-composer,
+.work-commercial-panel {
+  min-width: 0;
+  padding: var(--gap-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+}
+
+.ai-job-rail,
+.ai-result-pane,
+.ai-evidence-inspector,
+.ai-result-body,
+.ai-attempts,
+.ai-candidates,
+.ai-citations,
+.ai-clarifications,
+.ai-deterministic-facts,
+.ai-history,
+.work-summary,
+.work-activity,
+.context-ledger,
+.discussion-thread,
+.thread-group,
+.thread-reply {
+  display: grid;
+  min-width: 0;
+  gap: var(--gap-3);
+}
+
+.ai-evidence-inspector {
+  position: sticky;
+  top: 8rem;
+}
+
+@media (max-width: 82rem) {
+  .ai-evidence-inspector {
+    position: static;
+    grid-column: 1 / -1;
+  }
+}
+
+.ai-result-section,
+.ai-deterministic-facts,
+.separate-facts,
+.estimate-context,
+.work-context-header {
+  padding-top: var(--gap-3);
+  border-top: 1px solid var(--rule);
+}
+
+/* --- Machine output: JSON snapshots and evidence ----------------------- */
+
+.ai-evidence-inspector pre,
+.ai-result-pane pre,
+.ai-deterministic-facts pre {
+  max-width: 100%;
+  max-height: 24rem;
+  margin: 0;
+  padding: var(--gap-2);
+  border: 1px solid var(--rule-faint);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-snug);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+  white-space: pre-wrap;
+  overscroll-behavior: contain;
+}
+
+.ai-evidence-inspector .eyebrow {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* Pin-cite: an evidence key is a citation, so it is set like one. */
+.ai-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-1);
+}
+
+.ai-citations button {
+  min-width: 0;
+  padding: 0.1rem 0.32rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-label);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.ai-citations button:hover {
+  border-color: var(--seal);
+  background: var(--seal-soft);
+  color: var(--seal-ink);
+}
+
+/* --- Job rail, history, candidates ------------------------------------ */
+
+.ai-launcher select {
+  min-width: 0;
+}
+
+.ai-history button {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+  justify-items: start;
+  padding: var(--gap-2);
+  border: 1px solid transparent;
+  border-left: 2px solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-history button:hover {
+  background: var(--surface-3);
+}
+
+.ai-history button.is-selected {
+  border-left-color: var(--seal);
+  background: var(--surface-3);
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+}
+
+.ai-history button small,
+.ai-attempts p {
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.ai-attempts summary {
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.ai-attempts p {
+  margin: 0;
+}
+
+.ai-candidates label {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--gap-2);
+  padding: var(--gap-2);
+  border: 1px solid var(--rule-faint);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.ai-candidates label:hover {
+  border-color: var(--rule);
+  background: var(--surface-3);
+}
+
+.ai-candidates input[type="checkbox"] {
+  width: 1.05rem;
+  height: 1.05rem;
+  min-width: 1.05rem;
+  margin: 0.15rem 0 0;
+  accent-color: var(--seal);
+}
+
+.ai-candidates label > span {
+  display: grid;
+  min-width: 0;
+  gap: var(--gap-1);
+  justify-items: start;
+}
+
+.ai-candidates label strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.ai-candidates label small {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+
+/* --- Work editor dialog ------------------------------------------------ */
+
+.work-editor-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--gap-5);
+  background: color-mix(in srgb, var(--ink) 42%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.work-editor {
+  width: min(100%, 42rem);
+  max-height: min(86svh, 54rem);
+  padding: var(--gap-5);
+  border-color: var(--rule-strong);
+  overflow-y: auto;
+  box-shadow: var(--shadow-1);
+}
+
+@media (max-width: 42rem) {
+  .work-editor-backdrop {
+    padding: 0;
+  }
+
+  .work-editor {
+    width: 100%;
+    max-height: 100svh;
+    min-height: 100svh;
+    border: 0;
+    border-radius: 0;
+  }
+}
+
+.work-form,
+.work-time-composer,
+.comment-composer,
+.context-composer,
+.publication-form,
+.commercial-request-composer,
+.commercial-source-form,
+.scope-item-form,
+.baseline-create-form,
+.operations-composer,
+.adoption-composer {
+  display: grid;
+  min-width: 0;
+  gap: var(--gap-3);
+}
+
+@media (max-width: 42rem) {
+  .work-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- Inset panels ------------------------------------------------------ */
+
+.mention-picker,
+.preview-panel,
+.selected-evidence,
+.commercial-provenance,
+.kernel-proof,
+.kernel-status,
+.adoption-import-result,
+.adoption-template,
+.adoption-mapping,
+.onboarding-summary,
+.onboarding-prompt {
+  min-width: 0;
+  padding: var(--gap-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+
+/* The agreement speaks in serif: this is the client's own excerpt. */
+.selected-evidence blockquote {
+  margin: var(--gap-1) 0 0;
+  padding-left: var(--gap-2);
+  border-left: 2px solid var(--seal);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+
+.selected-evidence > span:first-child {
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+/* --- Collaboration ---------------------------------------------------- */
+
+.work-collaboration-grid {
+  grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 0.8fr);
+}
+
+@media (max-width: 68rem) {
+  .work-collaboration-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A reply is a marginal note on the comment above it. */
+.thread-reply {
+  margin-left: clamp(0rem, 4vw, var(--gap-4));
+  padding-left: var(--gap-3);
+  border-left: 2px solid var(--rule);
+}
+
+.thread-reply .comment-row {
+  border-bottom: 0;
+}
+
+.comment-composer textarea,
+.context-composer textarea,
+.inline-comment-edit textarea {
+  min-width: 0;
+}
+
+/* Versions are stored figures, so they are monospaced pin-cites. The list's
+   own ledger chrome stays with composition.css. */
+.comment-history strong,
+.comment-history time {
+  font-family: var(--mono);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-label);
+}
+
+.comment-history time {
+  color: var(--ink-3);
+}

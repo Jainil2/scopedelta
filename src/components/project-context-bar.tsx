@@ -94,7 +94,7 @@ export function ProjectContextBar({
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="min-w-56 rounded-xl border-stone-200 bg-[#fffdf8] p-1.5 shadow-xl"
+            className="min-w-56 rounded-lg border-border bg-popover p-1.5 shadow-lg"
           >
             {secondary.map(([label, href]) => (
               <DropdownMenuItem

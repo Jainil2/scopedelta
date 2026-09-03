@@ -1,0 +1,993 @@
+/* ============================================================================
+   Shared application composition — the de-facto design system.
+
+   Direction "Dossier": the application is a case file. Achromatic document
+   surfaces, hairline structure, one authority accent (--seal) spent sparingly,
+   tight radii, no gradients. Sans for everything the system says; mono for
+   identifiers, offsets, versions and money; serif is reserved for the client's
+   own contract prose and therefore never appears in this file.
+
+   Two selector unions here are used by every screen: the page container and
+   the section heading. Responsive coverage is co-located with each rule.
+   ============================================================================ */
+
+/* --- The page container -----------------------------------------------------
+   One shared measure for the whole authenticated product. The gutter is
+   intrinsic (clamp), so it collapses to 2rem on a 390px viewport without a
+   media query. */
+.app-content,
+.delivery-stack,
+.commercial-page,
+.engineering-page,
+.planning-workspace,
+.backlog-workspace,
+.my-workspace,
+.cycles-workspace,
+.collaboration-page,
+.ai-delivery-page,
+.operations-page,
+.adoption-page,
+.inbox-page,
+.member-management,
+.billing-stack,
+.self-service-stack {
+  display: grid;
+  width: min(100% - clamp(2rem, 4vw, 4rem), 90rem);
+  gap: clamp(var(--gap-4), 3vw, var(--gap-5));
+  margin: 0 auto;
+  padding: clamp(var(--gap-4), 3vw, var(--gap-6)) 0 var(--gap-6);
+}
+
+/* Grid children must be allowed to shrink below their content width, or a long
+   identifier inside any panel pushes the page wider than the viewport. */
+:where(
+    .app-content,
+    .delivery-stack,
+    .commercial-page,
+    .engineering-page,
+    .planning-workspace,
+    .backlog-workspace,
+    .my-workspace,
+    .cycles-workspace,
+    .collaboration-page,
+    .ai-delivery-page,
+    .operations-page,
+    .adoption-page,
+    .inbox-page,
+    .member-management,
+    .billing-stack,
+    .self-service-stack
+  )
+  > * {
+  min-width: 0;
+}
+
+/* --- The section heading ----------------------------------------------------
+   "Eyebrow + heading + trailing count/badge/action", used at 23+ sites.
+   flex-wrap does the responsive work: the trailing slot drops to its own line
+   only when it no longer fits, so no breakpoint is needed. */
+.delivery-page-header,
+.project-header,
+.commercial-header,
+.engineering-header,
+.app-page-header,
+.operations-header,
+.adoption-header,
+.directory-header,
+.billing-section-heading,
+.client-section-heading,
+.section-heading,
+.adoption-row-head,
+.operations-row-head,
+.engineering-card-title,
+.commercial-heading,
+.command-commercial-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap-2) var(--gap-4);
+}
+
+:where(
+    .delivery-page-header,
+    .project-header,
+    .commercial-header,
+    .engineering-header,
+    .app-page-header,
+    .operations-header,
+    .adoption-header,
+    .directory-header,
+    .billing-section-heading,
+    .client-section-heading,
+    .section-heading,
+    .adoption-row-head,
+    .operations-row-head,
+    .engineering-card-title,
+    .commercial-heading,
+    .command-commercial-heading
+  )
+  > * {
+  min-width: 0;
+}
+
+/* The page title. Sans, not serif: the system is speaking. */
+:where(
+    .delivery-page-header,
+    .project-header,
+    .commercial-header,
+    .engineering-header,
+    .app-page-header,
+    .operations-header,
+    .adoption-header,
+    .directory-header
+  )
+  h1 {
+  max-width: 28ch;
+  margin: var(--gap-1) 0 0;
+  font-family: var(--sans);
+  font-size: clamp(var(--text-2xl), 2.6vw, var(--text-3xl));
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+}
+
+:where(
+    .delivery-page-header,
+    .project-header,
+    .commercial-header,
+    .engineering-header,
+    .app-page-header,
+    .operations-header,
+    .adoption-header,
+    .directory-header
+  )
+  p:not(.eyebrow):not(.app-eyebrow) {
+  max-width: 60ch;
+  margin: var(--gap-1) 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+
+/* The eyebrow inside this pattern: a restrained filing label, not a shout.
+   Scoped to the heading union so the identity surfaces keep their own rule. */
+:is(
+    .delivery-page-header,
+    .project-header,
+    .commercial-header,
+    .engineering-header,
+    .app-page-header,
+    .operations-header,
+    .adoption-header,
+    .directory-header,
+    .billing-section-heading,
+    .client-section-heading,
+    .section-heading,
+    .commercial-heading,
+    .command-commercial-heading
+  )
+  :is(.eyebrow, .app-eyebrow) {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-eyebrow);
+  line-height: var(--leading-snug);
+  text-transform: uppercase;
+}
+
+.command-center-title {
+  align-items: center;
+  gap: var(--gap-3);
+}
+
+.command-center-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-1) var(--gap-2);
+  margin-top: var(--gap-2) !important;
+  color: var(--ink-3) !important;
+  font-size: var(--text-xs);
+}
+
+/* --- Action rows ---------------------------------------------------------- */
+.command-center-actions,
+.workspace-actions,
+.client-actions,
+.commercial-request-actions,
+.commercial-row-actions,
+.comment-actions,
+.invitation-actions,
+.member-actions,
+.lifecycle-actions,
+.reorder-actions,
+.scope-form-actions,
+.app-form-actions,
+.composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-2);
+}
+
+/* --- Buttons: one coherent set ----------------------------------------------
+   Secondary by default: --surface on a --rule hairline. */
+.command-center-actions a,
+.workspace-actions a,
+.client-actions a,
+.back-link,
+.collaboration-link,
+.delivery-project-link,
+.project-exposure,
+.attention-link,
+.button-link,
+.text-link,
+.operations-clear {
+  display: inline-flex;
+  min-height: 2.4rem;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-1);
+  padding: 0.5rem var(--gap-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-decoration: none;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+
+:where(
+  .command-center-actions a,
+  .workspace-actions a,
+  .client-actions a,
+  .collaboration-link,
+  .delivery-project-link,
+  .project-exposure,
+  .attention-link,
+  .button-link
+):hover {
+  border-color: var(--rule-strong);
+  background: var(--surface-2);
+}
+
+/* Quiet variant: seal ink, no chrome. */
+.back-link,
+.text-link,
+.operations-clear {
+  min-height: 2rem;
+  padding-inline: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--seal);
+}
+
+.back-link:hover,
+.text-link:hover,
+.operations-clear:hover {
+  color: var(--seal-hover);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* --- Stat strips: genuinely tabular --------------------------------------- */
+.project-summary-strip,
+.commercial-status-strip,
+.engineering-status-strip,
+.operations-totals,
+.billing-metrics,
+.adoption-result-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  border-block: 1px solid var(--rule);
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(
+    .project-summary-strip,
+    .commercial-status-strip,
+    .engineering-status-strip,
+    .operations-totals,
+    .billing-metrics,
+    .adoption-result-summary
+  )
+  > div {
+  display: grid;
+  min-width: 0;
+  min-height: 5.5rem;
+  align-content: center;
+  gap: var(--gap-1);
+  padding: var(--gap-3);
+  border-right: 1px solid var(--rule-faint);
+}
+
+:where(
+    .project-summary-strip,
+    .commercial-status-strip,
+    .engineering-status-strip,
+    .operations-totals,
+    .billing-metrics,
+    .adoption-result-summary
+  )
+  > div:last-child {
+  border-right: 0;
+}
+
+:where(
+    .project-summary-strip,
+    .commercial-status-strip,
+    .engineering-status-strip,
+    .operations-totals,
+    .billing-metrics,
+    .adoption-result-summary
+  )
+  strong {
+  font-size: var(--text-2xl);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+
+:where(
+    .project-summary-strip,
+    .commercial-status-strip,
+    .engineering-status-strip,
+    .operations-totals,
+    .billing-metrics,
+    .adoption-result-summary
+  )
+  span {
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-label);
+  line-height: var(--leading-snug);
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+/* Two columns on a phone, with the vertical hairline replaced by a horizontal
+   one so the grid still reads as a table. */
+@media (max-width: 42rem) {
+  .project-summary-strip,
+  .commercial-status-strip,
+  .engineering-status-strip,
+  .operations-totals,
+  .billing-metrics,
+  .adoption-result-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :where(
+      .project-summary-strip,
+      .commercial-status-strip,
+      .engineering-status-strip,
+      .operations-totals,
+      .billing-metrics,
+      .adoption-result-summary
+    )
+    > div {
+    min-height: 4.75rem;
+    padding: var(--gap-2);
+    border-right: 0;
+    border-bottom: 1px solid var(--rule-faint);
+  }
+
+  :where(
+      .project-summary-strip,
+      .commercial-status-strip,
+      .engineering-status-strip,
+      .operations-totals,
+      .billing-metrics,
+      .adoption-result-summary
+    )
+    > div:nth-child(odd) {
+    border-right: 1px solid var(--rule-faint);
+  }
+}
+
+.status-critical strong {
+  color: var(--danger);
+}
+
+/* `.invitation-state` was in the badge union below, but the components use it
+   as a block container wrapping a status paragraph and an action row
+   (platform-forms.tsx:704 · client-invitation-acceptance.tsx:75) — an
+   uppercase inline pill holding a whole callout. It is a stack, not a stamp. */
+.invitation-state {
+  display: grid;
+  gap: var(--gap-3);
+  justify-items: start;
+  min-width: 0;
+}
+
+/* --- Badges: neutral by default, semantic only when a state says so -------
+   Rubber-stamp shape: tight radius, uppercase, hairline border. */
+.state-token,
+.priority,
+.label-token,
+.commercial-badge,
+.drift-state,
+.client-chip,
+.engineering-state,
+.scope-kind,
+.lineage-kind,
+.baseline-version,
+.role-label,
+.project-navigation-status {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 1.5rem;
+  align-items: center;
+  gap: var(--gap-1);
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+/* authorised — the work is covered by the agreement */
+:where(
+  .state-active,
+  .commercial-linked,
+  .commercial-historical,
+  .engineering-passing,
+  .engineering-passed,
+  .engineering-resolved,
+  .drift-linked,
+  .state-completed,
+  .label-green
+) {
+  border-color: var(--state-linked-rule);
+  background: var(--state-linked-soft);
+  color: var(--state-linked);
+}
+
+/* drift — delivery with no commercial basis */
+:where(
+  .commercial-commercially-unlinked,
+  .commercial-unlinked,
+  .drift-commercially_unlinked,
+  .priority-urgent,
+  .priority-critical,
+  .engineering-failing,
+  .engineering-failed,
+  .engineering-blocked,
+  .label-red
+) {
+  border-color: var(--state-unlinked-rule);
+  background: var(--state-unlinked-soft);
+  color: var(--state-unlinked);
+}
+
+/* basis moved, or classification still owed */
+:where(
+  .priority-high,
+  .drift-needs_classification,
+  .drift-stale_commercial_basis,
+  .drift-stale_basis,
+  .commercial-stale,
+  .engineering-pending,
+  .engineering-open,
+  .label-amber,
+  .client-chip.warm
+) {
+  border-color: var(--state-stale-rule);
+  background: var(--state-stale-soft);
+  color: var(--state-stale);
+}
+
+/* unknown — deliberately colourless */
+:where(
+  .commercial-needs-classification,
+  .engineering-unknown,
+  .state-archived,
+  .state-canceled,
+  .state-skipped,
+  .label-slate
+) {
+  border-color: var(--state-unclassified-rule);
+  background: var(--state-unclassified-soft);
+  color: var(--state-unclassified);
+}
+
+/* support — internal work, not client-billable */
+:where(
+  .commercial-support,
+  .commercial-internal,
+  .drift-support_internal,
+  .label-blue,
+  .label-violet
+) {
+  border-color: var(--state-internal-rule);
+  background: var(--state-internal-soft);
+  color: var(--state-internal);
+}
+
+/* Priorities below "high" stay quiet: an unmarked page is a calm page. */
+:where(.priority-none, .priority-low) {
+  border-color: var(--rule-faint);
+  background: transparent;
+  color: var(--ink-3);
+}
+
+/* --- Pin-cites: the identifiers the product actually stores ---------------
+   A version or an offset is a citation, so it is set in mono and never
+   uppercased away from the value the database holds. */
+.baseline-version {
+  border-radius: var(--r-1);
+  background: var(--surface);
+  color: var(--seal-ink);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.baseline-version.version-effective {
+  border-color: var(--state-linked-rule);
+  background: var(--state-linked-soft);
+  color: var(--state-linked);
+}
+
+.baseline-version.version-draft {
+  border-color: var(--state-stale-rule);
+  background: var(--state-stale-soft);
+  color: var(--state-stale);
+}
+
+.baseline-version.version-superseded {
+  border-color: var(--state-unclassified-rule);
+  background: var(--state-unclassified-soft);
+  color: var(--state-unclassified);
+}
+
+.evidence-offsets > span {
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Supporting copy and the empty states -------------------------------- */
+.metadata,
+.operations-muted,
+.adoption-muted,
+.empty-copy,
+.empty-status,
+.client-empty,
+.delivery-empty,
+.operations-empty,
+.ai-empty-state,
+.actionable-empty-state {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  overflow-wrap: anywhere;
+}
+
+.metadata {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Four historically competing empty states, now one: an unfilled section of
+   the file, ruled with a dashed hairline. */
+.empty-copy,
+.empty-status,
+.client-empty,
+.delivery-empty,
+.operations-empty,
+.ai-empty-state,
+.actionable-empty-state {
+  display: grid;
+  justify-items: start;
+  gap: var(--gap-2);
+  margin: 0;
+  padding: var(--gap-3);
+  border: 1px dashed var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.delivery-row-title,
+.delivery-row-meta,
+.work-metadata,
+.kanban-card-context,
+.context-body,
+.comment-meta,
+.client-recorded,
+.evidence-offsets,
+.copy-link-row,
+.notification-subheader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-1) var(--gap-2);
+  min-width: 0;
+}
+
+/* --- Executive project overview ------------------------------------------ */
+.command-commercial {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.65fr) minmax(0, 1.35fr);
+  align-items: center;
+  gap: clamp(var(--gap-4), 4vw, var(--gap-6));
+  padding: var(--gap-4) 0;
+  border-block: 1px solid var(--rule);
+}
+
+@media (max-width: 68rem) {
+  .command-commercial {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.command-commercial h2,
+.command-center-grid h2,
+.commercial-section h2,
+.engineering-section h2,
+.client-section h2,
+.settings-section h2,
+.adoption-section h2,
+.operations-page h2,
+.billing-stack h2 {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-snug);
+  overflow-wrap: anywhere;
+}
+
+.command-commercial-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr));
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.command-commercial-counts > div {
+  min-width: 0;
+  padding: var(--gap-2) var(--gap-3);
+  border-left: 1px solid var(--rule-faint);
+}
+
+.command-commercial-counts > div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.command-commercial-counts dt {
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-label);
+  line-height: var(--leading-snug);
+  text-transform: uppercase;
+}
+
+.command-commercial-counts dd {
+  margin: var(--gap-1) 0 0;
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+
+@media (max-width: 42rem) {
+  .command-commercial-counts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .command-commercial-counts > div {
+    padding: var(--gap-2) 0;
+    border-top: 1px solid var(--rule-faint);
+    border-left: 0;
+  }
+
+  .command-commercial-counts > div:first-child {
+    border-top: 0;
+  }
+}
+
+.command-center-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.45fr) minmax(16rem, 0.72fr)
+    minmax(16rem, 0.72fr);
+  gap: var(--gap-4);
+}
+
+.command-center-grid > section {
+  min-width: 0;
+  padding-top: var(--gap-3);
+  border-top: 1px solid var(--rule);
+}
+
+@media (max-width: 82rem) {
+  .command-center-grid {
+    grid-template-columns: minmax(0, 1.25fr) minmax(16rem, 0.75fr);
+  }
+
+  /* The team column has no rule of its own anywhere; it is only ever a child
+     of this grid, so it is spanned from here. */
+  .command-center-grid .command-team {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 42rem) {
+  .command-center-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- Ledgers: the rows of the file --------------------------------------- */
+.command-attention-list,
+.attention-list,
+.compact-list,
+.activity-ledger,
+.notification-list,
+.client-record-list,
+.engineering-card-list,
+.commercial-source-list,
+.scope-ledger,
+.drift-ledger,
+.version-changes,
+.version-decisions,
+.work-commercial-links,
+.comment-history,
+.onboarding-ledger,
+.adoption-ledger,
+.operations-ledger,
+.capacity-ledger,
+.exposure-ledger {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+  list-style: none;
+}
+
+:where(.command-attention-list, .attention-list, .compact-list) > a,
+.activity-ledger > article,
+/* `.work-commercial-links > article` is intentionally absent: the component
+   renders `> div` (commercial-workspace.tsx:1306), which is also what
+   Playwright binds, so the article selector matched nothing. commercial.css
+   styles the real rows as the authorization chain. */
+.notification-list > article,
+.client-record-list > article,
+.engineering-card,
+.commercial-source-list > article,
+.scope-ledger > article,
+.drift-ledger > a,
+.comment-row,
+.adoption-ledger-row,
+.operations-row,
+.capacity-person,
+.exposure-project {
+  display: grid;
+  min-width: 0;
+  min-height: 4rem;
+  align-items: center;
+  gap: var(--gap-2) var(--gap-3);
+  padding: var(--gap-2) 0;
+  border-bottom: 1px solid var(--rule-faint);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    padding var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+
+:where(.command-attention-list, .attention-list, .compact-list) > a:hover,
+.drift-ledger > a:hover {
+  padding-inline: var(--gap-2);
+  background: var(--surface-2);
+}
+
+/* SIGNATURE — the state spine.
+   A ledger row that carries a commercial state is marked in its own margin, so
+   a drift list reads like a marked-up document rather than a table. No base
+   border-left is declared, so unmarked rows stay flush with the heading above
+   and nothing has to fight specificity to stay clean. */
+:is(
+  .command-attention-list > a,
+  .attention-list > a,
+  .compact-list > a,
+  .activity-ledger > article,
+  .notification-list > article,
+  .client-record-list > article,
+  .engineering-card,
+  .commercial-source-list > article,
+  .scope-ledger > article,
+  .drift-ledger > a,
+  .work-commercial-links > article,
+  .comment-row,
+  .adoption-ledger-row,
+  .operations-row,
+  .capacity-person,
+  .exposure-project
+):has(
+  :is(
+    .commercial-linked,
+    .commercial-historical,
+    .drift-linked,
+    .engineering-passing,
+    .engineering-passed,
+    .engineering-resolved
+  )
+) {
+  padding-left: var(--gap-2);
+  border-left: 2px solid var(--state-linked);
+}
+
+:is(
+  .command-attention-list > a,
+  .attention-list > a,
+  .compact-list > a,
+  .activity-ledger > article,
+  .notification-list > article,
+  .client-record-list > article,
+  .engineering-card,
+  .commercial-source-list > article,
+  .scope-ledger > article,
+  .drift-ledger > a,
+  .work-commercial-links > article,
+  .comment-row,
+  .adoption-ledger-row,
+  .operations-row,
+  .capacity-person,
+  .exposure-project
+):has(
+  :is(
+    .commercial-commercially-unlinked,
+    .commercial-unlinked,
+    .drift-commercially_unlinked,
+    .engineering-failing,
+    .engineering-failed,
+    .engineering-blocked
+  )
+) {
+  padding-left: var(--gap-2);
+  border-left: 2px solid var(--state-unlinked);
+}
+
+:is(
+  .command-attention-list > a,
+  .attention-list > a,
+  .compact-list > a,
+  .activity-ledger > article,
+  .notification-list > article,
+  .client-record-list > article,
+  .engineering-card,
+  .commercial-source-list > article,
+  .scope-ledger > article,
+  .drift-ledger > a,
+  .work-commercial-links > article,
+  .comment-row,
+  .adoption-ledger-row,
+  .operations-row,
+  .capacity-person,
+  .exposure-project
+):has(
+  :is(
+    .commercial-stale,
+    .drift-stale_basis,
+    .drift-stale_commercial_basis,
+    .drift-needs_classification
+  )
+) {
+  padding-left: var(--gap-2);
+  border-left: 2px solid var(--state-stale);
+}
+
+:is(
+  .command-attention-list > a,
+  .attention-list > a,
+  .compact-list > a,
+  .activity-ledger > article,
+  .notification-list > article,
+  .client-record-list > article,
+  .engineering-card,
+  .commercial-source-list > article,
+  .scope-ledger > article,
+  .drift-ledger > a,
+  .work-commercial-links > article,
+  .comment-row,
+  .adoption-ledger-row,
+  .operations-row,
+  .capacity-person,
+  .exposure-project
+):has(:is(.commercial-needs-classification, .engineering-unknown)) {
+  padding-left: var(--gap-2);
+  border-left: 2px solid var(--state-unclassified);
+}
+
+:is(
+  .command-attention-list > a,
+  .attention-list > a,
+  .compact-list > a,
+  .activity-ledger > article,
+  .notification-list > article,
+  .client-record-list > article,
+  .engineering-card,
+  .commercial-source-list > article,
+  .scope-ledger > article,
+  .drift-ledger > a,
+  .work-commercial-links > article,
+  .comment-row,
+  .adoption-ledger-row,
+  .operations-row,
+  .capacity-person,
+  .exposure-project
+):has(:is(.commercial-support, .commercial-internal, .drift-support_internal)) {
+  padding-left: var(--gap-2);
+  border-left: 2px solid var(--state-internal);
+}
+
+/* Multi-column rows collapse to one column on a phone. */
+@media (max-width: 42rem) {
+  .drift-ledger > a,
+  .commercial-source-list > article,
+  .scope-ledger > article,
+  .client-record-list > article,
+  .work-commercial-links > article,
+  .adoption-ledger-row,
+  .operations-row,
+  .capacity-person,
+  .exposure-project {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.command-plan dl {
+  margin: 0;
+}
+
+.command-plan dl > div,
+.command-team-lead {
+  display: grid;
+  gap: var(--gap-1);
+  padding: var(--gap-2) 0;
+  border-bottom: 1px solid var(--rule-faint);
+}
+
+.command-plan dt {
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-label);
+  line-height: var(--leading-snug);
+  text-transform: uppercase;
+}
+
+.command-plan dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}

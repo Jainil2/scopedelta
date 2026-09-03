@@ -48,11 +48,11 @@ export function WorkspaceSwitcher({
           <ChevronsUpDown aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          className="w-[var(--anchor-width)] min-w-64 rounded-xl border-stone-200 bg-[#fffdf8] p-1.5 shadow-xl"
+          className="w-[var(--anchor-width)] min-w-64 rounded-lg border-border bg-popover p-1.5 shadow-lg"
           sideOffset={8}
         >
           <DropdownMenuGroup>
-            <DropdownMenuLabel className="px-2.5 py-2 text-[0.68rem] font-bold uppercase tracking-[0.13em] text-stone-500">
+            <DropdownMenuLabel className="px-2.5 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               Switch workspace
             </DropdownMenuLabel>
             {workspaces.map((workspace) => (
@@ -61,19 +61,19 @@ export function WorkspaceSwitcher({
                 className="min-h-11 gap-3 rounded-lg px-2.5 py-2"
                 render={<Link href={`/app/${workspace.slug}`} />}
               >
-                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-stone-100 text-[0.65rem] font-extrabold text-stone-700">
+                <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-[0.65rem] font-semibold text-secondary-foreground">
                   {initials(workspace.name)}
                 </span>
                 <span className="grid min-w-0 flex-1">
                   <strong className="truncate text-sm font-semibold">
                     {workspace.name}
                   </strong>
-                  <small className="capitalize text-stone-500">
+                  <small className="capitalize text-muted-foreground">
                     {workspace.role}
                   </small>
                 </span>
                 {workspace.id === current.id ? (
-                  <Check className="size-4 text-[#365b45]" aria-hidden="true" />
+                  <Check className="size-4 text-seal" aria-hidden="true" />
                 ) : null}
               </DropdownMenuItem>
             ))}

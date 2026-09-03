@@ -1,0 +1,274 @@
+/* ============================================================================
+   Design tokens — the single source of truth for colour, type, and rhythm.
+   No other stylesheet may contain a raw colour value.
+
+   Direction: "Dossier". ScopeDelta's job is provenance — proving which
+   sentence of a signed agreement authorises which piece of delivery work.
+   So the interface is built like a case file: achromatic document surfaces,
+   hairline rules, one authority accent ("the seal"), and monospaced pin-cites
+   for the character offsets the product actually stores.
+
+   The load-bearing typographic rule: the agreement speaks in serif, the system
+   speaks in sans. --font-serif is reserved for the client's own contract prose
+   (source excerpts, quoted evidence, published packet text). Everything the
+   application itself says is --font-sans. Identifiers, offsets, versions and
+   money are --font-mono.
+   ============================================================================ */
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Inverted chrome, so components can reach the sidebar palette. */
+  --color-night: var(--night);
+  --color-night-2: var(--night-2);
+  --color-night-ink: var(--night-ink);
+  --color-seal: var(--seal);
+  --color-seal-soft: var(--seal-soft);
+  --color-seal-ink: var(--seal-ink);
+
+  /* Promoted so Tailwind's font utilities resolve to the real faces. */
+  --font-sans: var(--sans);
+  --font-serif: var(--serif);
+  --font-mono: var(--mono);
+
+  /* Aligned with the stylesheet's own breakpoints so utilities and
+     hand-written media queries never disagree. */
+  --breakpoint-sm: 42rem;
+  --breakpoint-md: 68rem;
+  --breakpoint-lg: 82rem;
+
+  --radius-sm: var(--r-1);
+  --radius-md: var(--r-2);
+  --radius-lg: var(--r-3);
+  --radius-xl: var(--r-4);
+}
+
+:root {
+  color-scheme: light dark;
+
+  /* --- Surfaces: cool paper, not cream ----------------------------------- */
+  --paper: #eef0f3;
+  --paper-sunken: #e3e6eb;
+  --surface: #fbfcfd;
+  --surface-2: #f5f7f9;
+  --surface-3: #e9edf2;
+
+  /* --- Ink: three steps, replacing 23 near-identical greys --------------- */
+  --ink: #15181d;
+  --ink-2: #444b55;
+  --ink-3: #6b737e;
+  --ink-inverse: #f7f9fb;
+
+  /* --- Rules: hairlines carry the structure ------------------------------ */
+  --rule-faint: #e6e9ee;
+  --rule: #d5dae1;
+  --rule-strong: #b2bac5;
+
+  /* --- The seal: one authority accent, spent sparingly ------------------- */
+  --seal: #1f3a5f;
+  --seal-hover: #162c49;
+  --seal-soft: #e6ecf4;
+  --seal-ink: #14293f;
+  --seal-ring: rgb(31 58 95 / 22%);
+
+  /* --- Night: the sidebar and inverted panels ---------------------------- */
+  --night: #171b22;
+  --night-2: #1f242d;
+  --night-rule: rgb(255 255 255 / 9%);
+  --night-ink: #e9edf2;
+  --night-ink-2: rgb(233 237 242 / 64%);
+  --night-ink-3: rgb(233 237 242 / 42%);
+
+  /* --- The five commercial states the product actually models ------------
+     linked = authorised · unlinked = drift · stale = basis moved
+     unclassified = unknown, deliberately colourless · internal = support */
+  --state-linked: #1c6b4d;
+  --state-linked-soft: #e2f0ea;
+  --state-linked-rule: #a9cfbe;
+  --state-unlinked: #a3341c;
+  --state-unlinked-soft: #fbe9e4;
+  --state-unlinked-rule: #e4b3a5;
+  --state-stale: #8a5b12;
+  --state-stale-soft: #f8f0dd;
+  --state-stale-rule: #dcc294;
+  --state-unclassified: #5a6270;
+  --state-unclassified-soft: #eceef2;
+  --state-unclassified-rule: #c2c8d1;
+  --state-internal: #3f5486;
+  --state-internal-soft: #e8ecf5;
+  --state-internal-rule: #b3bfd8;
+
+  --danger: #a3241f;
+  --danger-soft: #fae8e6;
+  --danger-rule: #e0aaa4;
+  --warning: var(--state-stale);
+  --warning-soft: var(--state-stale-soft);
+  --success: var(--state-linked);
+  --success-soft: var(--state-linked-soft);
+
+  /* --- Type ------------------------------------------------------------- */
+  --sans:
+    "Manrope Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --serif: "Newsreader Variable", "Iowan Old Style", Georgia, serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-normal: 1.6;
+  --tracking-tight: -0.02em;
+  --tracking-label: 0.06em;
+  --tracking-eyebrow: 0.12em;
+
+  --weight-regular: 450;
+  --weight-medium: 520;
+  --weight-semibold: 620;
+  --weight-bold: 700;
+
+  /* --- Rhythm ----------------------------------------------------------- */
+  --gap-1: 0.375rem;
+  --gap-2: 0.625rem;
+  --gap-3: 1rem;
+  --gap-4: 1.5rem;
+  --gap-5: 2rem;
+  --gap-6: 3rem;
+
+  --r-1: 3px;
+  --r-2: 5px;
+  --r-3: 8px;
+  --r-4: 12px;
+  --r-pill: 999px;
+  --radius: var(--r-3);
+
+  --shadow-hairline: 0 1px 0 var(--rule-faint);
+  --shadow-1: 0 1px 2px rgb(21 24 29 / 6%), 0 1px 1px rgb(21 24 29 / 4%);
+  --shadow-2:
+    0 24px 48px -12px rgb(21 24 29 / 22%), 0 2px 8px rgb(21 24 29 / 8%);
+
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Intrinsic gutter: the old stylesheet re-declared --content inside a 42rem
+     media query to shrink the margin on phones. Expressed as a clamp it needs
+     no breakpoint, so deleting the responsive block costs nothing. */
+  --content: min(100% - clamp(1.5rem, 5vw, 3rem), 84rem);
+
+  /* --- Compatibility aliases --------------------------------------------
+     Existing partials and four component files reference these names. They
+     are now views onto the tokens above, so the palette has exactly one
+     definition. Prefer the canonical names in new rules. */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--seal);
+  --primary-foreground: var(--ink-inverse);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--ink-2);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-3);
+  --accent: var(--seal-soft);
+  --accent-foreground: var(--seal-ink);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--ink-inverse);
+  --border: var(--rule);
+  --input: var(--rule-strong);
+  --ring: var(--seal);
+
+  --paper-deep: var(--paper-sunken);
+  --ink-copy: var(--ink-2);
+  --muted-copy: var(--ink-3);
+  --line: var(--rule);
+  --line-strong: var(--rule-strong);
+  --brand: var(--seal);
+  --brand-soft: var(--seal-soft);
+  --brand-dark: var(--seal-ink);
+  --night-soft: var(--night-2);
+  --white: var(--surface);
+}
+
+/* Dark mode is preference-driven only. The .dark class variant above stays
+   dormant because activating it would require a component change. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #101318;
+    --paper-sunken: #0b0d11;
+    --surface: #171b22;
+    --surface-2: #1e232b;
+    --surface-3: #242a34;
+
+    --ink: #e8ebf0;
+    --ink-2: #adb5c0;
+    --ink-3: #7d8794;
+    --ink-inverse: #101318;
+
+    --rule-faint: #1c212a;
+    --rule: #262c36;
+    --rule-strong: #39424f;
+
+    --seal: #8fb3d9;
+    --seal-hover: #a8c6e6;
+    --seal-soft: #1a2735;
+    --seal-ink: #cfe0f2;
+    --seal-ring: rgb(143 179 217 / 30%);
+
+    --night: #0b0d11;
+    --night-2: #141821;
+    --night-rule: rgb(255 255 255 / 8%);
+
+    --state-linked: #6cc39c;
+    --state-linked-soft: #14261f;
+    --state-linked-rule: #2c4a3c;
+    --state-unlinked: #e88b72;
+    --state-unlinked-soft: #2c1713;
+    --state-unlinked-rule: #5a2b21;
+    --state-stale: #d8ab5c;
+    --state-stale-soft: #291f10;
+    --state-stale-rule: #4d3a1b;
+    --state-unclassified: #9aa3b1;
+    --state-unclassified-soft: #1c2028;
+    --state-unclassified-rule: #333a45;
+    --state-internal: #92a8d8;
+    --state-internal-soft: #171d2b;
+    --state-internal-rule: #2f3a52;
+
+    --danger: #e88b72;
+    --danger-soft: #2c1713;
+    --danger-rule: #5a2b21;
+
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 40%), 0 1px 1px rgb(0 0 0 / 30%);
+    --shadow-2: 0 24px 48px -12px rgb(0 0 0 / 60%), 0 2px 8px rgb(0 0 0 / 40%);
+  }
+}

@@ -52,7 +52,7 @@ export function AppMobileNavigation({
         </SheetTrigger>
         <SheetContent
           side="left"
-          className="w-[min(88vw,22rem)] gap-0 border-0 bg-[#20241f] p-0 text-stone-100"
+          className="w-[min(88vw,22rem)] gap-0 border-0 bg-night p-0 text-night-ink"
         >
           <SheetHeader className="border-b border-white/10 px-5 py-5 text-left">
             <SheetTitle className="sr-only">Workspace navigation</SheetTitle>

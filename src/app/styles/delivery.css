@@ -75,6 +75,35 @@
   border-top: 1px solid var(--rule);
 }
 
+/* Project access rows render `{name}<small>{role}</small>` with nothing
+   between them, so inline flow produced "Jainil Chauhanowner". The role is
+   metadata about the name, so it belongs on its own line. */
+.member-list > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-3);
+  min-height: 3rem;
+  padding: var(--gap-2) 0;
+  border-bottom: 1px solid var(--rule-faint);
+}
+
+.member-list > li > span {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.member-list > li > span > small {
+  color: var(--ink-3);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-regular);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
 /* --- The my-work ledger ------------------------------------------------ */
 
 .my-work-list-header,

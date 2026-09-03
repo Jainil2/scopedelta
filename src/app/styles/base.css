@@ -67,8 +67,41 @@
     text-decoration: none;
   }
 
+  /* Disclosures are the product's universal edit/expand affordance (16 of
+     them). The UA triangle sits at a different optical weight to everything
+     else and cannot be positioned, so it is replaced by a rotating chevron
+     drawn from the border box. */
   summary {
     cursor: pointer;
+    list-style: none;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  summary::before {
+    display: inline-block;
+    width: 0.34rem;
+    height: 0.34rem;
+    margin-right: 0.55rem;
+    border-right: 1.5px solid var(--ink-3);
+    border-bottom: 1.5px solid var(--ink-3);
+    content: "";
+    rotate: -45deg;
+    translate: 0 -0.1rem;
+    transition:
+      rotate var(--dur-1) var(--ease),
+      border-color var(--dur-1) var(--ease);
+  }
+
+  details[open] > summary::before {
+    rotate: 45deg;
+    translate: 0 -0.15rem;
+  }
+
+  summary:hover::before {
+    border-color: var(--seal);
   }
 
   ::selection {

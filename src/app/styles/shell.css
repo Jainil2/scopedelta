@@ -270,9 +270,22 @@
 }
 
 /* The same indicator on the light surfaces (identity pages, client portal). */
+/* Off the sidebar (client, public, setup surfaces) the pill is not a rail
+   footer — it renders loose in <main>, before the page content. Give it a
+   self-contained chip form instead of the inherited top hairline, so it reads
+   as a status marker rather than a stray line of text. */
 .webmcp-status:not([data-surface="workspace"]) {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  margin: var(--gap-2) auto 0;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-pill);
+  background: var(--surface);
   color: var(--ink-3);
-  border-top-color: var(--rule);
+  font-family: var(--mono);
+  font-size: var(--text-2xs);
 }
 
 .webmcp-status:not([data-surface="workspace"])[data-state="unavailable"] {

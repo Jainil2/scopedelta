@@ -623,10 +623,12 @@ async function registerTools(
       ...createWorkflowTools({
         ...config,
         isActive: () => isCurrentRegistry(registry, host),
-        loadWorkflow: (tool) => {
+        loadWorkflow: (tool, signal) => {
           // Serialize replacement so concurrent discovery cannot accumulate tools.
           loading = loading.then(async () => {
             if (!isCurrentRegistry(registry, host)) return false;
+            // A request abandoned while queued must leave the selection intact.
+            if (signal?.aborted) return false;
             if (selected) {
               selected.controller.abort();
               registry.controllers.delete(selected.controller);
@@ -692,6 +694,7 @@ async function registerDocumentTool(
     });
     if (!isCurrentRegistry(registry, host) || controller.signal.aborted) {
       controller.abort();
+      registry.controllers.delete(controller);
       return false;
     }
     registry.successfulTools.add(tool.name);

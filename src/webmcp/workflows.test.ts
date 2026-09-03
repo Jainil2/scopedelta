@@ -155,6 +155,16 @@ describe("workflow coverage and surface isolation", () => {
     expect(registered.size).toBe(11);
     expect(registered.has("client_accounts")).toBe(false);
     expect(registered.has("delivery_work")).toBe(true);
+    // An abandoned load must leave the current selection registered.
+    const abandoned = new AbortController();
+    const abandonedLoad = registered
+      .get("discover_workflows")!
+      .execute({ load: "client_accounts" }, { signal: abandoned.signal });
+    abandoned.abort();
+    await expect(abandonedLoad).rejects.toThrow();
+    expect(registered.size).toBe(11);
+    expect(registered.has("delivery_work")).toBe(true);
+    expect(registered.has("client_accounts")).toBe(false);
     // A failed native registration is reported and does not poison later loads.
     context.registerTool.mockRejectedValueOnce(new Error("unsupported"));
     expect(await load("client_accounts")).toMatchObject({

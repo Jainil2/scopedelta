@@ -16,7 +16,10 @@ type JsonObject = Record<string, unknown>;
 
 export type WorkflowRuntime = ScopeDeltaWebMcpConfig & {
   isActive?: () => boolean;
-  loadWorkflow?: (tool: WebMCP.ModelContextTool) => Promise<boolean>;
+  loadWorkflow?: (
+    tool: WebMCP.ModelContextTool,
+    signal?: AbortSignal,
+  ) => Promise<boolean>;
 };
 
 /** Each action has a fixed route and reuses its server's input contract. */
@@ -115,8 +118,8 @@ export function createWorkflowTools(
         additionalProperties: false,
       },
       annotations: { readOnlyHint: true, untrustedContentHint: true },
-      execute: async (raw) => {
-        assertActive(config);
+      execute: async (raw, options) => {
+        assertActive(config, options?.signal);
         const { query, load } = z
           .object({
             query: z.string().max(120).optional(),
@@ -131,10 +134,14 @@ export function createWorkflowTools(
               status: "invalid_input",
               message: "Discover a workflow available on this page first.",
             };
+          // An abandoned request must not swap the selected workflow, so the
+          // signal is checked here, inside the queued replacement, and after it.
+          assertActive(config, options?.signal);
           const loaded = await config.loadWorkflow?.(
             createWorkflowTool(flow, config),
+            options?.signal,
           );
-          assertActive(config);
+          assertActive(config, options?.signal);
           return {
             status: loaded ? "workflow_loaded" : "workflow_unavailable",
             tool: flow.name,
